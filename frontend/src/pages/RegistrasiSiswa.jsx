@@ -369,11 +369,10 @@ export default function RegistrasiSiswa() {
           </Link>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Pendaftaran & Database Siswa SMKN 21
+              Pendaftaran Siswa SMKN 21
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
-              Kelola database siswa, hapus siswa lulus, dan rekam sampel
-              multi-wajah untuk akurasi tinggi
+              Mengelola data siswa
             </p>
           </div>
         </div>
@@ -536,7 +535,7 @@ export default function RegistrasiSiswa() {
                   Kamera Perekam Sampel
                 </label>
                 <span className="text-[11px] text-blue-600 font-semibold">
-                  Slot Aktif: Sampel {currentSlot + 1} of 3
+                  Sampel {currentSlot + 1} of 3
                 </span>
               </div>
 
@@ -589,9 +588,6 @@ export default function RegistrasiSiswa() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-700">
                   Sampel Terkumpul ({samples.length}/3)
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Semakin banyak sampel, deteksi semakin akurat
                 </span>
               </div>
 
@@ -680,36 +676,6 @@ export default function RegistrasiSiswa() {
             </span>
           </div>
 
-          {/* Quick Filter Jurusan SMKN 21 */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            <span className="text-[11px] font-bold text-slate-500 mr-1">
-              Jurusan:
-            </span>
-            <button
-              onClick={() => setJurusanFilter("ALL")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                jurusanFilter === "ALL"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              Semua
-            </button>
-            {JURUSAN_SMKN21.map((jur) => (
-              <button
-                key={jur.kode}
-                onClick={() => setJurusanFilter(jur.kode)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all border ${
-                  jurusanFilter === jur.kode
-                    ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {jur.kode}
-              </button>
-            ))}
-          </div>
-
           {/* Search & Filter Kelas Bar */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5 mb-4">
             <div className="relative flex-1 w-full">
@@ -727,7 +693,7 @@ export default function RegistrasiSiswa() {
               value={kelasFilter}
               onChange={setKelasFilter}
               options={[
-                { value: "ALL", label: "Semua Rombel/Kelas" },
+                { value: "ALL", label: "Semua Kelas" },
                 ...uniqueKelas.map((k) => ({ value: k, label: k })),
               ]}
               icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}

@@ -59,9 +59,6 @@ export default function Navbar() {
               <span className="font-bold text-slate-900 tracking-tight text-sm sm:text-lg truncate">
                 SMKN 21
               </span>
-              <span className="text-[9px] sm:text-[10px] uppercase font-semibold tracking-wider px-1.5 py-0.2 sm:py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 flex-shrink-0">
-                Official
-              </span>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block truncate">
               Sistem Presensi & Perpustakaan
@@ -81,10 +78,6 @@ export default function Navbar() {
             <span>{timeStr || "00:00:00 WIB"}</span>
           </div>
           <span className="text-slate-300">•</span>
-          <div className="flex items-center gap-1.5 text-emerald-600 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Online</span>
-          </div>
         </div>
 
         {/* Navigation Actions */}

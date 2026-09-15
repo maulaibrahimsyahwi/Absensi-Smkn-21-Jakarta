@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -18,6 +19,11 @@ import {
   Inbox,
   Sparkles,
   BarChart2,
+  Sliders,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "./RegistrasiSiswa";
@@ -42,7 +48,9 @@ const BULAN_DROPDOWN_OPTIONS = BULAN_OPTIONS.map((b) => ({
   label: `Bulan ${b.label}`,
 }));
 
-const TAHUN_OPTIONS = [2024, 2025, 2026, 2027, 2028];
+// Tahun saat ini dan 4 tahun sebelumnya (total 5 tahun secara dinamis)
+const CURRENT_YEAR = new Date().getFullYear();
+const TAHUN_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
 const TAHUN_DROPDOWN_OPTIONS = TAHUN_OPTIONS.map((t) => ({
   value: t,
@@ -59,6 +67,34 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [kelasFilter, setKelasFilter] = useState("ALL");
+
+  // Batas Tampilan Data & Paginasi (slider: 25, 50, 100, max 150)
+  const [displayLimit, setDisplayLimit] = useState(25);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Dropdown menu ekspor (XLSX, XLS, CSV)
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportDropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (
+        exportDropdownRef.current &&
+        !exportDropdownRef.current.contains(e.target)
+      ) {
+        setIsExportOpen(false);
+      }
+    }
+    if (isExportOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isExportOpen]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchTerm, kelasFilter, displayLimit]);
 
   // Data State
   const [siswaPeriode, setSiswaPeriode] = useState({
@@ -159,8 +195,38 @@ export default function Dashboard() {
     return b ? b.label : "";
   }, [selectedBulan]);
 
-  // Ekspor CSV
-  const exportToCSV = () => {
+  // Perhitungan batas tampilan dan paginasi data aktif
+  const currentTotalList = useMemo(() => {
+    if (activeTab === "rekap_siswa") return filteredSiswa;
+    if (activeTab === "riwayat_harian") return filteredHarian;
+    return filteredPerpus;
+  }, [activeTab, filteredSiswa, filteredHarian, filteredPerpus]);
+
+  const totalItems = currentTotalList.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / displayLimit));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  const startIndex = (safeCurrentPage - 1) * displayLimit;
+  const endIndex = Math.min(startIndex + displayLimit, totalItems);
+
+  // Potongan data yang ditampilkan sesuai slider limit & halaman aktif
+  const paginatedSiswa = useMemo(() => {
+    if (activeTab !== "rekap_siswa") return [];
+    return filteredSiswa.slice(startIndex, endIndex);
+  }, [activeTab, filteredSiswa, startIndex, endIndex]);
+
+  const paginatedHarian = useMemo(() => {
+    if (activeTab !== "riwayat_harian") return [];
+    return filteredHarian.slice(startIndex, endIndex);
+  }, [activeTab, filteredHarian, startIndex, endIndex]);
+
+  const paginatedPerpus = useMemo(() => {
+    if (activeTab !== "riwayat_perpus") return [];
+    return filteredPerpus.slice(startIndex, endIndex);
+  }, [activeTab, filteredPerpus, startIndex, endIndex]);
+
+  // Ekspor Data Laporan (Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
+  const handleExport = (format = "xlsx") => {
     let headers = [];
     let rows = [];
     const periodeTag =
@@ -168,9 +234,13 @@ export default function Dashboard() {
         ? `${namaBulanTerpilih}_${selectedTahun}`
         : `Tahun_${selectedTahun}`;
     let filename = "";
+    let sheetName = "Rekap Data";
 
     if (activeTab === "rekap_siswa") {
+      sheetName = "Rekap Siswa";
+      filename = `rekap_kehadiran_${periodeTag}`;
       headers = [
+        "No",
         "NIS",
         "Nama Siswa",
         "Kelas",
@@ -178,50 +248,79 @@ export default function Dashboard() {
         "Terlambat",
         "Total Hadir",
         "Kunjungan Perpus",
+        "Status Aktivitas",
       ];
-      rows = filteredSiswa.map((item) => [
-        `"${item.nis}"`,
-        `"${item.nama}"`,
-        `"${item.kelas}"`,
+      rows = filteredSiswa.map((item, index) => [
+        index + 1,
+        item.nis,
+        item.nama,
+        item.kelas,
         item.tepat_waktu,
         item.terlambat,
         item.total_hadir,
         item.kunjungan_perpus,
+        item.total_hadir > 0 ? "Aktif Presensi" : "Nir-Kehadiran",
       ]);
-      filename = `rekap_kehadiran_${periodeTag}.csv`;
     } else if (activeTab === "riwayat_harian") {
-      headers = ["ID", "Waktu", "Nama Siswa", "Kelas", "Status Kehadiran"];
-      rows = filteredHarian.map((item) => [
-        item.id,
-        `"${item.waktu}"`,
-        `"${item.nama}"`,
-        `"${item.kelas}"`,
-        `"${item.status}"`,
+      sheetName = "Presensi Harian";
+      filename = `riwayat_presensi_harian_${periodeTag}`;
+      headers = [
+        "No",
+        "Waktu Presensi",
+        "Nama Siswa",
+        "Kelas",
+        "Status Kehadiran",
+      ];
+      rows = filteredHarian.map((item, index) => [
+        index + 1,
+        item.waktu,
+        item.nama,
+        item.kelas,
+        item.status,
       ]);
-      filename = `riwayat_presensi_harian_${periodeTag}.csv`;
     } else {
-      headers = ["ID", "Waktu", "Nama Siswa", "Kelas", "Keperluan Kunjungan"];
-      rows = filteredPerpus.map((item) => [
-        item.id,
-        `"${item.waktu}"`,
-        `"${item.nama}"`,
-        `"${item.kelas}"`,
-        `"${item.keperluan}"`,
+      sheetName = "Kunjungan Perpus";
+      filename = `riwayat_perpustakaan_${periodeTag}`;
+      headers = [
+        "No",
+        "Waktu Kunjungan",
+        "Nama Siswa",
+        "Kelas",
+        "Keperluan Kunjungan",
+      ];
+      rows = filteredPerpus.map((item, index) => [
+        index + 1,
+        item.waktu,
+        item.nama,
+        item.kelas,
+        item.keperluan,
       ]);
-      filename = `riwayat_perpustakaan_${periodeTag}.csv`;
     }
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    try {
+      const worksheetData = [headers, ...rows];
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      // Auto-width kolom agar tampilan di Microsoft Excel rapi
+      const colWidths = headers.map((h, colIdx) => {
+        const maxLen = Math.max(
+          h.length,
+          ...rows.map((r) => String(r[colIdx] ?? "").length),
+        );
+        return { wch: Math.min(Math.max(maxLen + 3, 10), 40) };
+      });
+      worksheet["!cols"] = colWidths;
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+      const bookType = format === "xls" ? "biff8" : format;
+      XLSX.writeFile(workbook, `${filename}.${format}`, { bookType });
+    } catch (err) {
+      console.error("Gagal mengekspor data:", err);
+    } finally {
+      setIsExportOpen(false);
+    }
   };
 
   const stats = siswaPeriode.statistik || {};
@@ -258,20 +357,110 @@ export default function Dashboard() {
           <button
             onClick={fetchData}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50"
+            className="inline-flex items-center cursor-pointer gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50"
           >
             <RefreshCw
               className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
             />
             <span className="hidden sm:inline">Segarkan</span>
           </button>
-          <button
-            onClick={exportToCSV}
-            className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
-          >
-            <Download className="w-4 h-4" />
-            <span>Unduh CSV</span>
-          </button>
+          {/* Dropdown Menu Unduh Rekap (XLSX, XLS, CSV) */}
+          <div className="relative" ref={exportDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsExportOpen(!isExportOpen)}
+              className="inline-flex items-center gap-1.5 sm:gap-2 px-3 cursor-pointer sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
+            >
+              <Download className="w-4 h-4" />
+              <span>Unduh Rekap</span>
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                  isExportOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {isExportOpen && (
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 -mt-2 mb-1 rounded-t-2xl">
+                  <p className="text-[11px] text-slate-700 font-semibold truncate mt-0.5">
+                    Periode:{" "}
+                    <span className="text-blue-600">
+                      {periodeMode === "bulan"
+                        ? `${namaBulanTerpilih} ${selectedTahun}`
+                        : `Tahun ${selectedTahun} `}
+                    </span>
+                  </p>
+                </div>
+
+                {/* 1. Format Excel Modern (.xlsx) */}
+                <button
+                  type="button"
+                  onClick={() => handleExport("xlsx")}
+                  className="w-full text-left px-3.5 py-2.5 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-3 transition-colors cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors flex-shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 group-hover:text-emerald-800 flex items-center gap-1.5">
+                      <span>Microsoft Excel</span>
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
+                        .xlsx
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      Format spreadsheet standar modern
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. Format Excel Legacy (.xls) */}
+                <button
+                  type="button"
+                  onClick={() => handleExport("xls")}
+                  className="w-full text-left px-3.5 py-2.5 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center gap-3 transition-colors cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center font-bold text-xs group-hover:bg-emerald-600 group-hover:text-white transition-colors flex-shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 group-hover:text-emerald-800 flex items-center gap-1.5">
+                      <span>Excel 97–2003</span>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-200">
+                        .xls
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      Kompatibel dengan aplikasi versi lama
+                    </p>
+                  </div>
+                </button>
+
+                {/* 3. Format CSV (.csv) */}
+                <button
+                  type="button"
+                  onClick={() => handleExport("csv")}
+                  className="w-full text-left px-3.5 py-2.5 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-900 flex items-center gap-3 transition-colors cursor-pointer group border-t border-slate-100"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center font-bold text-xs group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 group-hover:text-blue-800 flex items-center gap-1.5">
+                      <span>Format CSV</span>
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded">
+                        .csv
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      Teks terpisah koma, ringan & portabel
+                    </p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -279,10 +468,6 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mb-6 sm:mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         {/* Toggle Mode: Per Bulan vs Per Tahun */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold text-slate-600 mr-1 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-blue-600" />
-            <span>Tampilkan Data:</span>
-          </span>
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
             <button
               onClick={() => setPeriodeMode("bulan")}
@@ -324,12 +509,6 @@ export default function Dashboard() {
             options={TAHUN_DROPDOWN_OPTIONS}
             icon={<Calendar className="w-3.5 h-3.5 text-slate-500" />}
           />
-
-          <span className="text-xs text-slate-400 hidden sm:inline ml-1">
-            {periodeMode === "bulan"
-              ? `Periode: ${namaBulanTerpilih} ${selectedTahun}`
-              : `Periode: Tahun ${selectedTahun} Penuh`}
-          </span>
         </div>
       </div>
 
@@ -348,15 +527,13 @@ export default function Dashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
             {stats.total_siswa || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">Database sekolah</p>
         </div>
 
         {/* Hadir Tepat Waktu */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Tepat Waktu ({periodeMode === "bulan" ? "Bulan Ini" : "Tahun Ini"}
-              )
+              Tepat Waktu
             </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4" />
@@ -365,16 +542,13 @@ export default function Dashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
             {stats.total_tepat_waktu || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Presensi ≤ 06:30 WIB
-          </p>
         </div>
 
         {/* Terlambat */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Terlambat ({periodeMode === "bulan" ? "Bulan Ini" : "Tahun Ini"})
+              Terlambat
             </span>
             <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
               <AlertTriangle className="w-4 h-4" />
@@ -383,9 +557,6 @@ export default function Dashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-amber-600">
             {stats.total_terlambat || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Presensi &gt; 06:30 WIB
-          </p>
         </div>
 
         {/* Kunjungan Perpustakaan */}
@@ -401,11 +572,6 @@ export default function Dashboard() {
           <div className="text-2xl sm:text-3xl font-extrabold text-indigo-600">
             {stats.total_perpus || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {periodeMode === "bulan"
-              ? `${namaBulanTerpilih} ${selectedTahun}`
-              : `Tahun ${selectedTahun}`}
-          </p>
         </div>
       </div>
 
@@ -535,6 +701,88 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Bar Kontrol Slider Limit Tampilan & Navigasi Halaman */}
+        <div className="px-3.5 sm:px-6 py-3 bg-slate-50/80 border-b border-slate-200/80 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 text-xs">
+          {/* Kontrol Slider */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="font-semibold text-slate-700">
+                Batas Tampilan:
+              </span>
+            </div>
+
+            {/* Preset Buttons */}
+            <div className="flex items-center gap-1">
+              {[10, 5, 100, 150].map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setDisplayLimit(preset)}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
+                    displayLimit === preset
+                      ? "bg-blue-600 text-white shadow-2xs"
+                      : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Info Range & Pagination Controls */}
+          <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200/60">
+            <span className="text-slate-500 font-medium text-[11px] sm:text-xs">
+              {totalItems === 0 ? (
+                "0 data"
+              ) : (
+                <>
+                  Menampilkan{" "}
+                  <strong className="text-slate-800 font-bold">
+                    {startIndex + 1}–{endIndex}
+                  </strong>{" "}
+                  dari{" "}
+                  <strong className="text-slate-800 font-bold">
+                    {totalItems}
+                  </strong>{" "}
+                  data
+                </>
+              )}
+            </span>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="p-1 sm:px-2 sm:py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 transition-all cursor-pointer"
+                  title="Halaman Sebelumnya"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <span className="px-2 py-1 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">
+                  {safeCurrentPage} / {totalPages}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  className="p-1 sm:px-2 sm:py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 transition-all cursor-pointer"
+                  title="Halaman Selanjutnya"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* TAB 1: REKAP AKUMULASI SISWA PER BULAN / PER TAHUN */}
         {activeTab === "rekap_siswa" && (
           <div>
@@ -552,7 +800,7 @@ export default function Dashboard() {
                   </p>
                 </div>
               ) : (
-                filteredSiswa.map((item) => {
+                paginatedSiswa.map((item) => {
                   const isAktif = item.total_hadir > 0;
                   const jurInfo = getJurusanInfo(item.kelas);
                   return (
@@ -670,7 +918,7 @@ export default function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredSiswa.map((item) => {
+                    paginatedSiswa.map((item) => {
                       const isAktif = item.total_hadir > 0;
                       const jurInfo = getJurusanInfo(item.kelas);
                       return (
@@ -762,7 +1010,7 @@ export default function Dashboard() {
                   </p>
                 </div>
               ) : (
-                filteredHarian.map((item, index) => {
+                paginatedHarian.map((item, index) => {
                   const jurInfo = getJurusanInfo(item.kelas);
                   const isTepat = item.status === "Tepat Waktu";
                   return (
@@ -848,7 +1096,7 @@ export default function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredHarian.map((item, index) => {
+                    paginatedHarian.map((item, index) => {
                       const jurInfo = getJurusanInfo(item.kelas);
                       return (
                         <tr
@@ -917,7 +1165,7 @@ export default function Dashboard() {
                   </p>
                 </div>
               ) : (
-                filteredPerpus.map((item, index) => {
+                paginatedPerpus.map((item, index) => {
                   const jurInfo = getJurusanInfo(item.kelas);
                   return (
                     <div
@@ -992,7 +1240,7 @@ export default function Dashboard() {
                       </td>
                     </tr>
                   ) : (
-                    filteredPerpus.map((item, index) => {
+                    paginatedPerpus.map((item, index) => {
                       const jurInfo = getJurusanInfo(item.kelas);
                       return (
                         <tr
@@ -1036,8 +1284,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Table Footer Info */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-2">
+        {/* Table Footer Info & Bottom Pagination */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
           <span>
             Menampilkan data periode:{" "}
             <strong className="text-slate-800">
@@ -1046,9 +1294,38 @@ export default function Dashboard() {
                 : `Tahun ${selectedTahun}`}
             </strong>
           </span>
-          <span className="text-[11px] text-slate-400">
-            Sistem Presensi SMKN 21 • Rekapitulasi Otomatis Berdasarkan Database
-          </span>
+
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-slate-400">
+                Halaman {safeCurrentPage} dari {totalPages}
+              </span>
+              <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
+                <button
+                  type="button"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => {
+                    setCurrentPage((p) => Math.max(1, p - 1));
+                    window.scrollTo({ top: 350, behavior: "smooth" });
+                  }}
+                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  type="button"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => {
+                    setCurrentPage((p) => Math.min(totalPages, p + 1));
+                    window.scrollTo({ top: 350, behavior: "smooth" });
+                  }}
+                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  Selanjutnya
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

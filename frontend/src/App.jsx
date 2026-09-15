@@ -61,13 +61,10 @@ function AppLayout() {
 
       {!isKioskMode && (
         <footer className="py-6 border-t border-slate-200 bg-white/80 text-center text-xs text-slate-500">
-          <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
             <p className="font-medium text-slate-600">
               SMKN 21 Jakarta &copy; {new Date().getFullYear()} • Sistem
               Presensi Cerdas
-            </p>
-            <p className="text-[11px] text-slate-400">
-              Presensi Wajah Cepat • Realtime Database • Rekap Terpadu
             </p>
           </div>
         </footer>

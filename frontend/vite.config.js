@@ -24,6 +24,9 @@ export default defineConfig({
             if (id.includes("axios")) {
               return "vendor-utils";
             }
+            if (id.includes("xlsx")) {
+              return "vendor-xlsx";
+            }
           }
         },
       },
