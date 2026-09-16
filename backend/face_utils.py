@@ -147,9 +147,9 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
                 best_siswa_id = siswa_ids[idx]
 
         if best_siswa_id is not None and best_score >= COSINE_THRESHOLD:
-            # Konversi skor cosine ke persentase akurasi (65% - 99.5%)
+            # Konversi skor cosine ke persentase akurasi (80% - 99.5%)
             norm_conf = (best_score - COSINE_THRESHOLD) / (1.0 - COSINE_THRESHOLD)
-            confidence = round(min(99.5, max(65.0, 65.0 + norm_conf * 34.5)), 1)
+            confidence = round(min(99.5, max(80.0, 80.0 + norm_conf * 19.5)), 1)
 
             return {
                 "success": True,

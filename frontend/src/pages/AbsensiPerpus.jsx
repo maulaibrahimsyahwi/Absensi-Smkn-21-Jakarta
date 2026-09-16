@@ -41,8 +41,8 @@ const KEPERLUAN_OPTIONS = [
     icon: RotateCcw,
   },
   {
-    id: "Tugas Terstruktur",
-    label: "Tugas Terstruktur",
+    id: "Mengerjakan Tugas",
+    label: "Mengerjakan Tugas",
     desc: "Mengerjakan tugas sekolah atau tugas kelompok",
     icon: FileText,
   },
@@ -362,7 +362,7 @@ export default function AbsensiPerpus() {
                   />
                   <div>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                      <Sparkles className="w-3 h-3" /> Foto Terambil
+                      <Camera className="w-3 h-3" /> Foto Terambil
                     </span>
                     <p className="text-xs text-slate-600 mt-1">
                       Pilih atau ketik keperluan di bawah untuk verifikasi.
@@ -381,7 +381,7 @@ export default function AbsensiPerpus() {
                       key={item.id}
                       type="button"
                       onClick={() => setKeperluan(item.id)}
-                      className={`w-full p-2.5 rounded-xl border text-left transition-all duration-150 flex items-center gap-3 ${
+                      className={`w-full p-2.5 rounded-xl border text-left transition-all duration-150 flex items-center gap-3 cursor-pointer ${
                         isSelected
                           ? "border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20"
                           : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white"
@@ -422,7 +422,7 @@ export default function AbsensiPerpus() {
               {keperluan === "Lainnya" && (
                 <div className="mb-4 animate-in fade-in duration-150">
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Tuliskan Keperluan Anda:
+                    Tuliskan Keperluan Anda
                   </label>
                   <input
                     type="text"
@@ -445,7 +445,7 @@ export default function AbsensiPerpus() {
                     setCountdown(4);
                     setIsFaceDetected(false);
                   }}
-                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
@@ -455,7 +455,7 @@ export default function AbsensiPerpus() {
                     loading ||
                     (keperluan === "Lainnya" && !customKeperluan.trim())
                   }
-                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loading ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

@@ -236,11 +236,6 @@ export default function AbsensiHarian() {
               <p className="text-xs sm:text-sm mt-1 opacity-90 break-words">
                 {result.message}
               </p>
-              <p className="text-[10px] sm:text-[11px] mt-1.5 font-medium opacity-75">
-                {result.success
-                  ? "Sistem siap memindai siswa berikutnya..."
-                  : "Mempersiapkan pemindaian ulang otomatis..."}
-              </p>
             </div>
           </div>
         </div>

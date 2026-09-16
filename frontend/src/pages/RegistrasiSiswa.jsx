@@ -651,13 +651,12 @@ export default function RegistrasiSiswa() {
               {submitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <ShieldCheck className="w-4 h-4" />
+                <span>
+                  {reRecordingSiswa
+                    ? `Perbarui Biometrik (${samples.length} Sampel)`
+                    : `Simpan ${samples.length} Foto`}
+                </span>
               )}
-              <span>
-                {reRecordingSiswa
-                  ? `Perbarui Biometrik (${samples.length} Sampel)`
-                  : `Simpan ${samples.length} Foto`}
-              </span>
             </button>
           </form>
         </div>
