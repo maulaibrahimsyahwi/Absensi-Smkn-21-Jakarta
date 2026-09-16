@@ -161,7 +161,7 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
         else:
             return {
                 "success": False,
-                "message": "Wajah tidak cocok dengan data siswa terdaftar di database (kemiripan di bawah batas)"
+                "message": "Wajah tidak cocok dengan data siswa yang terdaftar di database"
             }
     except Exception as e:
         print("Error verify_face:", e)

@@ -431,6 +431,34 @@ def get_rekap_siswa_periode():
         "daftar": daftar
     })
 
+@app.route('/api/rekap/available_years', methods=['GET'])
+def get_available_years():
+    try:
+        years_set = set()
+        current_year = datetime.now().year
+        years_set.add(current_year)
+
+        # Selalu sertakan minimal 5 tahun terakhir
+        for i in range(5):
+            years_set.add(current_year - i)
+
+        # Ambil tahun unik dari riwayat presensi harian
+        harian_years = db.session.query(extract('year', AbsensiHarian.waktu)).distinct().all()
+        for (y,) in harian_years:
+            if y:
+                years_set.add(int(y))
+
+        # Ambil tahun unik dari riwayat kunjungan perpustakaan
+        perpus_years = db.session.query(extract('year', AbsensiPerpustakaan.waktu)).distinct().all()
+        for (y,) in perpus_years:
+            if y:
+                years_set.add(int(y))
+
+        sorted_years = sorted(list(years_set), reverse=True)
+        return jsonify(sorted_years)
+    except Exception as e:
+        return jsonify([datetime.now().year - i for i in range(5)])
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

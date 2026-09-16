@@ -64,7 +64,7 @@ function AppLayout() {
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
             <p className="font-medium text-slate-600">
               SMKN 21 Jakarta &copy; {new Date().getFullYear()} • Sistem
-              Presensi Cerdas
+              Presensi
             </p>
           </div>
         </footer>

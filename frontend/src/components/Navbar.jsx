@@ -77,7 +77,6 @@ export default function Navbar() {
             <Clock className="w-3.5 h-3.5 text-blue-600" />
             <span>{timeStr || "00:00:00 WIB"}</span>
           </div>
-          <span className="text-slate-300">•</span>
         </div>
 
         {/* Navigation Actions */}

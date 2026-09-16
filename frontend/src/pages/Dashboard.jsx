@@ -48,20 +48,38 @@ const BULAN_DROPDOWN_OPTIONS = BULAN_OPTIONS.map((b) => ({
   label: `Bulan ${b.label}`,
 }));
 
-// Tahun saat ini dan 4 tahun sebelumnya (total 5 tahun secara dinamis)
+// Fallback tahun (tahun saat ini dan 4 tahun ke belakang)
 const CURRENT_YEAR = new Date().getFullYear();
-const TAHUN_OPTIONS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
-
-const TAHUN_DROPDOWN_OPTIONS = TAHUN_OPTIONS.map((t) => ({
-  value: t,
-  label: `Tahun ${t}`,
-}));
+const DEFAULT_YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
 export default function Dashboard() {
   const currentNow = new Date();
   const [periodeMode, setPeriodeMode] = useState("bulan"); // "bulan" atau "tahun"
   const [selectedBulan, setSelectedBulan] = useState(currentNow.getMonth() + 1);
   const [selectedTahun, setSelectedTahun] = useState(currentNow.getFullYear());
+
+  // Opsi 1: Daftar tahun dinamis dari database (otomatis memuat seluruh tahun yang ada datanya)
+  const [availableYears, setAvailableYears] = useState(DEFAULT_YEARS);
+
+  useEffect(() => {
+    axios
+      .get("http://localhost:5000/api/rekap/available_years")
+      .then((res) => {
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setAvailableYears(res.data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Menggunakan fallback tahun:", err);
+      });
+  }, []);
+
+  const tahunDropdownOptions = useMemo(() => {
+    return availableYears.map((t) => ({
+      value: t,
+      label: `Tahun ${t}`,
+    }));
+  }, [availableYears]);
 
   const [activeTab, setActiveTab] = useState("rekap_siswa"); // "rekap_siswa", "riwayat_harian", "riwayat_perpus"
   const [loading, setLoading] = useState(false);
@@ -362,7 +380,7 @@ export default function Dashboard() {
             <RefreshCw
               className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
             />
-            <span className="hidden sm:inline">Segarkan</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
           {/* Dropdown Menu Unduh Rekap (XLSX, XLS, CSV) */}
           <div className="relative" ref={exportDropdownRef}>
@@ -471,7 +489,7 @@ export default function Dashboard() {
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
             <button
               onClick={() => setPeriodeMode("bulan")}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 periodeMode === "bulan"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -481,7 +499,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setPeriodeMode("tahun")}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 periodeMode === "tahun"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -500,14 +518,16 @@ export default function Dashboard() {
               onChange={(val) => setSelectedBulan(Number(val))}
               options={BULAN_DROPDOWN_OPTIONS}
               icon={<Calendar className="w-3.5 h-3.5 text-blue-600" />}
+              className="flex-1 sm:flex-none min-w-[130px]"
             />
           )}
 
           <CustomDropdown
             value={selectedTahun}
             onChange={(val) => setSelectedTahun(Number(val))}
-            options={TAHUN_DROPDOWN_OPTIONS}
+            options={tahunDropdownOptions}
             icon={<Calendar className="w-3.5 h-3.5 text-slate-500" />}
+            className="flex-1 sm:flex-none min-w-[120px]"
           />
         </div>
       </div>
@@ -708,13 +728,13 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <Sliders className="w-4 h-4 text-blue-600 flex-shrink-0" />
               <span className="font-semibold text-slate-700">
-                Batas Tampilan:
+                Batas Tampilan
               </span>
             </div>
 
             {/* Preset Buttons */}
             <div className="flex items-center gap-1">
-              {[10, 5, 100, 150].map((preset) => (
+              {[10, 15, 25, 50].map((preset) => (
                 <button
                   key={preset}
                   type="button"
@@ -941,21 +961,16 @@ export default function Dashboard() {
                               <span className="font-semibold text-slate-800 text-xs">
                                 {item.kelas}
                               </span>
-                              <span
-                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                              >
-                                {jurInfo.kode}
-                              </span>
                             </div>
                           </td>
                           <td className="py-3.5 px-6 text-center">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              {item.tepat_waktu}x
+                            <span className="font-extrabold text-emerald-700 text-sm">
+                              {item.tepat_waktu}
                             </span>
                           </td>
                           <td className="py-3.5 px-6 text-center">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              {item.terlambat}x
+                            <span className="font-extrabold text-amber-700 text-sm">
+                              {item.terlambat}
                             </span>
                           </td>
                           <td className="py-3.5 px-6 text-center">
@@ -964,9 +979,8 @@ export default function Dashboard() {
                             </span>
                           </td>
                           <td className="py-3.5 px-6 text-center">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              <BookOpen className="w-3 h-3" />
-                              <span>{item.kunjungan_perpus}x</span>
+                            <span className="font-extrabold text-indigo-900 text-sm">
+                              <span>{item.kunjungan_perpus}</span>
                             </span>
                           </td>
                           <td className="py-3.5 px-6 text-right">
@@ -1117,11 +1131,6 @@ export default function Dashboard() {
                               <span className="font-semibold text-slate-800 text-xs">
                                 {item.kelas}
                               </span>
-                              <span
-                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                              >
-                                {jurInfo.kode}
-                              </span>
                             </div>
                           </td>
                           <td className="py-4 px-6">
@@ -1261,16 +1270,10 @@ export default function Dashboard() {
                               <span className="font-semibold text-slate-800 text-xs">
                                 {item.kelas}
                               </span>
-                              <span
-                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                              >
-                                {jurInfo.kode}
-                              </span>
                             </div>
                           </td>
                           <td className="py-4 px-6">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80">
-                              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="py-4 px-6 font-semibold text-slate-900">
                               <span>{item.keperluan}</span>
                             </span>
                           </td>
@@ -1287,7 +1290,7 @@ export default function Dashboard() {
         {/* Table Footer Info & Bottom Pagination */}
         <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
           <span>
-            Menampilkan data periode:{" "}
+            Menampilkan data periode{" "}
             <strong className="text-slate-800">
               {periodeMode === "bulan"
                 ? `${namaBulanTerpilih} ${selectedTahun}`

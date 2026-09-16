@@ -68,20 +68,6 @@ export default function Home() {
           </div>
         </Link>
       </div>
-
-      {/* Admin Quick Action: Registrasi Siswa */}
-      <div className="mt-10">
-        <Link
-          to="/registrasi"
-          className="text-xs font-semibold text-slate-600 hover:text-indigo-600 transition-colors inline-flex items-center gap-2 bg-white border border-slate-200 hover:border-indigo-300 px-4 py-2.5 rounded-full shadow-2xs group"
-        >
-          <span className="w-2 h-2 rounded-full bg-indigo-500 group-hover:animate-ping"></span>
-          <span>
-            Perlu daftarkan siswa baru?{" "}
-            <strong>Rekam Sampel Wajah di sini &rarr;</strong>
-          </span>
-        </Link>
-      </div>
     </section>
   );
 }
