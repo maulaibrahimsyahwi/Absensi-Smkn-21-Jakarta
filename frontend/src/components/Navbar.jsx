@@ -7,6 +7,7 @@ import {
   BarChart3,
   Home,
   UserPlus,
+  FileText,
 } from "lucide-react";
 
 export default function Navbar() {
@@ -42,21 +43,22 @@ export default function Navbar() {
   const isHome = location.pathname === "/";
   const isDashboard = location.pathname === "/dashboard";
   const isRegistrasi = location.pathname === "/registrasi";
+  const isIzin = location.pathname === "/izin";
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2">
         {/* Brand */}
         <Link
           to="/"
-          className="flex items-center gap-2.5 sm:gap-3 group min-w-0"
+          className="flex items-center gap-2 sm:gap-3 group min-w-0 flex-shrink-0"
         >
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
+          <div className="w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
             <School className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="font-bold text-slate-900 tracking-tight text-sm sm:text-lg truncate">
+              <span className="font-extrabold text-slate-900 tracking-tight text-sm sm:text-lg truncate">
                 SMKN 21
               </span>
             </div>
@@ -80,39 +82,55 @@ export default function Navbar() {
         </div>
 
         {/* Navigation Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
           {!isHome && (
             <Link
               to="/"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Beranda"
+              className="inline-flex items-center gap-1 px-2 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg sm:rounded-xl transition-colors"
             >
               <Home className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden sm:inline">Beranda</span>
             </Link>
           )}
           <Link
+            to="/izin"
+            title="Pengajuan Surat Izin / Sakit"
+            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-colors ${
+              isIzin
+                ? "bg-rose-600 text-white shadow-xs shadow-rose-500/30"
+                : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden md:inline">Surat Izin/Sakit</span>
+            <span className="md:hidden">Izin</span>
+          </Link>
+          <Link
             to="/registrasi"
-            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+            title="Daftar & Database Wajah Siswa"
+            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-colors ${
               isRegistrasi
                 ? "bg-indigo-600 text-white shadow-xs shadow-indigo-500/30"
                 : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
             }`}
           >
             <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Daftar Wajah Siswa</span>
-            <span className="sm:hidden">Wajah</span>
+            <span className="hidden md:inline">Daftar Wajah</span>
+            <span className="md:hidden">Wajah</span>
           </Link>
           <Link
             to="/dashboard"
-            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
+            title="Dashboard Rekapitulasi Presensi"
+            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-semibold rounded-lg sm:rounded-xl transition-colors ${
               isDashboard
                 ? "bg-blue-600 text-white shadow-xs shadow-blue-500/30"
                 : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span className="hidden sm:inline">Dashboard Rekap</span>
-            <span className="sm:hidden">Rekap</span>
+            <span className="hidden md:inline">Dashboard Rekap</span>
+            <span className="md:hidden">Rekap</span>
           </Link>
         </div>
       </div>

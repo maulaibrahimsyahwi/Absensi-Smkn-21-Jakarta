@@ -24,6 +24,15 @@ import {
   ChevronRight,
   ChevronDown,
   FileSpreadsheet,
+  FileText,
+  HeartPulse,
+  Mail,
+  Eye,
+  Check,
+  X,
+  AlertCircle,
+  Loader2,
+  MapPin,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "./RegistrasiSiswa";
@@ -81,10 +90,15 @@ export default function Dashboard() {
     }));
   }, [availableYears]);
 
-  const [activeTab, setActiveTab] = useState("rekap_siswa"); // "rekap_siswa", "riwayat_harian", "riwayat_perpus"
+  const [activeTab, setActiveTab] = useState("rekap_siswa"); // "rekap_siswa", "riwayat_harian", "riwayat_perpus", "verifikasi_izin"
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [kelasFilter, setKelasFilter] = useState("ALL");
+  const [statusIzinFilter, setStatusIzinFilter] = useState("ALL"); // "ALL", "Menunggu", "Disetujui", "Ditolak"
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [selectedSuratModal, setSelectedSuratModal] = useState(null);
+  const [rejectModalItem, setRejectModalItem] = useState(null);
+  const [rejectNote, setRejectNote] = useState("");
 
   // Batas Tampilan Data & Paginasi (slider: 25, 50, 100, max 150)
   const [displayLimit, setDisplayLimit] = useState(25);
@@ -112,7 +126,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeTab, searchTerm, kelasFilter, displayLimit]);
+  }, [activeTab, searchTerm, kelasFilter, statusIzinFilter, displayLimit]);
 
   // Data State
   const [siswaPeriode, setSiswaPeriode] = useState({
@@ -121,46 +135,77 @@ export default function Dashboard() {
       total_presensi_harian: 0,
       total_tepat_waktu: 0,
       total_terlambat: 0,
+      total_sakit: 0,
+      total_izin: 0,
       total_perpus: 0,
     },
     daftar: [],
   });
   const [riwayatHarian, setRiwayatHarian] = useState([]);
   const [riwayatPerpus, setRiwayatPerpus] = useState([]);
+  const [pengajuanList, setPengajuanList] = useState([]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const bulanParam = periodeMode === "bulan" ? selectedBulan : "ALL";
-      const [resPeriode, resHarian, resPerpus] = await Promise.all([
-        axios.get("http://localhost:5000/api/rekap/siswa_periode", {
-          params: {
-            mode: periodeMode,
-            bulan: selectedBulan,
-            tahun: selectedTahun,
-          },
-        }),
-        axios.get("http://localhost:5000/api/rekap/harian", {
-          params: {
-            bulan: bulanParam,
-            tahun: selectedTahun,
-          },
-        }),
-        axios.get("http://localhost:5000/api/rekap/perpus", {
-          params: {
-            bulan: bulanParam,
-            tahun: selectedTahun,
-          },
-        }),
-      ]);
+      const [resPeriode, resHarian, resPerpus, resPengajuan] =
+        await Promise.all([
+          axios.get("http://localhost:5000/api/rekap/siswa_periode", {
+            params: {
+              mode: periodeMode,
+              bulan: selectedBulan,
+              tahun: selectedTahun,
+            },
+          }),
+          axios.get("http://localhost:5000/api/rekap/harian", {
+            params: {
+              bulan: bulanParam,
+              tahun: selectedTahun,
+            },
+          }),
+          axios.get("http://localhost:5000/api/rekap/perpus", {
+            params: {
+              bulan: bulanParam,
+              tahun: selectedTahun,
+            },
+          }),
+          axios.get("http://localhost:5000/api/pengajuan_izin"),
+        ]);
 
       setSiswaPeriode(resPeriode.data || { statistik: {}, daftar: [] });
       setRiwayatHarian(resHarian.data || []);
       setRiwayatPerpus(resPerpus.data || []);
+      setPengajuanList(resPengajuan.data || []);
     } catch (err) {
       console.error("Gagal mengambil data rekap:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifikasi = async (id, aksi, catatan = "") => {
+    setVerifyingId(id);
+    try {
+      const res = await axios.post(
+        `http://localhost:5000/api/pengajuan_izin/${id}/verifikasi`,
+        {
+          aksi,
+          catatan,
+        },
+      );
+      if (res.data && res.data.success) {
+        await fetchData();
+        setRejectModalItem(null);
+        setRejectNote("");
+      }
+    } catch (err) {
+      alert(
+        err.response?.data?.message ||
+          "Gagal memproses verifikasi surat pengajuan.",
+      );
+    } finally {
+      setVerifyingId(null);
     }
   };
 
@@ -203,6 +248,27 @@ export default function Dashboard() {
     });
   }, [riwayatPerpus, searchTerm, kelasFilter]);
 
+  // Filtered Pengajuan Izin
+  const filteredPengajuan = useMemo(() => {
+    return pengajuanList.filter((item) => {
+      const matchSearch =
+        item.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.alasan?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.kelas?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchKelas = kelasFilter === "ALL" || item.kelas === kelasFilter;
+      const matchStatus =
+        statusIzinFilter === "ALL" ||
+        item.status_pengajuan === statusIzinFilter;
+      return matchSearch && matchKelas && matchStatus;
+    });
+  }, [pengajuanList, searchTerm, kelasFilter, statusIzinFilter]);
+
+  const pendingCount = useMemo(() => {
+    return pengajuanList.filter((p) => p.status_pengajuan === "Menunggu")
+      .length;
+  }, [pengajuanList]);
+
   const uniqueKelas = useMemo(() => {
     const list = siswaPeriode.daftar?.map((s) => s.kelas) || [];
     return Array.from(new Set(list)).filter(Boolean);
@@ -217,8 +283,15 @@ export default function Dashboard() {
   const currentTotalList = useMemo(() => {
     if (activeTab === "rekap_siswa") return filteredSiswa;
     if (activeTab === "riwayat_harian") return filteredHarian;
-    return filteredPerpus;
-  }, [activeTab, filteredSiswa, filteredHarian, filteredPerpus]);
+    if (activeTab === "riwayat_perpus") return filteredPerpus;
+    return filteredPengajuan;
+  }, [
+    activeTab,
+    filteredSiswa,
+    filteredHarian,
+    filteredPerpus,
+    filteredPengajuan,
+  ]);
 
   const totalItems = currentTotalList.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / displayLimit));
@@ -243,6 +316,11 @@ export default function Dashboard() {
     return filteredPerpus.slice(startIndex, endIndex);
   }, [activeTab, filteredPerpus, startIndex, endIndex]);
 
+  const paginatedPengajuan = useMemo(() => {
+    if (activeTab !== "verifikasi_izin") return [];
+    return filteredPengajuan.slice(startIndex, endIndex);
+  }, [activeTab, filteredPengajuan, startIndex, endIndex]);
+
   // Ekspor Data Laporan (Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
   const handleExport = (format = "xlsx") => {
     let headers = [];
@@ -264,6 +342,8 @@ export default function Dashboard() {
         "Kelas",
         "Tepat Waktu",
         "Terlambat",
+        "Sakit",
+        "Izin",
         "Total Hadir",
         "Kunjungan Perpus",
         "Status Aktivitas",
@@ -275,6 +355,8 @@ export default function Dashboard() {
         item.kelas,
         item.tepat_waktu,
         item.terlambat,
+        item.sakit || 0,
+        item.izin || 0,
         item.total_hadir,
         item.kunjungan_perpus,
         item.total_hadir > 0 ? "Aktif Presensi" : "Nir-Kehadiran",
@@ -296,7 +378,7 @@ export default function Dashboard() {
         item.kelas,
         item.status,
       ]);
-    } else {
+    } else if (activeTab === "riwayat_perpus") {
       sheetName = "Kunjungan Perpus";
       filename = `riwayat_perpustakaan_${periodeTag}`;
       headers = [
@@ -312,6 +394,43 @@ export default function Dashboard() {
         item.nama,
         item.kelas,
         item.keperluan,
+      ]);
+    } else {
+      sheetName = "Verifikasi Izin";
+      filename = `pengajuan_izin_sakit_${periodeTag}`;
+      headers = [
+        "No",
+        "Waktu Pengajuan",
+        "NIS",
+        "Nama Siswa",
+        "Kelas",
+        "Jenis",
+        "Tanggal Mulai",
+        "Tanggal Selesai",
+        "Alasan",
+        "Status Verifikasi",
+        "Catatan Guru",
+        "Latitude",
+        "Longitude",
+        "Tautan Google Maps",
+      ];
+      rows = filteredPengajuan.map((item, index) => [
+        index + 1,
+        item.created_at,
+        item.nis,
+        item.nama,
+        item.kelas,
+        item.jenis,
+        item.tanggal_mulai,
+        item.tanggal_selesai,
+        item.alasan,
+        item.status_pengajuan,
+        item.catatan_guru || "-",
+        item.latitude || "-",
+        item.longitude || "-",
+        item.latitude && item.longitude
+          ? `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
+          : "-",
       ]);
     }
 
@@ -399,7 +518,7 @@ export default function Dashboard() {
             </button>
 
             {isExportOpen && (
-              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 -mt-2 mb-1 rounded-t-2xl">
                   <p className="text-[11px] text-slate-700 font-semibold truncate mt-0.5">
                     Periode:{" "}
@@ -485,11 +604,11 @@ export default function Dashboard() {
       {/* FILTER PERIODE WAKTU (PER BULAN & PER TAHUN) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mb-6 sm:mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         {/* Toggle Mode: Per Bulan vs Per Tahun */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setPeriodeMode("bulan")}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
                 periodeMode === "bulan"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -499,7 +618,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setPeriodeMode("tahun")}
-              className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
                 periodeMode === "tahun"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
@@ -511,14 +630,14 @@ export default function Dashboard() {
         </div>
 
         {/* Dropdown Pemilih Bulan & Tahun */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
           {periodeMode === "bulan" && (
             <CustomDropdown
               value={selectedBulan}
               onChange={(val) => setSelectedBulan(Number(val))}
               options={BULAN_DROPDOWN_OPTIONS}
               icon={<Calendar className="w-3.5 h-3.5 text-blue-600" />}
-              className="flex-1 sm:flex-none min-w-[130px]"
+              className="w-full sm:w-auto sm:flex-none min-w-[130px]"
             />
           )}
 
@@ -527,24 +646,24 @@ export default function Dashboard() {
             onChange={(val) => setSelectedTahun(Number(val))}
             options={tahunDropdownOptions}
             icon={<Calendar className="w-3.5 h-3.5 text-slate-500" />}
-            className="flex-1 sm:flex-none min-w-[120px]"
+            className="w-full sm:w-auto sm:flex-none min-w-[120px]"
           />
         </div>
       </div>
 
       {/* KPI METRIC SUMMARY CARDS (Sesuai Bulan / Tahun Terpilih) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {/* Total Siswa Terdaftar */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Total Siswa Terdaftar
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
+              Total Siswa
             </span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Users className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 truncate">
             {stats.total_siswa || 0}
           </div>
         </div>
@@ -552,14 +671,14 @@ export default function Dashboard() {
         {/* Hadir Tepat Waktu */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
               Tepat Waktu
             </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-emerald-600 truncate">
             {stats.total_tepat_waktu || 0}
           </div>
         </div>
@@ -567,29 +686,50 @@ export default function Dashboard() {
         {/* Terlambat */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
               Terlambat
             </span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-amber-600">
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-amber-600 truncate">
             {stats.total_terlambat || 0}
           </div>
         </div>
 
-        {/* Kunjungan Perpustakaan */}
+        {/* Sakit & Izin */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Kunjungan Perpustakaan
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
+              Sakit & Izin
             </span>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <BookOpen className="w-4 h-4" />
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+              <HeartPulse className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-indigo-600">
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-rose-600 truncate">
+            {(stats.total_sakit || 0) + (stats.total_izin || 0)}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1 truncate">
+            Sakit{" "}
+            <strong className="text-slate-700">{stats.total_sakit || 0}</strong>{" "}
+            • Izin{" "}
+            <strong className="text-slate-700">{stats.total_izin || 0}</strong>
+          </p>
+        </div>
+
+        {/* Kunjungan Perpustakaan */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
+              Perpustakaan
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-indigo-600 truncate">
             {stats.total_perpus || 0}
           </div>
         </div>
@@ -690,6 +830,40 @@ export default function Dashboard() {
               {riwayatPerpus.length}
             </span>
           </button>
+
+          {/* Tab 4: Verifikasi Izin & Sakit */}
+          <button
+            onClick={() => {
+              setActiveTab("verifikasi_izin");
+              setSearchTerm("");
+            }}
+            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+              activeTab === "verifikasi_izin"
+                ? "border-rose-600 text-rose-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileText className="w-4 h-4 flex-shrink-0" />
+            <span>
+              <span className="sm:hidden">Izin & Sakit</span>
+              <span className="hidden sm:inline">Verifikasi Izin & Sakit</span>
+            </span>
+            {pendingCount > 0 ? (
+              <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
+                {pendingCount} Baru
+              </span>
+            ) : (
+              <span
+                className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  activeTab === "verifikasi_izin"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-slate-200/70 text-slate-600"
+                }`}
+              >
+                {pengajuanList.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Filter & Search Bar */}
@@ -698,15 +872,30 @@ export default function Dashboard() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Cari berdasarkan nama, NIS, atau kelas..."
+              placeholder="Cari berdasarkan nama, NIS, alasan, atau kelas..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
             />
           </div>
 
-          <div className="w-full sm:w-auto">
-            {/* Filter Kelas */}
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {activeTab === "verifikasi_izin" && (
+              <CustomDropdown
+                value={statusIzinFilter}
+                onChange={setStatusIzinFilter}
+                options={[
+                  { value: "ALL", label: "Semua Status" },
+                  { value: "Menunggu", label: "Menunggu Konfirmasi" },
+                  { value: "Disetujui", label: "Disetujui" },
+                  { value: "Ditolak", label: "Ditolak" },
+                ]}
+                icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
+                className="w-full sm:w-auto min-w-[150px]"
+                align="right"
+              />
+            )}
+
             <CustomDropdown
               value={kelasFilter}
               onChange={setKelasFilter}
@@ -861,8 +1050,8 @@ export default function Dashboard() {
                         )}
                       </div>
 
-                      {/* 4 Kotak Metrik Akumulasi Kehadiran */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-100 text-center">
+                      {/* 6 Kotak Metrik Akumulasi Kehadiran */}
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-2 border-t border-slate-100 text-center">
                         <div className="bg-emerald-50/70 border border-emerald-100/80 rounded-xl p-1.5">
                           <span className="text-[10px] text-emerald-700 font-medium block">
                             Tepat
@@ -877,6 +1066,22 @@ export default function Dashboard() {
                           </span>
                           <span className="text-xs font-black text-amber-800">
                             {item.terlambat}x
+                          </span>
+                        </div>
+                        <div className="bg-rose-50/70 border border-rose-100/80 rounded-xl p-1.5">
+                          <span className="text-[10px] text-rose-700 font-medium block">
+                            Sakit
+                          </span>
+                          <span className="text-xs font-black text-rose-800">
+                            {item.sakit || 0}
+                          </span>
+                        </div>
+                        <div className="bg-amber-50/70 border border-amber-100/80 rounded-xl p-1.5">
+                          <span className="text-[10px] text-amber-700 font-medium block">
+                            Izin
+                          </span>
+                          <span className="text-xs font-black text-amber-800">
+                            {item.izin || 0}
                           </span>
                         </div>
                         <div className="bg-blue-50/70 border border-blue-100/80 rounded-xl p-1.5">
@@ -904,15 +1109,17 @@ export default function Dashboard() {
 
             {/* 2. Desktop Table View (>= md) */}
             <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[700px]">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[760px]">
                 <thead>
                   <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
                     <th className="py-3.5 px-6">Siswa</th>
                     <th className="py-3.5 px-6">Kelas</th>
-                    <th className="py-3.5 px-6 text-center">Tepat Waktu</th>
-                    <th className="py-3.5 px-6 text-center">Terlambat</th>
-                    <th className="py-3.5 px-6 text-center">Total Hadir</th>
-                    <th className="py-3.5 px-6 text-center">
+                    <th className="py-3.5 px-4 text-center">Tepat Waktu</th>
+                    <th className="py-3.5 px-4 text-center">Terlambat</th>
+                    <th className="py-3.5 px-4 text-center">Sakit</th>
+                    <th className="py-3.5 px-4 text-center">Izin</th>
+                    <th className="py-3.5 px-4 text-center">Total Hadir</th>
+                    <th className="py-3.5 px-4 text-center">
                       Kunjungan Perpus
                     </th>
                     <th className="py-3.5 px-6 text-right">Status Aktivitas</th>
@@ -922,7 +1129,7 @@ export default function Dashboard() {
                   {filteredSiswa.length === 0 ? (
                     <tr>
                       <td
-                        colSpan="7"
+                        colSpan="9"
                         className="py-12 text-center text-slate-400"
                       >
                         <div className="flex flex-col items-center justify-center">
@@ -963,22 +1170,32 @@ export default function Dashboard() {
                               </span>
                             </div>
                           </td>
-                          <td className="py-3.5 px-6 text-center">
+                          <td className="py-3.5 px-4 text-center">
                             <span className="font-extrabold text-emerald-700 text-sm">
                               {item.tepat_waktu}
                             </span>
                           </td>
-                          <td className="py-3.5 px-6 text-center">
+                          <td className="py-3.5 px-4 text-center">
                             <span className="font-extrabold text-amber-700 text-sm">
                               {item.terlambat}
                             </span>
                           </td>
-                          <td className="py-3.5 px-6 text-center">
+                          <td className="py-3.5 px-4 text-center">
+                            <span className="font-extrabold text-rose-600 text-sm">
+                              {item.sakit || 0}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <span className="font-extrabold text-amber-600 text-sm">
+                              {item.izin || 0}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
                             <span className="font-extrabold text-slate-900 text-sm">
                               {item.total_hadir} Hari
                             </span>
                           </td>
-                          <td className="py-3.5 px-6 text-center">
+                          <td className="py-3.5 px-4 text-center">
                             <span className="font-extrabold text-indigo-900 text-sm">
                               <span>{item.kunjungan_perpus}</span>
                             </span>
@@ -1026,7 +1243,6 @@ export default function Dashboard() {
               ) : (
                 paginatedHarian.map((item, index) => {
                   const jurInfo = getJurusanInfo(item.kelas);
-                  const isTepat = item.status === "Tepat Waktu";
                   return (
                     <div
                       key={item.id || index}
@@ -1050,15 +1266,26 @@ export default function Dashboard() {
                         </div>
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex-shrink-0 ${
-                            isTepat
+                            item.status === "Tepat Waktu"
                               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
+                              : item.status === "Terlambat"
+                                ? "bg-amber-50 text-amber-700 border-amber-200"
+                                : item.status === "Sakit"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200"
                           }`}
                         >
-                          {isTepat ? (
+                          {item.status === "Tepat Waktu" && (
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          ) : (
+                          )}
+                          {item.status === "Terlambat" && (
                             <AlertTriangle className="w-3 h-3 text-amber-600" />
+                          )}
+                          {item.status === "Sakit" && (
+                            <HeartPulse className="w-3 h-3 text-rose-600" />
+                          )}
+                          {item.status === "Izin" && (
+                            <Mail className="w-3 h-3 text-blue-600" />
                           )}
                           <span>{item.status}</span>
                         </span>
@@ -1138,10 +1365,14 @@ export default function Dashboard() {
                               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
                                 item.status === "Tepat Waktu"
                                   ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                                  : item.status === "Terlambat"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : item.status === "Sakit"
+                                      ? "bg-rose-50 text-rose-700 border-rose-200"
+                                      : "bg-blue-50 text-blue-700 border-blue-200"
                               }`}
                             >
-                              {item.status}
+                              <span>{item.status}</span>
                             </span>
                           </td>
                         </tr>
@@ -1287,6 +1518,382 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* TAB 4: VERIFIKASI PENGAJUAN IZIN & SAKIT */}
+        {activeTab === "verifikasi_izin" && (
+          <div>
+            {/* 1. Mobile Cards View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {filteredPengajuan.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 p-4">
+                  <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
+                  <p className="font-semibold text-slate-600 text-sm">
+                    Tidak Ada Pengajuan Izin / Sakit
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {statusIzinFilter !== "ALL"
+                      ? `Tidak ada pengajuan dengan status '${statusIzinFilter}'.`
+                      : "Belum ada pengajuan izin yang dikirimkan oleh siswa/orang tua."}
+                  </p>
+                </div>
+              ) : (
+                paginatedPengajuan.map((item) => {
+                  const jurInfo = getJurusanInfo(item.kelas);
+                  const isMenunggu = item.status_pengajuan === "Menunggu";
+                  const isDisetujui = item.status_pengajuan === "Disetujui";
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-4 hover:bg-slate-50/60 transition-colors space-y-3"
+                    >
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 text-sm truncate">
+                            {item.nama}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            <span className="text-[11px] text-slate-400 font-mono">
+                              NIS: {item.nis}
+                            </span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-[11px] font-bold text-slate-700">
+                              {item.kelas}
+                            </span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
+                            >
+                              {jurInfo.kode}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex-shrink-0 ${
+                            isMenunggu
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : isDisetujui
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : "bg-rose-50 text-rose-800 border-rose-200"
+                          }`}
+                        >
+                          {isMenunggu && (
+                            <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                          )}
+                          {isDisetujui && (
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          )}
+                          {!isMenunggu && !isDisetujui && (
+                            <X className="w-3 h-3 text-rose-600" />
+                          )}
+                          <span>{item.status_pengajuan}</span>
+                        </span>
+                      </div>
+
+                      {/* Details Box */}
+                      <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-medium">
+                            Jenis:
+                          </span>
+                          <span
+                            className={`font-bold px-2 py-0.2 rounded-md ${
+                              item.jenis === "Sakit"
+                                ? "bg-rose-100 text-rose-700"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
+                          >
+                            {item.jenis === "Sakit" ? "Sakit" : "Izin"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500 font-medium">
+                            Periode:
+                          </span>
+                          <span className="font-semibold text-slate-800">
+                            {item.tanggal_mulai} s/d {item.tanggal_selesai}
+                          </span>
+                        </div>
+                        <div className="pt-1 border-t border-slate-200/40">
+                          <span className="text-slate-500 font-medium block mb-0.5">
+                            Alasan:
+                          </span>
+                          <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs">
+                            "{item.alasan}"
+                          </p>
+                        </div>
+                        {item.catatan_guru && (
+                          <div className="pt-1 border-t border-slate-200/40 text-slate-600 text-xs">
+                            <span className="font-bold text-slate-700">
+                              Catatan Guru:
+                            </span>{" "}
+                            {item.catatan_guru}
+                          </div>
+                        )}
+                        {item.latitude && item.longitude && (
+                          <div className="pt-1.5 border-t border-slate-200/40 flex items-center justify-between">
+                            <span className="text-slate-500 font-medium flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Lokasi GPS:</span>
+                            </span>
+                            <a
+                              href={
+                                item.maps_url ||
+                                `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200/70 transition-colors"
+                            >
+                              <span>📍 Buka di Google Maps</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Surat & Actions */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {item.surat_bukti ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSuratModal(item)}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Lihat Surat Bukti</span>
+                          </button>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">
+                            Tanpa lampiran foto
+                          </span>
+                        )}
+
+                        {isMenunggu && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={verifyingId === item.id}
+                              onClick={() =>
+                                handleVerifikasi(item.id, "Disetujui")
+                              }
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              {verifyingId === item.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Check className="w-3.5 h-3.5" />
+                              )}
+                              <span>Setujui</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={verifyingId === item.id}
+                              onClick={() => setRejectModalItem(item)}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Tolak</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* 2. Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[920px]">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 px-5">Waktu Pengajuan</th>
+                    <th className="py-3.5 px-5">Siswa</th>
+                    <th className="py-3.5 px-4 text-center">Jenis</th>
+                    <th className="py-3.5 px-5">Periode</th>
+                    <th className="py-3.5 px-5 min-w-[200px] max-w-[300px]">
+                      Alasan
+                    </th>
+                    <th className="py-3.5 px-4 text-center">Surat Bukti</th>
+                    <th className="py-3.5 px-4 text-center">Lokasi GPS</th>
+                    <th className="py-3.5 px-4 text-center">Status</th>
+                    <th className="py-3.5 px-5 text-right">Aksi Verifikasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPengajuan.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan="9"
+                        className="py-12 text-center text-slate-400"
+                      >
+                        <div className="flex flex-col items-center justify-center">
+                          <Inbox className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
+                          <p className="font-semibold text-slate-600 text-sm">
+                            Tidak Ada Pengajuan Izin / Sakit
+                          </p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {statusIzinFilter !== "ALL"
+                              ? `Tidak ada pengajuan dengan status '${statusIzinFilter}'.`
+                              : "Belum ada pengajuan izin yang dikirimkan oleh siswa/orang tua."}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedPengajuan.map((item) => {
+                      const jurInfo = getJurusanInfo(item.kelas);
+                      const isMenunggu = item.status_pengajuan === "Menunggu";
+                      const isDisetujui = item.status_pengajuan === "Disetujui";
+                      return (
+                        <tr
+                          key={item.id}
+                          className="hover:bg-slate-50/70 transition-colors"
+                        >
+                          <td className="py-4 px-5 text-slate-500 font-medium whitespace-nowrap text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{item.created_at}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-5">
+                            <div>
+                              <p className="font-bold text-slate-900">
+                                {item.nama}
+                              </p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs font-semibold text-slate-700">
+                                  {item.kelas}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                item.jenis === "Sakit"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-amber-50 text-amber-800 border-amber-200"
+                              }`}
+                            >
+                              {item.jenis === "Sakit" ? "Sakit" : "Izin"}
+                            </span>
+                          </td>
+                          <td className="py-4 px-5 text-xs text-slate-700 whitespace-nowrap font-medium">
+                            <div>{item.tanggal_mulai}</div>
+                            <div className="text-[11px] text-slate-400">
+                              s/d {item.tanggal_selesai}
+                            </div>
+                          </td>
+                          <td className="py-4 px-5 text-xs text-slate-700 min-w-[200px] max-w-[300px]">
+                            <div className="whitespace-normal break-words leading-relaxed bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/70 font-medium text-slate-800 shadow-2xs">
+                              "{item.alasan}"
+                            </div>
+                            {item.catatan_guru && (
+                              <div className="text-[11px] text-slate-600 mt-1.5 flex items-start gap-1 bg-amber-50/70 border border-amber-200/60 p-1.5 rounded-lg">
+                                <span className="font-bold text-amber-900 flex-shrink-0">
+                                  Catatan:
+                                </span>
+                                <span className="break-words">
+                                  {item.catatan_guru}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-center whitespace-nowrap">
+                            {item.surat_bukti ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedSuratModal(item)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>Lihat Foto</span>
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">
+                                -
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-center whitespace-nowrap">
+                            {item.latitude && item.longitude ? (
+                              <a
+                                href={
+                                  item.maps_url ||
+                                  `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200/70 transition-colors"
+                                title={`Koordinat: ${item.latitude}, ${item.longitude}`}
+                              >
+                                <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Maps</span>
+                              </a>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">
+                                -
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-center whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                isMenunggu
+                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                  : isDisetujui
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : "bg-rose-50 text-rose-800 border-rose-200"
+                              }`}
+                            >
+                              <span>{item.status_pengajuan}</span>
+                            </span>
+                          </td>
+                          <td className="py-4 px-5 text-right whitespace-nowrap">
+                            {isMenunggu ? (
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={verifyingId === item.id}
+                                  onClick={() =>
+                                    handleVerifikasi(item.id, "Disetujui")
+                                  }
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                >
+                                  {verifyingId === item.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    ""
+                                  )}
+                                  <span>Setujui</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={verifyingId === item.id}
+                                  onClick={() => setRejectModalItem(item)}
+                                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                                >
+                                  <span>Tolak</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-medium">
+                                Selesai diverifikasi
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* Table Footer Info & Bottom Pagination */}
         <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-3">
           <span>
@@ -1331,6 +1938,120 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* MODAL LIGHTBOX FOTO SURAT BUKTI */}
+      {selectedSuratModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Foto Surat Bukti {selectedSuratModal.nama}
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {selectedSuratModal.jenis} •{" "}
+                  {selectedSuratModal.tanggal_mulai} s/d{" "}
+                  {selectedSuratModal.tanggal_selesai}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedSuratModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-auto flex items-center justify-center bg-slate-900/5 min-h-[200px] sm:min-h-[300px]">
+              <img
+                src={selectedSuratModal.surat_bukti}
+                alt="Foto Surat Keterangan"
+                className="max-h-[55vh] sm:max-h-[70vh] object-contain rounded-lg shadow-sm"
+              />
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedSuratModal(null)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PENOLAKAN DENGAN CATATAN GURU */}
+      {rejectModalItem && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-md w-full max-h-[92vh] overflow-y-auto p-5 sm:p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Tolak Pengajuan {rejectModalItem.jenis}?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Siswa {rejectModalItem.nama} ({rejectModalItem.kelas})
+                </p>
+              </div>
+            </div>
+
+            {/* Alasan Siswa */}
+            <div className="mb-3.5 p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs">
+              <span className="font-semibold text-slate-500 block mb-1">
+                Alasan Pengajuan Siswa:
+              </span>
+              <p className="text-slate-800 italic break-words whitespace-normal leading-relaxed">
+                "{rejectModalItem.alasan}"
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Catatan / Alasan Penolakan
+              </label>
+              <textarea
+                rows={3}
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="Contoh: Surat keterangan dokter tidak terbaca jelas, mohon unggah ulang..."
+                className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectModalItem(null);
+                  setRejectNote("");
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={verifyingId === rejectModalItem.id}
+                onClick={() =>
+                  handleVerifikasi(rejectModalItem.id, "Ditolak", rejectNote)
+                }
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {verifyingId === rejectModalItem.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <span>Konfirmasi Tolak</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -620,9 +620,10 @@ export default function RegistrasiSiswa() {
                               e.stopPropagation();
                               removeSample(idx);
                             }}
-                            className="absolute top-1 right-1 w-5 h-5 bg-rose-600 text-white rounded-full flex items-center justify-center hover:bg-rose-700 shadow-sm"
+                            className="absolute top-1 right-1 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center hover:bg-rose-700 active:scale-90 transition-transform shadow-sm cursor-pointer"
+                            title="Hapus Sampel Ini"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-3.5 h-3.5" />
                           </button>
                           <span className="absolute bottom-1 left-1 px-1.5 py-0.2 rounded bg-black/60 text-white text-[9px] font-bold">
                             #{idx + 1}
@@ -901,7 +902,7 @@ export default function RegistrasiSiswa() {
       {/* Modal Hapus Siswa (Konfirmasi) */}
       {deletingSiswa && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm overflow-hidden shadow-2xl p-6">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6">
             <h3 className="text-base font-bold text-slate-900 mb-2">
               Hapus Siswa dari Database?
             </h3>
@@ -934,7 +935,7 @@ export default function RegistrasiSiswa() {
       {/* Modal Edit Siswa */}
       {editingSiswa && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm shadow-2xl p-6 relative">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 relative">
             <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900">
                 Edit Data Siswa

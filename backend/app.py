@@ -1,12 +1,12 @@
 import os
 import re
 import json
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_compress import Compress
 from sqlalchemy import extract
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin
 from face_utils import get_face_encoding, verify_face, check_face_present
 
 VALID_JURUSAN_SMKN21 = ['PPLG', 'AKL', 'MPLB', 'BR']
@@ -170,15 +170,32 @@ def delete_siswa(id):
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
     try:
         nama_siswa = siswa.nama
-        # Hapus riwayat absensi terkait jika ada
+        # Hapus riwayat absensi dan pengajuan izin terkait jika ada
         AbsensiHarian.query.filter_by(siswa_id=id).delete()
         AbsensiPerpustakaan.query.filter_by(siswa_id=id).delete()
+        PengajuanIzin.query.filter_by(siswa_id=id).delete()
         db.session.delete(siswa)
         db.session.commit()
         return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil dihapus dari database."})
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/cek_siswa_nis/<nis>', methods=['GET'])
+def cek_siswa_nis(nis):
+    nis = str(nis or '').strip()
+    siswa = Siswa.query.filter_by(nis=nis).first()
+    if not siswa:
+        return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan."}), 404
+    return jsonify({
+        "success": True,
+        "siswa": {
+            "id": siswa.id,
+            "nis": siswa.nis,
+            "nama": siswa.nama,
+            "kelas": siswa.kelas
+        }
+    })
 
 # ================= REGISTRASI SAMPEL WAJAH (MULTI-SAMPLE) =================
 
@@ -269,10 +286,10 @@ def verify_harian():
             db.session.add(absen)
             db.session.commit()
             
-            confidence_text = f" (Akurasi: {result.get('confidence', 95)}%)" if 'confidence' in result else ""
+            confidence_text = f" kecocokan {result.get('confidence', 95)}%" if 'confidence' in result else ""
             return jsonify({
                 "success": True,
-                "message": f"Berhasil Absen: {siswa.nama} - {siswa.kelas} ({status}){confidence_text}"
+                "message": f"Berhasil Absen {siswa.nama} - {siswa.kelas} ({status}){confidence_text}"
             })
         else:
             return jsonify(result), 401
@@ -308,6 +325,169 @@ def verify_perpus():
             })
         else:
             return jsonify(result), 401
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+# ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
+
+@app.route('/api/pengajuan_izin', methods=['POST'])
+def submit_pengajuan_izin():
+    data = request.json or {}
+    nis = str(data.get('nis', '')).strip()
+    jenis = str(data.get('jenis', '')).strip() # "Sakit" atau "Izin"
+    tgl_mulai_str = str(data.get('tanggal_mulai', '')).strip()
+    tgl_selesai_str = str(data.get('tanggal_selesai', '')).strip()
+    alasan = str(data.get('alasan', '')).strip()
+    surat_bukti = data.get('surat_bukti') # base64 data uri string
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    lokasi_teks = data.get('lokasi_teks')
+
+    try:
+        if latitude is not None and latitude != '':
+            latitude = float(latitude)
+        else:
+            latitude = None
+        if longitude is not None and longitude != '':
+            longitude = float(longitude)
+        else:
+            longitude = None
+    except (ValueError, TypeError):
+        latitude = None
+        longitude = None
+
+    if not nis:
+        return jsonify({"success": False, "message": "NIS siswa wajib diisi."}), 400
+    
+    siswa = Siswa.query.filter_by(nis=nis).first()
+    if not siswa:
+        return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan dalam database."}), 404
+
+    if jenis not in ["Sakit", "Izin"]:
+        return jsonify({"success": False, "message": "Jenis pengajuan harus 'Sakit' atau 'Izin'."}), 400
+
+    if not tgl_mulai_str or not tgl_selesai_str:
+        return jsonify({"success": False, "message": "Tanggal mulai dan selesai harus diisi."}), 400
+
+    try:
+        tgl_mulai = datetime.strptime(tgl_mulai_str, "%Y-%m-%d").date()
+        tgl_selesai = datetime.strptime(tgl_selesai_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"success": False, "message": "Format tanggal tidak valid. Gunakan format YYYY-MM-DD."}), 400
+
+    if tgl_selesai < tgl_mulai:
+        return jsonify({"success": False, "message": "Tanggal selesai tidak boleh sebelum tanggal mulai."}), 400
+
+    if not alasan:
+        return jsonify({"success": False, "message": "Alasan / keterangan ketidakhadiran wajib diisi."}), 400
+
+    MAX_ALASAN_LENGTH = 200
+    if len(alasan) > MAX_ALASAN_LENGTH:
+        return jsonify({
+            "success": False,
+            "message": f"Alasan ketidakhadiran terlalu panjang (maksimal {MAX_ALASAN_LENGTH} karakter, terisi {len(alasan)} karakter)."
+        }), 400
+
+    # Validasi Wajib GPS
+    if latitude is None or longitude is None:
+        return jsonify({
+            "success": False,
+            "message": "Titik koordinat lokasi GPS wajib disertakan saat mengajukan surat izin / sakit. Harap aktifkan sensor lokasi (GPS) pada perangkat Anda."
+        }), 400
+
+    try:
+        pengajuan = PengajuanIzin(
+            siswa_id=siswa.id,
+            jenis=jenis,
+            tanggal_mulai=tgl_mulai,
+            tanggal_selesai=tgl_selesai,
+            alasan=alasan,
+            surat_bukti=surat_bukti,
+            latitude=latitude,
+            longitude=longitude,
+            lokasi_teks=lokasi_teks,
+            status_pengajuan="Menunggu"
+        )
+        db.session.add(pengajuan)
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Pengajuan {jenis} atas nama {siswa.nama} ({siswa.kelas}) berhasil dikirim dan sedang menunggu verifikasi guru.",
+            "data": pengajuan.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@app.route('/api/sekolah/lokasi', methods=['GET'])
+def get_sekolah_lokasi():
+    return jsonify({
+        "nama": "SMKN 21 Jakarta",
+        "alamat": "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat",
+        "latitude": -6.1587,
+        "longitude": 106.8550,
+        "radius_meter": 50
+    })
+
+@app.route('/api/pengajuan_izin', methods=['GET'])
+def get_pengajuan_izin():
+    status = request.args.get('status')
+    query = PengajuanIzin.query
+    if status and status != 'ALL':
+        query = query.filter_by(status_pengajuan=status)
+    pengajuan_list = query.order_by(PengajuanIzin.created_at.desc()).all()
+    return jsonify([p.to_dict() for p in pengajuan_list])
+
+@app.route('/api/pengajuan_izin/<int:id>/verifikasi', methods=['POST'])
+def verifikasi_pengajuan_izin(id):
+    pengajuan = PengajuanIzin.query.get(id)
+    if not pengajuan:
+        return jsonify({"success": False, "message": "Data pengajuan tidak ditemukan."}), 404
+
+    data = request.json or {}
+    aksi = str(data.get('aksi', '')).strip() # "Disetujui" atau "Ditolak"
+    catatan = str(data.get('catatan', '')).strip()
+
+    if aksi not in ["Disetujui", "Ditolak"]:
+        return jsonify({"success": False, "message": "Aksi harus 'Disetujui' atau 'Ditolak'."}), 400
+
+    try:
+        pengajuan.status_pengajuan = aksi
+        pengajuan.catatan_guru = catatan
+
+        # Jika disetujui, generasikan rekaman AbsensiHarian untuk rentang tanggal tersebut
+        if aksi == "Disetujui":
+            curr = pengajuan.tanggal_mulai
+            while curr <= pengajuan.tanggal_selesai:
+                start_day = datetime.combine(curr, time.min)
+                end_day = datetime.combine(curr, time.max)
+                
+                # Cek apakah sudah ada presensi harian untuk siswa di hari ini
+                existing = AbsensiHarian.query.filter(
+                    AbsensiHarian.siswa_id == pengajuan.siswa_id,
+                    AbsensiHarian.waktu >= start_day,
+                    AbsensiHarian.waktu <= end_day
+                ).first()
+
+                if existing:
+                    existing.status = pengajuan.jenis
+                else:
+                    absensi_baru = AbsensiHarian(
+                        siswa_id=pengajuan.siswa_id,
+                        waktu=datetime.combine(curr, time(7, 0, 0)),
+                        status=pengajuan.jenis
+                    )
+                    db.session.add(absensi_baru)
+                
+                curr += timedelta(days=1)
+
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Pengajuan {pengajuan.jenis} siswa {pengajuan.siswa.nama} berhasil di-{aksi.lower()}.",
+            "data": pengajuan.to_dict()
+        })
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -395,21 +575,32 @@ def get_rekap_siswa_periode():
             "kelas": s.kelas,
             "tepat_waktu": 0,
             "terlambat": 0,
+            "sakit": 0,
+            "izin": 0,
             "total_hadir": 0,
             "kunjungan_perpus": 0
         }
 
     total_tepat_waktu = 0
     total_terlambat = 0
+    total_sakit = 0
+    total_izin = 0
     for h in harian_records:
         if h.siswa_id in siswa_map:
             if h.status == "Tepat Waktu":
                 siswa_map[h.siswa_id]["tepat_waktu"] += 1
+                siswa_map[h.siswa_id]["total_hadir"] += 1
                 total_tepat_waktu += 1
-            else:
+            elif h.status == "Terlambat":
                 siswa_map[h.siswa_id]["terlambat"] += 1
+                siswa_map[h.siswa_id]["total_hadir"] += 1
                 total_terlambat += 1
-            siswa_map[h.siswa_id]["total_hadir"] += 1
+            elif h.status == "Sakit":
+                siswa_map[h.siswa_id]["sakit"] += 1
+                total_sakit += 1
+            elif h.status == "Izin":
+                siswa_map[h.siswa_id]["izin"] += 1
+                total_izin += 1
 
     for p in perpus_records:
         if p.siswa_id in siswa_map:
@@ -426,6 +617,8 @@ def get_rekap_siswa_periode():
             "total_presensi_harian": len(harian_records),
             "total_tepat_waktu": total_tepat_waktu,
             "total_terlambat": total_terlambat,
+            "total_sakit": total_sakit,
+            "total_izin": total_izin,
             "total_perpus": len(perpus_records)
         },
         "daftar": daftar
