@@ -1,13 +1,14 @@
 import os
 import re
 import json
+import math
 from datetime import datetime, time, date, timedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_compress import Compress
 from sqlalchemy import extract
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin
-from face_utils import get_face_encoding, verify_face, check_face_present
+from face_utils import get_face_encoding, verify_face, check_face_present, analyze_liveness
 
 VALID_JURUSAN_SMKN21 = ['PPLG', 'AKL', 'MPLB', 'BR']
 
@@ -74,6 +75,26 @@ def method_not_allowed(e):
 @app.errorhandler(500)
 def internal_error(e):
     return jsonify({"success": False, "message": "Terjadi kesalahan internal server"}), 500
+
+# Koordinat Resmi SMKN 21 Jakarta & Batas Geofencing
+SEKOLAH_LATITUDE = -6.1587
+SEKOLAH_LONGITUDE = 106.8550
+MAX_RADIUS_SEKOLAH = 15 # meter
+
+def calculate_distance_meters(lat1, lon1, lat2, lon2):
+    try:
+        lat1, lon1, lat2, lon2 = float(lat1), float(lon1), float(lat2), float(lon2)
+    except (TypeError, ValueError):
+        return None
+    R = 6371000 # meter
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    deltaPhi = math.radians(lat2 - lat1)
+    deltaLambda = math.radians(lon2 - lon1)
+    a = (math.sin(deltaPhi / 2) ** 2 +
+         math.cos(phi1) * math.cos(phi2) * (math.sin(deltaLambda / 2) ** 2))
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c)
 
 # Helper function to check if late
 def check_status_kehadiran():
@@ -237,11 +258,11 @@ def register_face():
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
 
-# ================= DETEKSI KEHADIRAN ORANG DI KAMERA =================
+# ================= DETEKSI KEHADIRAN ORANG & LIVENESS KEDIPAN =================
 
 @app.route('/api/detect_face', methods=['POST'])
 def detect_face():
-    data = request.json
+    data = request.json or {}
     image_data = data.get('image')
     if not image_data:
         return jsonify({"face_detected": False})
@@ -249,12 +270,50 @@ def detect_face():
     is_present = check_face_present(image_data)
     return jsonify({"face_detected": is_present})
 
+
+@app.route('/api/detect_liveness', methods=['POST'])
+def detect_liveness():
+    data = request.json or {}
+    image_data = data.get('image')
+    if not image_data:
+        return jsonify({"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0})
+    
+    result = analyze_liveness(image_data)
+    return jsonify(result)
+
 # ================= VERIFIKASI PRESENSI =================
 
 @app.route('/api/verify_harian', methods=['POST'])
 def verify_harian():
-    data = request.json
+    data = request.json or {}
     image_data = data.get('image')
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    accuracy = data.get('accuracy')
+    is_mock = data.get('is_mock', False)
+    simulated = data.get('simulated', False)
+
+    # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
+    if not simulated:
+        if is_mock:
+            return jsonify({
+                "success": False,
+                "message": "Presensi ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
+            }), 403
+        if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
+            return jsonify({
+                "success": False,
+                "message": f"Presensi ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
+            }), 403
+
+    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 15m
+    if not simulated and latitude is not None and longitude is not None:
+        dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+        if dist is not None and dist > MAX_RADIUS_SEKOLAH:
+            return jsonify({
+                "success": False,
+                "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
+            }), 403
     
     encodings, siswa_ids = get_flattened_known_faces()
     if not encodings:
@@ -299,12 +358,39 @@ def verify_harian():
 
 @app.route('/api/verify_perpus', methods=['POST'])
 def verify_perpus():
-    data = request.json
+    data = request.json or {}
     image_data = data.get('image')
     keperluan = data.get('keperluan')
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    accuracy = data.get('accuracy')
+    is_mock = data.get('is_mock', False)
+    simulated = data.get('simulated', False)
     
     if not keperluan:
          return jsonify({"success": False, "message": "Keperluan kunjungan belum diisi."}), 400
+
+    # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
+    if not simulated:
+        if is_mock:
+            return jsonify({
+                "success": False,
+                "message": "Presensi perpustakaan ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
+            }), 403
+        if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
+            return jsonify({
+                "success": False,
+                "message": f"Presensi perpustakaan ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
+            }), 403
+
+    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 15m
+    if not simulated and latitude is not None and longitude is not None:
+        dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+        if dist is not None and dist > MAX_RADIUS_SEKOLAH:
+            return jsonify({
+                "success": False,
+                "message": f"Presensi perpustakaan ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
+            }), 403
     
     encodings, siswa_ids = get_flattened_known_faces()
     if not encodings:
@@ -427,7 +513,7 @@ def get_sekolah_lokasi():
         "alamat": "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat",
         "latitude": -6.1587,
         "longitude": 106.8550,
-        "radius_meter": 50
+        "radius_meter": 15
     })
 
 @app.route('/api/pengajuan_izin', methods=['GET'])

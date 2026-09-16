@@ -23,81 +23,24 @@ import {
   Filter,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
+import EditSiswaModal from "../components/registrasi/EditSiswaModal";
+import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
+import {
+  JURUSAN_SMKN21,
+  KELAS_PER_JURUSAN,
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+  getJurusanInfo,
+} from "../constants/schoolData";
 
-// Struktur Resmi Jurusan SMKN 21 Jakarta
-export const JURUSAN_SMKN21 = [
-  {
-    kode: "PPLG",
-    nama: "Pengembangan Perangkat Lunak & Gim",
-    badge: "bg-blue-100 text-blue-800 border-blue-200",
-    color: "blue",
-  },
-  {
-    kode: "AKL",
-    nama: "Akuntansi & Keuangan Lembaga",
-    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    color: "emerald",
-  },
-  {
-    kode: "MPLB",
-    nama: "Manajemen Perkantoran & Layanan Bisnis",
-    badge: "bg-amber-100 text-amber-800 border-amber-200",
-    color: "amber",
-  },
-  {
-    kode: "BR",
-    nama: "Bisnis Ritel",
-    badge: "bg-purple-100 text-purple-800 border-purple-200",
-    color: "purple",
-  },
-];
-
-export const KELAS_PER_JURUSAN = {
-  PPLG: [
-    "X PPLG 1",
-    "X PPLG 2",
-    "XI PPLG 1",
-    "XI PPLG 2",
-    "XII PPLG 1",
-    "XII PPLG 2",
-  ],
-  AKL: ["X AKL 1", "X AKL 2", "XI AKL 1", "XI AKL 2", "XII AKL 1", "XII AKL 2"],
-  MPLB: [
-    "X MPLB 1",
-    "X MPLB 2",
-    "XI MPLB 1",
-    "XI MPLB 2",
-    "XII MPLB 1",
-    "XII MPLB 2",
-  ],
-  BR: ["X BR 1", "X BR 2", "XI BR 1", "XI BR 2", "XII BR 1", "XII BR 2"],
+// Re-export untuk kompatibilitas backward
+export {
+  JURUSAN_SMKN21,
+  KELAS_PER_JURUSAN,
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+  getJurusanInfo,
 };
-
-export const DAFTAR_KELAS_SMKN21 = Object.values(KELAS_PER_JURUSAN).flat();
-
-export const KELAS_GROUPS_DROPDOWN = JURUSAN_SMKN21.map((jur) => ({
-  group: `${jur.nama} (${jur.kode})`,
-  badge: jur.kode,
-  badgeClass: jur.badge,
-  options: (KELAS_PER_JURUSAN[jur.kode] || []).map((k) => ({
-    value: k,
-    label: k,
-  })),
-}));
-
-export function getJurusanInfo(kelasStr = "") {
-  const upper = (kelasStr || "").toUpperCase();
-  if (upper.includes("PPLG")) return JURUSAN_SMKN21[0];
-  if (upper.includes("AKL")) return JURUSAN_SMKN21[1];
-  if (upper.includes("MPLB")) return JURUSAN_SMKN21[2];
-  if (upper.includes("BR")) return JURUSAN_SMKN21[3];
-  return {
-    kode: "UMUM",
-    nama: "Umum",
-    badge: "bg-slate-100 text-slate-700 border-slate-200",
-    color: "slate",
-  };
-}
 
 export default function RegistrasiSiswa() {
   const webcamRef = useRef(null);
@@ -843,7 +786,7 @@ export default function RegistrasiSiswa() {
                         <td className="p-3">
                           {s.terdaftar ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <span>{s.sample_count || 1} Sampel</span>
+                              <span>{s.sample_count || 1} Foto</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
@@ -900,125 +843,19 @@ export default function RegistrasiSiswa() {
       </div>
 
       {/* Modal Hapus Siswa (Konfirmasi) */}
-      {deletingSiswa && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6">
-            <h3 className="text-base font-bold text-slate-900 mb-2">
-              Hapus Siswa dari Database?
-            </h3>
-            <p className="text-xs text-slate-600 mb-6 leading-relaxed">
-              Apakah Anda yakin ingin menghapus data{" "}
-              <strong>{deletingSiswa.nama}</strong> ({deletingSiswa.kelas})?
-              Sampel biometrik wajah dan seluruh data presensinya akan dihapus
-              permanen.
-            </p>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setDeletingSiswa(null)}
-                className="flex-1 py-2 text-xs font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={confirmDeleteSiswa}
-                className="flex-1 py-2 text-xs font-bold rounded-xl text-white bg-rose-600 hover:bg-rose-700 transition-colors shadow-xs cursor-pointer"
-              >
-                Hapus Siswa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteSiswaModal
+        deletingSiswa={deletingSiswa}
+        setDeletingSiswa={setDeletingSiswa}
+        confirmDeleteSiswa={confirmDeleteSiswa}
+      />
 
       {/* Modal Edit Siswa */}
-      {editingSiswa && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-sm max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 relative">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-900">
-                Edit Data Siswa
-              </h3>
-              <button
-                onClick={() => setEditingSiswa(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4 cursor-pointer" />
-              </button>
-            </div>
-            <form onSubmit={handleUpdateSiswa}>
-              <div className="space-y-3 mb-5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nomor Induk Siswa (NIS)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    required
-                    value={editingSiswa.nis}
-                    onChange={(e) =>
-                      setEditingSiswa({
-                        ...editingSiswa,
-                        nis: e.target.value.replace(/\D/g, ""),
-                      })
-                    }
-                    className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Lengkap Siswa
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editingSiswa.nama}
-                    onChange={(e) =>
-                      setEditingSiswa({ ...editingSiswa, nama: e.target.value })
-                    }
-                    className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kelas & Jurusan SMKN 21
-                  </label>
-                  <CustomDropdown
-                    value={editingSiswa.kelas}
-                    onChange={(newVal) =>
-                      setEditingSiswa({
-                        ...editingSiswa,
-                        kelas: newVal,
-                      })
-                    }
-                    groups={KELAS_GROUPS_DROPDOWN}
-                    className="w-full"
-                    placeholder="Pilih Kelas & Jurusan"
-                    icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setEditingSiswa(null)}
-                  className="flex-1 py-2 text-xs font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 text-xs font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
-                >
-                  Simpan Perubahan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <EditSiswaModal
+        editingSiswa={editingSiswa}
+        setEditingSiswa={setEditingSiswa}
+        handleUpdateSiswa={handleUpdateSiswa}
+        groups={KELAS_GROUPS_DROPDOWN}
+      />
     </div>
   );
 }

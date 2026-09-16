@@ -75,16 +75,24 @@ export default function AbsensiPerpus() {
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // 3 detik
   const [isFaceDetected, setIsFaceDetected] = useState(false);
+  const [isLiveVerified, setIsLiveVerified] = useState(false);
+  const [eyeState, setEyeState] = useState("UNKNOWN");
+  const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
+  const canvasRef = useRef(null);
+  const baselineOpenScoreRef = useRef(null);
+  const openSamplesRef = useRef([]);
 
-  // GPS Geofence State (Radius 50m SMKN 21)
+  // GPS Geofence State (Radius 15m SMKN 21)
   const [geoState, setGeoState] = useState({
     loading: true,
     latitude: null,
     longitude: null,
+    accuracy: null,
     distanceMeters: null,
     isWithinRadius: false,
     error: null,
     simulated: false,
+    isMock: false,
   });
 
   const checkGeofence = useCallback(async () => {
@@ -105,10 +113,12 @@ export default function AbsensiPerpus() {
         loading: false,
         latitude: loc.latitude,
         longitude: loc.longitude,
+        accuracy: loc.accuracy,
         distanceMeters: dist,
         isWithinRadius: isWithin,
         error: null,
         simulated: false,
+        isMock: loc.isMock || false,
       });
     } catch (err) {
       setGeoState((prev) => ({
@@ -131,10 +141,12 @@ export default function AbsensiPerpus() {
           loading: false,
           simulated: true,
           isWithinRadius: true,
-          distanceMeters: 14,
+          distanceMeters: 8,
+          accuracy: 5,
           error: null,
           latitude: SMKN21_COORDINATES.latitude,
           longitude: SMKN21_COORDINATES.longitude,
+          isMock: false,
         };
       } else {
         checkGeofence();
@@ -143,7 +155,15 @@ export default function AbsensiPerpus() {
     });
   };
 
-  const isGeofenceBlocked =
+  // Status Validitas GPS: HANYA BENAR JIKA SUDAH SELESAI MENGAMBIL LOKASI DAN BERADA DALAM RADIUS
+  const isGpsValid =
+    !geoState.loading && (geoState.isWithinRadius || geoState.simulated);
+
+  // Sedang menunggu sinyal GPS (wajib tunggu GPS sebelum bisa absen perpus)
+  const isGpsWaiting = geoState.loading;
+
+  // Terblokir karena di luar radius sekolah atau terjadi error pada sensor GPS
+  const isGpsBlocked =
     !geoState.loading && !geoState.isWithinRadius && !geoState.simulated;
 
   // Live clock
@@ -161,54 +181,151 @@ export default function AbsensiPerpus() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. Deteksi Keberadaan Orang di Kamera
-  const checkPresence = useCallback(async () => {
+  // Frame Ringan (<12KB) untuk responsivitas tinggi (8-10 FPS)
+  const getLightweightFrame = useCallback(() => {
+    if (!webcamRef.current) return null;
+    const video = webcamRef.current.video;
+    if (!video || video.readyState < 2) return null;
+
+    try {
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement("canvas");
+        canvasRef.current.width = 320;
+        canvasRef.current.height = 240;
+      }
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, 320, 240);
+      return canvas.toDataURL("image/jpeg", 0.6);
+    } catch (err) {
+      return webcamRef.current.getScreenshot();
+    }
+  }, []);
+
+  // 1. Deteksi Keberadaan Wajah & Liveness Kedipan Mata Cepat & Adaptif
+  const checkLiveness = useCallback(async () => {
     if (
       !webcamRef.current ||
       loading ||
       showPopup ||
       result ||
-      isGeofenceBlocked
+      !isGpsValid ||
+      isLiveVerified
     )
       return;
 
-    if ("FaceDetector" in window) {
-      try {
-        const video = webcamRef.current.video;
-        if (video && video.readyState >= 2) {
-          const detector = new window.FaceDetector({
-            fastMode: true,
-            maxDetectedFaces: 1,
-          });
-          const faces = await detector.detect(video);
-          setIsFaceDetected(faces.length > 0);
-          return;
-        }
-      } catch (err) {
-        // Fallback
-      }
-    }
-
     try {
-      const screenshot = webcamRef.current.getScreenshot();
-      if (!screenshot) return;
-      const res = await axios.post("http://localhost:5000/api/detect_face", {
-        image: screenshot,
-      });
-      setIsFaceDetected(Boolean(res.data.face_detected));
-    } catch (err) {
-      // Ignore
-    }
-  }, [loading, showPopup, result, isGeofenceBlocked]);
+      const frameData = getLightweightFrame();
+      if (!frameData) return;
 
+      const res = await axios.post(
+        "http://localhost:5000/api/detect_liveness",
+        {
+          image: frameData,
+        },
+        { timeout: 2500 },
+      );
+
+      const data = res.data;
+      if (!data.face_detected) {
+        setIsFaceDetected(false);
+        setEyeState("UNKNOWN");
+        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
+        baselineOpenScoreRef.current = null;
+        openSamplesRef.current = [];
+        return;
+      }
+
+      setIsFaceDetected(true);
+      const score = Number(data.openness_score || 0);
+
+      // Logika adaptif personal baseline + threshold absolut
+      const isClosedAbs = data.eye_state === "CLOSED" || score < 11.5;
+      const isClosedRel =
+        baselineOpenScoreRef.current &&
+        score < baselineOpenScoreRef.current * 0.72;
+      const isEyeClosed = isClosedAbs || isClosedRel;
+
+      const isOpenAbs = data.eye_state === "OPEN" && score >= 11.5;
+      const isOpenRel =
+        baselineOpenScoreRef.current &&
+        score >= baselineOpenScoreRef.current * 0.85;
+      const isEyeOpen = isOpenAbs || isOpenRel;
+
+      if (isEyeOpen && !isEyeClosed) {
+        setEyeState("OPEN");
+
+        // Kalibrasi baseline pribadi mata terbuka
+        if (openSamplesRef.current.length < 6) {
+          openSamplesRef.current.push(score);
+          const sum = openSamplesRef.current.reduce((a, b) => a + b, 0);
+          baselineOpenScoreRef.current = sum / openSamplesRef.current.length;
+        }
+
+        if (!blinkCycleRef.current.hasBeenOpen) {
+          blinkCycleRef.current.hasBeenOpen = true;
+        } else if (
+          blinkCycleRef.current.hasBeenOpen &&
+          blinkCycleRef.current.hasClosed
+        ) {
+          // Siklus Kedipan Berhasil: OPEN -> CLOSED -> OPEN
+          setIsLiveVerified(true);
+          setCountdown(3);
+        }
+      } else if (isEyeClosed) {
+        setEyeState("CLOSED");
+        if (blinkCycleRef.current.hasBeenOpen) {
+          blinkCycleRef.current.hasClosed = true;
+        }
+      }
+    } catch (err) {
+      // Abaikan kendala jaringan sesaat selama polling cepat
+    }
+  }, [
+    loading,
+    showPopup,
+    result,
+    isGpsValid,
+    isLiveVerified,
+    getLightweightFrame,
+  ]);
+
+  // Polling deteksi keaktifan cepat (~120ms jeda) agar kedipan 150-250ms pasti tertangkap
   useEffect(() => {
-    if (loading || showPopup || result || isGeofenceBlocked) return;
-    const interval = setInterval(checkPresence, 1000);
-    return () => clearInterval(interval);
-  }, [loading, showPopup, result, isGeofenceBlocked, checkPresence]);
+    let isMounted = true;
+    let timerId = null;
+
+    if (loading || showPopup || result || !isGpsValid || isLiveVerified) {
+      if (!isLiveVerified) {
+        setIsFaceDetected(false);
+        setEyeState("UNKNOWN");
+        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
+        baselineOpenScoreRef.current = null;
+        openSamplesRef.current = [];
+      }
+      return;
+    }
+
+    const runLivenessLoop = async () => {
+      if (!isMounted) return;
+      if (!loading && !showPopup && !result && isGpsValid && !isLiveVerified) {
+        await checkLiveness();
+      }
+      if (isMounted && !isLiveVerified) {
+        timerId = setTimeout(runLivenessLoop, 120);
+      }
+    };
+
+    runLivenessLoop();
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [loading, showPopup, result, isGpsValid, isLiveVerified, checkLiveness]);
 
   const captureFace = useCallback(() => {
-    if (isGeofenceBlocked) return;
+    if (!isGpsValid) return;
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
@@ -222,15 +339,12 @@ export default function AbsensiPerpus() {
       });
       setCountdown(3);
     }
-  }, [webcamRef, isGeofenceBlocked]);
+  }, [webcamRef, isGpsValid]);
 
-  // 2. Countdown Timer: HANYA BERJALAN JIKA ADA ORANG DI DEPAN KAMERA (3 Detik)
+  // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI & GPS VALID (3 Detik)
   useEffect(() => {
-    if (loading || showPopup || result || isGeofenceBlocked) return;
-
-    // Jika tidak ada orang terdeteksi, tahan waktu di 3 detik dan jangan mulai pindai
-    if (!isFaceDetected) {
-      setCountdown(3);
+    if (loading || showPopup || result || !isGpsValid || !isLiveVerified) {
+      if (!isLiveVerified) setCountdown(3);
       return;
     }
 
@@ -246,11 +360,11 @@ export default function AbsensiPerpus() {
     return () => clearInterval(timer);
   }, [
     countdown,
-    isFaceDetected,
+    isLiveVerified,
     loading,
     showPopup,
     result,
-    isGeofenceBlocked,
+    isGpsValid,
     captureFace,
   ]);
 
@@ -272,6 +386,12 @@ export default function AbsensiPerpus() {
         {
           image: capturedImage,
           keperluan: finalKeperluan,
+          latitude: geoState.latitude,
+          longitude: geoState.longitude,
+          accuracy: geoState.accuracy,
+          distance: geoState.distanceMeters,
+          simulated: geoState.simulated,
+          is_mock: geoState.isMock || false,
         },
       );
       setResult({ success: true, message: response.data.message });
@@ -279,8 +399,13 @@ export default function AbsensiPerpus() {
         setResult(null);
         setCustomKeperluan("");
         setKeperluan("Membaca/Belajar");
-        setCountdown(4);
+        setCountdown(3);
         setIsFaceDetected(false);
+        setIsLiveVerified(false);
+        setEyeState("UNKNOWN");
+        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
+        baselineOpenScoreRef.current = null;
+        openSamplesRef.current = [];
       }, 4000);
     } catch (err) {
       setResult({
@@ -291,8 +416,13 @@ export default function AbsensiPerpus() {
       });
       setTimeout(() => {
         setResult(null);
-        setCountdown(4);
+        setCountdown(3);
         setIsFaceDetected(false);
+        setIsLiveVerified(false);
+        setEyeState("UNKNOWN");
+        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
+        baselineOpenScoreRef.current = null;
+        openSamplesRef.current = [];
       }, 3000);
     } finally {
       setLoading(false);
@@ -324,6 +454,8 @@ export default function AbsensiPerpus() {
         theme="emerald"
         countdown={countdown}
         loading={loading}
+        isLiveVerified={isLiveVerified}
+        eyeState={eyeState}
       />
 
       {/* 4. Top Floating Bar */}
@@ -354,7 +486,7 @@ export default function AbsensiPerpus() {
             className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900/90 backdrop-blur-md border border-purple-400/50 text-purple-200 text-[11px] sm:text-xs font-semibold transition-all cursor-pointer"
           >
             <Navigation className="w-3.5 h-3.5 text-purple-300" />
-            <span>Mode Uji: SMKN 21 (&le;50m)</span>
+            <span>Mode Uji: SMKN 21 (&le;15m)</span>
           </button>
         ) : geoState.isWithinRadius ? (
           <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-[11px] sm:text-xs font-semibold">
@@ -412,28 +544,66 @@ export default function AbsensiPerpus() {
               <p className="text-xs sm:text-sm mt-1 opacity-90 break-words">
                 {result.message}
               </p>
-              <p className="text-[10px] sm:text-[11px] mt-1.5 font-medium opacity-75">
-                {result.success
-                  ? "Sistem siap untuk pengunjung berikutnya..."
-                  : "Mempersiapkan pemindaian ulang otomatis..."}
-              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* 7. Geofence Lock Screen Overlay (Jika di luar radius 50m) */}
-      {isGeofenceBlocked && (
+      {/* 7A. Overlay Menunggu GPS (Wajib tunggu GPS sebelum bisa absen perpus) */}
+      {isGpsWaiting && (
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+          <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mb-4 sm:mb-5">
+            <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin text-emerald-400" />
+            <MapPin className="w-4 h-4 text-emerald-300 absolute" />
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
+            Menunggu Titik Lokasi GPS...
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-5 leading-relaxed">
+            Presensi perpustakaan mewajibkan verifikasi lokasi berada di
+            lingkungan SMKN 21 Jakarta (radius &le; 15m). Pastikan GPS perangkat
+            Anda aktif dan izinkan akses lokasi pada browser.
+          </p>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-emerald-950/70 border border-emerald-800/70 text-emerald-300 text-xs font-semibold mb-6 shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>Mencari Sinyal GPS Lokasi Sekolah...</span>
+          </div>
+
+          {/* Localhost dev simulation toggle */}
+          {(window.location.hostname === "localhost" ||
+            window.location.hostname === "127.0.0.1") && (
+            <div className="pt-4 border-t border-white/10 max-w-xs w-full text-center">
+              <p className="text-[11px] text-slate-400 mb-2 font-mono">
+                [Mode Pengembang / Dev Test]
+              </p>
+              <button
+                type="button"
+                onClick={toggleSimulation}
+                className="w-full py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer shadow-md"
+              >
+                <Navigation className="w-3.5 h-3.5 text-indigo-200" />
+                <span>Simulasi di SMKN 21 (&le;15m)</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 7B. Geofence Lock Screen Overlay (Jika di luar radius 15m atau GPS error) */}
+      {isGpsBlocked && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-300 overflow-y-auto max-h-screen py-8">
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center mb-4 sm:mb-5">
             <AlertTriangle className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
-            Di Luar Radius SMKN 21
+            {geoState.error
+              ? "Akses Lokasi GPS Diperlukan"
+              : "Di Luar Radius SMKN 21"}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-4 leading-relaxed">
             Presensi perpustakaan hanya dapat dilakukan saat Anda berada di
-            lingkungan sekolah SMKN 21 Jakarta
+            lingkungan sekolah SMKN 21 Jakarta (radius &le; 15 meter).
             {geoState.distanceMeters != null && (
               <span className="block mt-2 font-bold text-rose-300 bg-rose-950/60 border border-rose-800/60 rounded-lg py-1.5 px-3">
                 Jarak Anda saat ini: ~{formatDistance(geoState.distanceMeters)}{" "}
@@ -441,8 +611,8 @@ export default function AbsensiPerpus() {
               </span>
             )}
             {geoState.error && (
-              <span className="block mt-1 text-amber-300 text-xs">
-                Status Sensor: {geoState.error}
+              <span className="block mt-2 font-bold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded-lg py-1.5 px-3">
+                Kendala Sensor GPS: {geoState.error}
               </span>
             )}
           </p>
@@ -475,11 +645,12 @@ export default function AbsensiPerpus() {
                 [Mode Pengembangan / Dev Test]
               </p>
               <button
+                type="button"
                 onClick={toggleSimulation}
                 className="w-full py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer"
               >
                 <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (Radius &le; 50m)</span>
+                <span>Simulasi di SMKN 21 (&le;15m)</span>
               </button>
             </div>
           )}
@@ -490,14 +661,25 @@ export default function AbsensiPerpus() {
       <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center z-20 pointer-events-auto px-4">
         <button
           onClick={() => {
+            if (!isLiveVerified) return;
             setResult(null);
             captureFace();
           }}
-          disabled={loading || showPopup || isGeofenceBlocked}
-          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-all flex items-center gap-2 sm:gap-2.5 shadow-2xl shadow-emerald-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm"
+          disabled={loading || showPopup || !isGpsValid || !isLiveVerified}
+          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-all flex items-center gap-2 sm:gap-2.5 shadow-2xl shadow-emerald-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed"
         >
           <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>Pindai Langsung</span>
+          <span>
+            {isGpsWaiting
+              ? "Menunggu GPS..."
+              : !isGpsValid
+                ? "Di Luar Radius SMKN 21"
+                : !isFaceDetected
+                  ? "Arahkan Wajah ke Siluet"
+                  : !isLiveVerified
+                    ? "Kedipkan Mata untuk Absen"
+                    : "Pindai Langsung"}
+          </span>
         </button>
       </div>
 
@@ -523,8 +705,16 @@ export default function AbsensiPerpus() {
               <button
                 onClick={() => {
                   setShowPopup(false);
-                  setCountdown(4);
+                  setCountdown(3);
                   setIsFaceDetected(false);
+                  setIsLiveVerified(false);
+                  setEyeState("UNKNOWN");
+                  blinkCycleRef.current = {
+                    hasBeenOpen: false,
+                    hasClosed: false,
+                  };
+                  baselineOpenScoreRef.current = null;
+                  openSamplesRef.current = [];
                 }}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
               >
@@ -627,8 +817,16 @@ export default function AbsensiPerpus() {
                   type="button"
                   onClick={() => {
                     setShowPopup(false);
-                    setCountdown(4);
+                    setCountdown(3);
                     setIsFaceDetected(false);
+                    setIsLiveVerified(false);
+                    setEyeState("UNKNOWN");
+                    blinkCycleRef.current = {
+                      hasBeenOpen: false,
+                      hasClosed: false,
+                    };
+                    baselineOpenScoreRef.current = null;
+                    openSamplesRef.current = [];
                   }}
                   className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                 >

@@ -194,3 +194,94 @@ def check_face_present(base64_image):
         return faces is not None and len(faces) > 0
     except Exception:
         return False
+
+
+def analyze_liveness(base64_image):
+    """
+    Analisis Keaktifan Wajah Hidup (Eye Blink Liveness Detection).
+    Memeriksa apakah mata pengguna terbuka (OPEN) atau tertutup/berkedip (CLOSED)
+    menggunakan 5 titik landmark OpenCV YuNet yang dinormalisasi dengan intensitas kulit.
+    """
+    img = decode_base64_image(base64_image)
+    if img is None:
+        return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0}
+
+    if detector is None:
+        return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0}
+
+    try:
+        h, w = img.shape[:2]
+        # Optimasi kecepatan ekstraksi: skala ke max 480px jika gambar resolusi tinggi
+        scale = 1.0
+        if max(w, h) > 480:
+            scale = 480.0 / max(w, h)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)))
+            h, w = img.shape[:2]
+
+        detector.setInputSize((w, h))
+        _, faces = detector.detect(img)
+
+        if faces is None or len(faces) == 0:
+            return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0}
+
+        # Pilih wajah dengan skor confidence tertinggi
+        best_face = faces[0]
+        if len(faces) > 1:
+            best_idx = np.argmax(faces[:, 14])
+            best_face = faces[best_idx]
+
+        fx, fy, fw, fh = best_face[0:4]
+        re_x, re_y = int(best_face[4]), int(best_face[5])
+        le_x, le_y = int(best_face[6]), int(best_face[7])
+
+        # Radius crop mata proporsional: dipersempit vertikal ke atas agar TIDAK memotong alis
+        ew = max(5, int(fw * 0.085))
+        eh_top = max(2, int(fh * 0.032))     # Hanya mencakup kelopak mata atas, tidak mencapai alis
+        eh_bottom = max(3, int(fh * 0.040))  # Mencakup batas kelopak bawah
+
+        re_patch = img[max(0, re_y - eh_top):min(h, re_y + eh_bottom), max(0, re_x - ew):min(w, re_x + ew)]
+        le_patch = img[max(0, le_y - eh_top):min(h, le_y + eh_bottom), max(0, le_x - ew):min(w, le_x + ew)]
+
+        # Ambil sampel kecerahan kulit pipi/dahi sebagai referensi pencahayaan
+        skin_y1 = max(0, int(fy + fh * 0.50))
+        skin_y2 = min(h, int(fy + fh * 0.65))
+        skin_x1 = max(0, int(fx + fw * 0.35))
+        skin_x2 = min(w, int(fx + fw * 0.65))
+        skin_patch = img[skin_y1:skin_y2, skin_x1:skin_x2]
+
+        if skin_patch.size > 0:
+            gray_skin = cv2.cvtColor(skin_patch, cv2.COLOR_BGR2GRAY)
+            skin_mean = max(10.0, float(np.mean(gray_skin)))
+        else:
+            skin_mean = 120.0
+
+        def calc_score(patch):
+            if patch is None or patch.size == 0:
+                return 0.0
+            gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+            std_dev = float(np.std(gray))
+            sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+            v_grad = float(np.mean(np.abs(sobely)))
+            # Normalisasi terhadap kecerahan ruangan/kulit
+            return (std_dev / skin_mean * 60.0) + (v_grad / skin_mean * 40.0)
+
+        score_re = calc_score(re_patch)
+        score_le = calc_score(le_patch)
+        avg_score = (score_re + score_le) / 2.0
+
+        # Ambang batas liveness kedipan yang presisi:
+        # Mata terbuka menghasilkan skor ~16 - 55
+        # Mata terpejam / berkedip menghasilkan skor ~3 - 10
+        BLINK_THRESHOLD = 11.5
+        eye_state = "OPEN" if avg_score >= BLINK_THRESHOLD else "CLOSED"
+
+        return {
+            "face_detected": True,
+            "eye_state": eye_state,
+            "openness_score": round(float(avg_score), 2),
+            "confidence": round(float(best_face[14]), 3)
+        }
+    except Exception as e:
+        print("Error analyze_liveness:", e)
+        return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0, "error": str(e)}
+
