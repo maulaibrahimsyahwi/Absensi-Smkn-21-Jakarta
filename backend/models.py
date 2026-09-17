@@ -9,6 +9,7 @@ class Siswa(db.Model):
     nis = db.Column(db.String(20), unique=True, nullable=False)
     nama = db.Column(db.String(100), nullable=False)
     kelas = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(20), default="Aktif", nullable=False, index=True) # "Aktif" atau "Alumni"
     face_encoding = db.Column(db.Text, nullable=True) # Stored as JSON string (single encoding or list of encodings)
     
     def get_encoding(self):
@@ -33,6 +34,7 @@ class Siswa(db.Model):
             "nis": self.nis,
             "nama": self.nama,
             "kelas": self.kelas,
+            "status": self.status or "Aktif",
             "terdaftar": bool(self.face_encoding),
             "sample_count": sample_count
         }
@@ -113,5 +115,36 @@ class PengajuanIzin(db.Model):
             "longitude": self.longitude,
             "lokasi_teks": self.lokasi_teks,
             "maps_url": maps_url,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+class IzinPiket(db.Model):
+    __tablename__ = 'izin_piket'
+    id = db.Column(db.Integer, primary_key=True)
+    siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
+    hari = db.Column(db.String(20), nullable=False) # "Senin", "Selasa", dll
+    tanggal = db.Column(db.Date, nullable=False, index=True)
+    tipe = db.Column(db.String(50), nullable=False) # "Izin Masuk" atau "Izin Meninggalkan Kelas"
+    jam_ke = db.Column(db.String(50), nullable=False) # "3", "Jam ke-3", dll
+    alasan = db.Column(db.Text, nullable=False)
+    petugas_piket = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+
+    siswa = db.relationship('Siswa', backref=db.backref('izin_piket', lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "siswa_id": self.siswa_id,
+            "nis": self.siswa.nis if self.siswa else "-",
+            "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
+            "kelas": self.siswa.kelas if self.siswa else "-",
+            "hari": self.hari,
+            "tanggal": self.tanggal.strftime("%Y-%m-%d"),
+            "tanggal_formatted": self.tanggal.strftime("%d/%m/%Y"),
+            "tipe": self.tipe,
+            "jam_ke": self.jam_ke,
+            "alasan": self.alasan,
+            "petugas_piket": self.petugas_piket,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }

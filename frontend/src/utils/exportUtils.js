@@ -94,7 +94,7 @@ export function exportSpreadsheet(
       item.kelas,
       item.keperluan,
     ]);
-  } else {
+  } else if (activeTab === "verifikasi_izin") {
     sheetName = "Verifikasi Izin";
     filename = `pengajuan_izin_sakit_${periodeTag}`;
     headers = [
@@ -130,6 +130,36 @@ export function exportSpreadsheet(
       item.latitude && item.longitude
         ? `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
         : "-",
+    ]);
+  } else if (activeTab === "izin_piket") {
+    const { filteredIzinPiket = [] } = datasets;
+    sheetName = "Izin Meja Piket";
+    filename = `izin_meja_piket_${periodeTag}`;
+    headers = [
+      "No",
+      "Waktu Diterbitkan",
+      "NIS",
+      "Nama Siswa",
+      "Kelas",
+      "Keperluan",
+      "Jam Ke-",
+      "Hari",
+      "Tanggal",
+      "Alasan",
+      "Petugas Piket",
+    ];
+    rows = filteredIzinPiket.map((item, index) => [
+      index + 1,
+      item.created_at,
+      item.nis,
+      item.nama,
+      item.kelas,
+      item.tipe,
+      item.jam_ke,
+      item.hari,
+      item.tanggal_formatted || item.tanggal,
+      item.alasan,
+      item.petugas_piket,
     ]);
   }
 

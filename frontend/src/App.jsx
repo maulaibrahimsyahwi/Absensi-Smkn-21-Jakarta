@@ -15,6 +15,7 @@ const AbsensiPerpus = React.lazy(() => import("./pages/AbsensiPerpus"));
 const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const RegistrasiSiswa = React.lazy(() => import("./pages/RegistrasiSiswa"));
 const PengajuanIzin = React.lazy(() => import("./pages/PengajuanIzin"));
+const GuruPiket = React.lazy(() => import("./pages/GuruPiket"));
 
 // Shared loading fallback shown while lazy chunks are being fetched
 function PageLoader() {
@@ -57,6 +58,7 @@ function AppLayout() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/registrasi" element={<RegistrasiSiswa />} />
             <Route path="/izin" element={<PengajuanIzin />} />
+            <Route path="/piket" element={<GuruPiket />} />
           </Routes>
         </Suspense>
       </main>

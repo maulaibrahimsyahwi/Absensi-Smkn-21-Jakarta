@@ -53,36 +53,36 @@ export default function DashboardPeriodFilter({
   return (
     <>
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
           <Link
             to="/"
             className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate">
               Rekapitulasi Presensi & Perpustakaan
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Laporan akumulasi kehadiran siswa berdasarkan bulan dan tahun
+            <p className="text-xs sm:text-sm text-slate-500 truncate">
+              Laporan akumulasi kehadiran siswa SMKN 21
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 self-start sm:self-auto flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap">
           <Link
             to="/registrasi"
-            className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs flex-1 sm:flex-none"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Database Siswa</span>
+            <span>Data Siswa</span>
           </Link>
           <button
             onClick={onRefresh}
             disabled={loading}
-            className="inline-flex items-center cursor-pointer gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50"
+            className="inline-flex items-center justify-center cursor-pointer gap-1.5 sm:gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50 flex-shrink-0"
           >
             <RefreshCw
               className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
@@ -91,11 +91,11 @@ export default function DashboardPeriodFilter({
           </button>
 
           {/* Dropdown Menu Unduh Rekap (XLSX, XLS, CSV) */}
-          <div className="relative" ref={exportDropdownRef}>
+          <div className="relative flex-1 sm:flex-none" ref={exportDropdownRef}>
             <button
               type="button"
               onClick={() => setIsExportOpen(!isExportOpen)}
-              className="inline-flex items-center gap-1.5 sm:gap-2 px-3 cursor-pointer sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 cursor-pointer sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
             >
               <Download className="w-4 h-4" />
               <span>Unduh Rekap</span>
@@ -110,7 +110,7 @@ export default function DashboardPeriodFilter({
               <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-2xl bg-white border border-slate-200 shadow-xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 -mt-2 mb-1 rounded-t-2xl">
                   <p className="text-[11px] text-slate-700 font-semibold truncate mt-0.5">
-                    Periode:{" "}
+                    Periode{" "}
                     <span className="text-blue-600">
                       {periodeMode === "bulan"
                         ? `${namaBulanTerpilih} ${selectedTahun}`
@@ -191,9 +191,9 @@ export default function DashboardPeriodFilter({
       </div>
 
       {/* FILTER PERIODE WAKTU (PER BULAN & PER TAHUN) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mb-6 sm:mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 sm:p-5 mb-6 sm:mb-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
         {/* Toggle Mode: Per Bulan vs Per Tahun */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setPeriodeMode("bulan")}
@@ -219,7 +219,7 @@ export default function DashboardPeriodFilter({
         </div>
 
         {/* Dropdown Pemilih Bulan & Tahun */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
           {periodeMode === "bulan" && (
             <CustomDropdown
               value={selectedBulan}

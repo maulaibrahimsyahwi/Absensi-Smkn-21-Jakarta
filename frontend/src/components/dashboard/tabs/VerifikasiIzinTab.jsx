@@ -109,7 +109,7 @@ export default function VerifikasiIzinTab({
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Periode:</span>
+                    <span className="text-slate-500 font-medium">Periode</span>
                     <span className="font-semibold text-slate-800">
                       {item.tanggal_mulai} s/d {item.tanggal_selesai}
                     </span>
@@ -216,7 +216,7 @@ export default function VerifikasiIzinTab({
               <th className="py-3.5 px-4 text-center">Surat Bukti</th>
               <th className="py-3.5 px-4 text-center">Lokasi GPS</th>
               <th className="py-3.5 px-4 text-center">Status</th>
-              <th className="py-3.5 px-5 text-right">Aksi Verifikasi</th>
+              <th className="py-3.5 px-5 text-right">Verifikasi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">

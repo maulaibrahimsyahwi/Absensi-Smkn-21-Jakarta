@@ -23,6 +23,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { getCurrentLocation } from "../utils/geoUtils";
+import CustomDatePicker, {
+  formatTanggalIndo,
+} from "../components/CustomDatePicker";
 
 export default function PengajuanIzin() {
   const [nis, setNis] = useState("");
@@ -235,7 +238,7 @@ export default function PengajuanIzin() {
 
     if (!geoLoc.latitude || !geoLoc.longitude) {
       setErrorMsg(
-        "Titik lokasi GPS wajib terdeteksi saat mengajukan izin / sakit. Harap aktifkan izin GPS browser Anda dan klik 'Ambil Ulang'.",
+        "Titik lokasi GPS wajib terdeteksi saat mengajukan izin / sakit. Harap aktifkan izin GPS browser Anda dan klik 'Refresh'.",
       );
       return;
     }
@@ -350,8 +353,9 @@ export default function PengajuanIzin() {
             <div className="flex justify-between items-center pb-2.5 border-b border-slate-200/60">
               <span className="text-slate-500 font-medium">Periode</span>
               <span className="font-semibold text-slate-800 text-right">
-                {submittedData.tanggal_mulai} s/d{" "}
-                {submittedData.tanggal_selesai} ({submittedData.durasi} Hari)
+                {formatTanggalIndo(submittedData.tanggal_mulai, false)} s/d{" "}
+                {formatTanggalIndo(submittedData.tanggal_selesai, false)} (
+                {submittedData.durasi} Hari)
               </span>
             </div>
             <div className="flex justify-between items-start pb-2.5 border-b border-slate-200/60">
@@ -559,42 +563,37 @@ export default function PengajuanIzin() {
               </div>
             </div>
 
-            {/* Field 3: Rentang Tanggal */}
+            {/* Field 3: Rentang Tanggal (CustomDatePicker Modern) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Tanggal Mulai <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={tanggalMulai}
-                    onChange={(e) => {
-                      setTanggalMulai(e.target.value);
-                      if (e.target.value > tanggalSelesai) {
-                        setTanggalSelesai(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    required
-                  />
-                </div>
+                <CustomDatePicker
+                  value={tanggalMulai}
+                  onChange={(val) => {
+                    setTanggalMulai(val);
+                    if (val > tanggalSelesai) {
+                      setTanggalSelesai(val);
+                    }
+                  }}
+                  className="w-full"
+                  placeholder="Pilih tanggal mulai..."
+                />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Tanggal Selesai <span className="text-rose-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    min={tanggalMulai}
-                    value={tanggalSelesai}
-                    onChange={(e) => setTanggalSelesai(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                    required
-                  />
-                </div>
+                <CustomDatePicker
+                  value={tanggalSelesai}
+                  minDate={tanggalMulai}
+                  onChange={(val) => setTanggalSelesai(val)}
+                  className="w-full"
+                  align="right"
+                  placeholder="Pilih tanggal selesai..."
+                />
               </div>
             </div>
 
@@ -777,7 +776,7 @@ export default function PengajuanIzin() {
                     <RefreshCw
                       className={`w-3 h-3 ${geoLoc.loading ? "animate-spin" : ""}`}
                     />
-                    <span>{geoLoc.loading ? "Mencari..." : "Ambil Ulang"}</span>
+                    <span>{geoLoc.loading ? "Mencari..." : "Refresh"}</span>
                   </button>
                 )}
               </div>
@@ -786,7 +785,7 @@ export default function PengajuanIzin() {
               {!geoLoc.latitude && !geoLoc.loading && (
                 <div className="mt-2.5 pt-2 border-t border-rose-200/80 text-[11px] text-rose-800 flex items-center justify-between gap-2 flex-wrap">
                   <span>
-                    ⚠️ Pengajuan surat izin/sakit mewajibkan rekaman titik GPS
+                    Pengajuan surat izin/sakit mewajibkan rekaman titik GPS
                     perangkat. Pastikan izin lokasi diizinkan.
                   </span>
                   {(window.location.hostname === "localhost" ||

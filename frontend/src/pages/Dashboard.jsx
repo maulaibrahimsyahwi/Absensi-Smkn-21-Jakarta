@@ -8,6 +8,7 @@ import {
   Search,
   Filter,
   FileText,
+  ClipboardCheck,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
@@ -21,8 +22,10 @@ import RekapSiswaTab from "../components/dashboard/tabs/RekapSiswaTab";
 import PresensiHarianTab from "../components/dashboard/tabs/PresensiHarianTab";
 import PerpustakaanTab from "../components/dashboard/tabs/PerpustakaanTab";
 import VerifikasiIzinTab from "../components/dashboard/tabs/VerifikasiIzinTab";
+import IzinPiketTab from "../components/dashboard/tabs/IzinPiketTab";
 import SuratLightboxModal from "../components/dashboard/modals/SuratLightboxModal";
 import RejectIzinModal from "../components/dashboard/modals/RejectIzinModal";
+import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 
 const BULAN_OPTIONS = [
   { value: 1, label: "Januari" },
@@ -82,6 +85,7 @@ export default function Dashboard() {
   const [statusIzinFilter, setStatusIzinFilter] = useState("ALL"); // "ALL", "Menunggu", "Disetujui", "Ditolak"
   const [verifyingId, setVerifyingId] = useState(null);
   const [selectedSuratModal, setSelectedSuratModal] = useState(null);
+  const [selectedSlipModal, setSelectedSlipModal] = useState(null);
   const [rejectModalItem, setRejectModalItem] = useState(null);
   const [rejectNote, setRejectNote] = useState("");
 
@@ -97,6 +101,7 @@ export default function Dashboard() {
   const [riwayatHarian, setRiwayatHarian] = useState([]);
   const [riwayatPerpus, setRiwayatPerpus] = useState([]);
   const [pengajuanList, setPengajuanList] = useState([]);
+  const [izinPiketList, setIzinPiketList] = useState([]);
 
   // Reset pagination saat ganti filter/tab
   useEffect(() => {
@@ -106,7 +111,7 @@ export default function Dashboard() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [resPeriode, resHarian, resPerpus, resPengajuan] =
+      const [resPeriode, resHarian, resPerpus, resPengajuan, resPiket] =
         await Promise.all([
           axios.get("http://localhost:5000/api/rekap", {
             params: {
@@ -130,16 +135,32 @@ export default function Dashboard() {
             },
           }),
           axios.get("http://localhost:5000/api/pengajuan_izin"),
+          axios.get("http://localhost:5000/api/piket/izin", {
+            params: {
+              tanggal: "ALL",
+            },
+          }),
         ]);
 
       setSiswaPeriode(resPeriode.data || { statistik: {}, daftar: [] });
       setRiwayatHarian(resHarian.data || []);
       setRiwayatPerpus(resPerpus.data || []);
       setPengajuanList(resPengajuan.data || []);
+      setIzinPiketList(resPiket.data || []);
     } catch (err) {
       console.error("Gagal mengambil data rekap:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteIzinPiket = async (id, nama) => {
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus surat izin untuk ${nama}?`)) return;
+    try {
+      await axios.delete(`http://localhost:5000/api/piket/izin/${id}`);
+      fetchData();
+    } catch (err) {
+      alert("Gagal menghapus surat izin piket.");
     }
   };
 
@@ -223,6 +244,39 @@ export default function Dashboard() {
     });
   }, [pengajuanList, searchTerm, kelasFilter, statusIzinFilter]);
 
+  // Filtered Izin Meja Piket
+  const filteredIzinPiket = useMemo(() => {
+    return izinPiketList.filter((item) => {
+      // Filter periode jika mode bulan/tahun dipilih
+      if (item.tanggal) {
+        const [y, m] = item.tanggal.split("-").map(Number);
+        if (selectedTahun && y !== Number(selectedTahun)) return false;
+        if (
+          periodeMode === "bulan" &&
+          selectedBulan &&
+          m !== Number(selectedBulan)
+        )
+          return false;
+      }
+      const matchSearch =
+        item.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.alasan?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.kelas?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.petugas_piket?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.tipe?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchKelas = kelasFilter === "ALL" || item.kelas === kelasFilter;
+      return matchSearch && matchKelas;
+    });
+  }, [
+    izinPiketList,
+    searchTerm,
+    kelasFilter,
+    periodeMode,
+    selectedBulan,
+    selectedTahun,
+  ]);
+
   const pendingCount = useMemo(() => {
     return pengajuanList.filter((p) => p.status_pengajuan === "Menunggu")
       .length;
@@ -243,13 +297,16 @@ export default function Dashboard() {
     if (activeTab === "rekap_siswa") return filteredSiswa;
     if (activeTab === "riwayat_harian") return filteredHarian;
     if (activeTab === "riwayat_perpus") return filteredPerpus;
-    return filteredPengajuan;
+    if (activeTab === "verifikasi_izin") return filteredPengajuan;
+    if (activeTab === "izin_piket") return filteredIzinPiket;
+    return [];
   }, [
     activeTab,
     filteredSiswa,
     filteredHarian,
     filteredPerpus,
     filteredPengajuan,
+    filteredIzinPiket,
   ]);
 
   const totalItems = currentTotalList.length;
@@ -280,6 +337,11 @@ export default function Dashboard() {
     return filteredPengajuan.slice(startIndex, endIndex);
   }, [activeTab, filteredPengajuan, startIndex, endIndex]);
 
+  const paginatedIzinPiket = useMemo(() => {
+    if (activeTab !== "izin_piket") return [];
+    return filteredIzinPiket.slice(startIndex, endIndex);
+  }, [activeTab, filteredIzinPiket, startIndex, endIndex]);
+
   // Ekspor Data Laporan (Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
   const handleExport = (format = "xlsx") => {
     exportSpreadsheet(
@@ -290,6 +352,7 @@ export default function Dashboard() {
         filteredHarian,
         filteredPerpus,
         filteredPengajuan,
+        filteredIzinPiket,
       },
       {
         periodeMode,
@@ -445,6 +508,34 @@ export default function Dashboard() {
               </span>
             )}
           </button>
+
+          {/* Tab 5: Izin Meja Piket */}
+          <button
+            onClick={() => {
+              setActiveTab("izin_piket");
+              setSearchTerm("");
+            }}
+            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
+              activeTab === "izin_piket"
+                ? "border-indigo-600 text-indigo-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
+            <span>
+              <span className="sm:hidden">Meja Piket</span>
+              <span className="hidden sm:inline">Izin Meja Piket</span>
+            </span>
+            <span
+              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === "izin_piket"
+                  ? "bg-indigo-100 text-indigo-700"
+                  : "bg-slate-200/70 text-slate-600"
+              }`}
+            >
+              {filteredIzinPiket.length}
+            </span>
+          </button>
         </div>
 
         {/* Filter & Search Bar */}
@@ -547,6 +638,16 @@ export default function Dashboard() {
           />
         )}
 
+        {/* Tab 5: Izin Meja Piket */}
+        {activeTab === "izin_piket" && (
+          <IzinPiketTab
+            filteredIzinPiket={filteredIzinPiket}
+            paginatedIzinPiket={paginatedIzinPiket}
+            onOpenSlipModal={(item) => setSelectedSlipModal(item)}
+            onDeleteIzin={handleDeleteIzinPiket}
+          />
+        )}
+
         {/* Footer Navigasi Halaman Bawah */}
         <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
           <p className="text-xs text-slate-500 text-center sm:text-left">
@@ -616,6 +717,13 @@ export default function Dashboard() {
           setRejectModalItem(null);
           setRejectNote("");
         }}
+      />
+
+      {/* Modal E-Slip Izin Meja Piket Resmi */}
+      <SlipIzinPiketModal
+        isOpen={Boolean(selectedSlipModal)}
+        slipData={selectedSlipModal}
+        onClose={() => setSelectedSlipModal(null)}
       />
     </div>
   );

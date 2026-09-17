@@ -7,7 +7,6 @@ export default function FaceSilhouetteGuide({
   countdown = null,
   loading = false,
   isLiveVerified = false,
-  blinkPrompt = "Silakan kedipkan mata Anda",
   eyeState = "UNKNOWN",
 }) {
   const isBlue = theme === "blue";
@@ -65,39 +64,6 @@ export default function FaceSilhouetteGuide({
           />
         </svg>
 
-        {/* 1. Prompt Liveness: Minta Siswa Berkedip (Saat Wajah Terdeteksi & Belum Kedip) */}
-        {isDetected && !isLiveVerified && !loading && (
-          <div className="absolute top-[32%] flex flex-col items-center gap-2 animate-in zoom-in-95 duration-150 pointer-events-none">
-            {eyeState === "CLOSED" ? (
-              <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-cyan-500/25 border-2 border-cyan-400 backdrop-blur-md flex items-center justify-center shadow-xl shadow-cyan-500/40 animate-pulse">
-                <Eye className="w-8 h-8 sm:w-9 sm:h-9 text-cyan-300 scale-y-50" />
-              </div>
-            ) : (
-              <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-amber-500/20 border-2 border-amber-400/80 backdrop-blur-md flex items-center justify-center shadow-xl shadow-amber-500/30">
-                <Eye className="w-8 h-8 sm:w-9 sm:h-9 text-amber-300 animate-pulse" />
-              </div>
-            )}
-            <div
-              className={`flex flex-col items-center backdrop-blur-md px-4 py-1.5 rounded-2xl border shadow-xl ${
-                eyeState === "CLOSED"
-                  ? "bg-cyan-950/90 border-cyan-400/80 text-cyan-200"
-                  : "bg-black/80 border-amber-400/50 text-amber-200"
-              }`}
-            >
-              <span className="text-xs sm:text-sm font-black tracking-wide">
-                {eyeState === "CLOSED"
-                  ? "Mata Terpejam Terdeteksi!"
-                  : "Kedipkan Mata Anda"}
-              </span>
-              <span className="text-[10px] sm:text-[11px] font-semibold text-slate-300">
-                {eyeState === "CLOSED"
-                  ? "Buka kembali mata Anda untuk melanjutkan..."
-                  : ""}
-              </span>
-            </div>
-          </div>
-        )}
-
         {/* 2. Floating Countdown Badge: Muncul SETELAH Kedipan Terverifikasi */}
         {isDetected && isLiveVerified && countdown !== null && !loading && (
           <div className="absolute top-[34%] flex flex-col items-center gap-1.5 animate-in zoom-in-95 duration-200 pointer-events-none">
@@ -110,9 +76,6 @@ export default function FaceSilhouetteGuide({
             >
               {countdown}
             </div>
-            <div className="inline-flex items-center gap-1.5 bg-emerald-950/90 text-emerald-200 border border-emerald-400/70 px-3 py-1 rounded-full text-[11px] sm:text-xs font-bold shadow-lg backdrop-blur-md">
-              <span>Kedipan Terverifikasi</span>
-            </div>
           </div>
         )}
 
@@ -121,22 +84,16 @@ export default function FaceSilhouetteGuide({
           {isDetected ? (
             isLiveVerified ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/85 border-emerald-400 text-emerald-200">
-                <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-emerald-400 animate-ping flex-shrink-0"></span>
-                <span className="truncate">
-                  Wajah Hidup Terverifikasi! Tahan posisi...
-                </span>
+                <span className="truncate">Tahan posisi...</span>
               </span>
             ) : eyeState === "CLOSED" ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-cyan-950/85 border-cyan-400 text-cyan-200">
-                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300 scale-y-50 flex-shrink-0" />
                 <span className="truncate">
-                  Kelopak mata terpejam terdeteksi! Buka kembali mata Anda...
+                  Kelopak mata terpejam! Buka kembali mata Anda...
                 </span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-amber-950/85 border-amber-400 text-amber-200">
-                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300 animate-pulse flex-shrink-0" />
-              </span>
+              <span className=""></span>
             )
           ) : (
             <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-semibold bg-black/70 border border-white/20 text-slate-300 backdrop-blur-md shadow-lg">

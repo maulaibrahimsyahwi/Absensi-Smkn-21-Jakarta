@@ -125,7 +125,7 @@ export default function CustomDropdown({
   return (
     <div
       ref={dropdownRef}
-      className={`relative ${className.includes("w-full") ? "w-full" : "inline-block"} text-left ${className}`}
+      className={`relative text-left ${className || "inline-block"}`}
     >
       {/* Trigger Button */}
       <button
@@ -154,11 +154,7 @@ export default function CustomDropdown({
         <div
           className={`absolute ${
             align === "right" ? "right-0" : "left-0"
-          } top-full mt-1.5 ${
-            className.includes("w-full")
-              ? "w-full min-w-full"
-              : "min-w-[180px] w-max"
-          } max-w-[calc(100vw-2rem)] sm:max-w-md bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-900/10 z-50 p-1.5 max-h-72 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
+          } top-full mt-1.5 min-w-full w-max max-w-[calc(100vw-2rem)] sm:max-w-md bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-900/10 z-50 p-1.5 max-h-72 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
         >
           {normalizedGroups.map((grp, gIdx) => (
             <div

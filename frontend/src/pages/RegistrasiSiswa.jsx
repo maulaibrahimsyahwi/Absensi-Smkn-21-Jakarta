@@ -21,10 +21,14 @@ import {
   GraduationCap,
   Sparkles,
   Filter,
+  CheckSquare,
+  Square,
+  UserCheck,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import EditSiswaModal from "../components/registrasi/EditSiswaModal";
 import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
+import LuluskanModal from "../components/registrasi/LuluskanModal";
 import {
   JURUSAN_SMKN21,
   KELAS_PER_JURUSAN,
@@ -50,6 +54,17 @@ export default function RegistrasiSiswa() {
   const [searchTerm, setSearchTerm] = useState("");
   const [jurusanFilter, setJurusanFilter] = useState("ALL");
   const [kelasFilter, setKelasFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL"); // "ALL" | "Aktif" | "Alumni"
+
+  // Multi-select & Bulk Action state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [luluskanModalData, setLuluskanModalData] = useState({
+    isOpen: false,
+    type: "tingkat_xii", // "tingkat_xii" | "selected" | "single"
+    targetSiswa: null,
+  });
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Form state
   const [nis, setNis] = useState("");
@@ -210,7 +225,172 @@ export default function RegistrasiSiswa() {
     }
   };
 
-  // Hapus Siswa (Misal yang sudah lulus)
+  // Luluskan & Status Actions
+  const handleLuluskanTingkatXII = () => {
+    setLuluskanModalData({
+      isOpen: true,
+      type: "tingkat_xii",
+      targetSiswa: null,
+    });
+  };
+
+  const handleLuluskanSelected = () => {
+    if (selectedIds.length === 0) return;
+    setLuluskanModalData({
+      isOpen: true,
+      type: "selected",
+      targetSiswa: null,
+    });
+  };
+
+  const handleLuluskanSingle = (siswa) => {
+    setLuluskanModalData({
+      isOpen: true,
+      type: "single",
+      targetSiswa: siswa,
+    });
+  };
+
+  const confirmLuluskanModal = async () => {
+    setActionLoading(true);
+    try {
+      if (luluskanModalData.type === "tingkat_xii") {
+        const res = await axios.post(
+          "http://localhost:5000/api/siswa/luluskan_tingkat",
+          { tingkat: "XII" },
+        );
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            "Seluruh siswa kelas XII berhasil diluluskan menjadi Alumni.",
+        });
+      } else if (luluskanModalData.type === "selected") {
+        const res = await axios.post(
+          "http://localhost:5000/api/siswa/bulk_status",
+          { siswa_ids: selectedIds, status: "Alumni" },
+        );
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            `${selectedIds.length} siswa berhasil diluluskan menjadi Alumni.`,
+        });
+        setSelectedIds([]);
+      } else if (
+        luluskanModalData.type === "single" &&
+        luluskanModalData.targetSiswa
+      ) {
+        const res = await axios.patch(
+          `http://localhost:5000/api/siswa/${luluskanModalData.targetSiswa.id}/status`,
+          { status: "Alumni" },
+        );
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            `Siswa ${luluskanModalData.targetSiswa.nama} berhasil diubah menjadi Alumni.`,
+        });
+      }
+      setLuluskanModalData({
+        isOpen: false,
+        type: "tingkat_xii",
+        targetSiswa: null,
+      });
+      fetchSiswa();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal memproses kelulusan siswa.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Aktifkan Kembali Siswa (Reactivate)
+  const handleAktifkanSelected = async () => {
+    if (selectedIds.length === 0) return;
+    setActionLoading(true);
+    try {
+      const res = await axios.post(
+        "http://localhost:5000/api/siswa/bulk_status",
+        {
+          siswa_ids: selectedIds,
+          status: "Aktif",
+        },
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data.message ||
+          `${selectedIds.length} siswa berhasil diaktifkan kembali.`,
+      });
+      setSelectedIds([]);
+      fetchSiswa();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mengaktifkan siswa.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAktifkanSingle = async (siswa) => {
+    try {
+      const res = await axios.patch(
+        `http://localhost:5000/api/siswa/${siswa.id}/status`,
+        { status: "Aktif" },
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data.message ||
+          `Siswa ${siswa.nama} berhasil diaktifkan kembali.`,
+      });
+      fetchSiswa();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mengaktifkan siswa.",
+      });
+    }
+  };
+
+  // Hapus Massal (Permanent Bulk Delete)
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setActionLoading(true);
+    try {
+      const res = await axios.post(
+        "http://localhost:5000/api/siswa/bulk_delete",
+        { siswa_ids: selectedIds },
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data.message ||
+          `${selectedIds.length} data siswa berhasil dihapus dari database.`,
+      });
+      setSelectedIds([]);
+      setBulkDeleting(false);
+      fetchSiswa();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Gagal menghapus data siswa secara massal.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Hapus Siswa Satuan (Single Permanent Delete)
   const confirmDeleteSiswa = async () => {
     if (!deletingSiswa) return;
     try {
@@ -220,6 +400,7 @@ export default function RegistrasiSiswa() {
         message: `Siswa ${deletingSiswa.nama} berhasil dihapus dari database.`,
       });
       setDeletingSiswa(null);
+      setSelectedIds((prev) => prev.filter((id) => id !== deletingSiswa.id));
       fetchSiswa();
     } catch (err) {
       setNotification({
@@ -268,6 +449,7 @@ export default function RegistrasiSiswa() {
         nis: cleanNis,
         nama: cleanNama,
         kelas: cleanKelas,
+        status: editingSiswa.status || "Aktif",
       });
       setNotification({
         type: "success",
@@ -283,6 +465,14 @@ export default function RegistrasiSiswa() {
     }
   };
 
+  const totalAktif = siswaList.filter(
+    (s) => (s.status || "Aktif") === "Aktif",
+  ).length;
+  const totalAlumni = siswaList.filter((s) => s.status === "Alumni").length;
+  const totalKelasXIIAktif = siswaList.filter(
+    (s) => s.kelas?.startsWith("XII") && (s.status || "Aktif") === "Aktif",
+  ).length;
+
   const filteredSiswa = siswaList.filter((s) => {
     const matchSearch =
       s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -292,12 +482,40 @@ export default function RegistrasiSiswa() {
       jurusanFilter === "ALL" ||
       (s.kelas && s.kelas.toUpperCase().includes(jurusanFilter));
     const matchKelas = kelasFilter === "ALL" || s.kelas === kelasFilter;
-    return matchSearch && matchJurusan && matchKelas;
+    const sStatus = s.status || "Aktif";
+    const matchStatus = statusFilter === "ALL" || sStatus === statusFilter;
+    return matchSearch && matchJurusan && matchKelas && matchStatus;
   });
 
   const uniqueKelas = Array.from(new Set(siswaList.map((s) => s.kelas))).filter(
     Boolean,
   );
+
+  // Checkbox helpers
+  const allFilteredIds = filteredSiswa.map((s) => s.id);
+  const isAllSelected =
+    filteredSiswa.length > 0 &&
+    allFilteredIds.every((id) => selectedIds.includes(id));
+  const isSomeSelected =
+    filteredSiswa.some((s) => selectedIds.includes(s.id)) && !isAllSelected;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) =>
+        prev.filter((id) => !allFilteredIds.includes(id)),
+      );
+    } else {
+      setSelectedIds((prev) =>
+        Array.from(new Set([...prev, ...allFilteredIds])),
+      );
+    }
+  };
+
+  const toggleSelectSiswa = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
 
   return (
     <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto">
@@ -606,21 +824,60 @@ export default function RegistrasiSiswa() {
         </div>
 
         {/* Kolom Kanan: Database Siswa Terdaftar (CRUD Management) */}
-        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 flex flex-col">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 flex flex-col relative">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 mb-4 border-b border-slate-100 gap-2">
             <div className="flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-600" />
               <h2 className="text-base font-bold text-slate-900">
                 Data Siswa Terdaftar
               </h2>
             </div>
-            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
-              Total {siswaList.length} Siswa
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
+                Total {siswaList.length} Siswa
+              </span>
+            </div>
           </div>
 
-          {/* Search & Filter Kelas Bar */}
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 mb-4">
+          {/* Filter Status Siswa Tabs (Semua, Aktif, Alumni) */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl mb-3.5 self-start overflow-x-auto max-w-full">
+            <button
+              type="button"
+              onClick={() => setStatusFilter("ALL")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                statusFilter === "ALL"
+                  ? "bg-white text-slate-900 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Semua ({siswaList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("Aktif")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                statusFilter === "Aktif"
+                  ? "bg-white text-emerald-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>Aktif ({totalAktif})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter("Alumni")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                statusFilter === "Alumni"
+                  ? "bg-white text-indigo-700 shadow-2xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <span>Alumni / Lulus ({totalAlumni})</span>
+            </button>
+          </div>
+
+          {/* Search, Filter Kelas, & Tombol Cepat Luluskan Kelas XII */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 mb-4">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
@@ -632,17 +889,39 @@ export default function RegistrasiSiswa() {
               />
             </div>
 
-            <CustomDropdown
-              value={kelasFilter}
-              onChange={setKelasFilter}
-              options={[
-                { value: "ALL", label: "Semua Kelas" },
-                ...uniqueKelas.map((k) => ({ value: k, label: k })),
-              ]}
-              icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-              className="w-full sm:w-auto"
-              align="right"
-            />
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <CustomDropdown
+                value={kelasFilter}
+                onChange={setKelasFilter}
+                options={[
+                  { value: "ALL", label: "Semua Kelas" },
+                  ...uniqueKelas.map((k) => ({ value: k, label: k })),
+                ]}
+                icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
+                className="w-full sm:w-auto"
+                align="right"
+              />
+
+              {/* Tombol Luluskan Sekaligus Tingkat XII */}
+              <button
+                type="button"
+                onClick={handleLuluskanTingkatXII}
+                disabled={totalKelasXIIAktif === 0}
+                title={
+                  totalKelasXIIAktif > 0
+                    ? `Luluskan sekaligus ${totalKelasXIIAktif} siswa kelas XII yang aktif`
+                    : "Tidak ada siswa kelas XII yang aktif"
+                }
+                className="py-2 px-3 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap flex-shrink-0"
+              >
+                <GraduationCap className="w-4 h-4 text-indigo-600" />
+                <span className="hidden sm:inline">Luluskan Kelas XII</span>
+                <span className="sm:hidden">Luluskan XII</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                  {totalKelasXIIAktif}
+                </span>
+              </button>
+            </div>
           </div>
 
           {/* 1. Mobile Cards View (< md) */}
@@ -654,22 +933,49 @@ export default function RegistrasiSiswa() {
                   Tidak ada siswa ditemukan
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Coba ubah kata kunci atau filter kelas.
+                  Coba ubah kata kunci atau filter status/kelas.
                 </p>
               </div>
             ) : (
               filteredSiswa.map((s) => {
                 const jurInfo = getJurusanInfo(s.kelas);
+                const isSelected = selectedIds.includes(s.id);
+                const isAlumni = s.status === "Alumni";
+
                 return (
                   <div
                     key={s.id}
-                    className="p-3.5 hover:bg-slate-50/60 transition-colors"
+                    className={`p-3.5 transition-colors ${
+                      isSelected ? "bg-blue-50/50" : "hover:bg-slate-50/60"
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="min-w-0">
-                        <p className="font-bold text-slate-900 text-sm truncate">
-                          {s.nama}
-                        </p>
+                    <div className="flex items-start gap-2.5 mb-2">
+                      {/* Checkbox Siswa */}
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelectSiswa(s.id)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 mt-0.5 cursor-pointer"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-slate-900 text-sm truncate">
+                            {s.nama}
+                          </p>
+
+                          {/* Status Badge */}
+                          {isAlumni ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <span>Alumni</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span>Aktif</span>
+                            </span>
+                          )}
+                        </div>
+
                         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                           <span className="text-[11px] text-slate-400 font-mono">
                             NIS: {s.nis}
@@ -689,7 +995,7 @@ export default function RegistrasiSiswa() {
                       {s.terdaftar ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>{s.sample_count || 1} Sampel</span>
+                          <span>{s.sample_count || 1} Foto</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0">
@@ -699,7 +1005,27 @@ export default function RegistrasiSiswa() {
                     </div>
 
                     {/* Tombol Aksi Touch-Friendly di Mobile */}
-                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
+                      {/* Luluskan atau Aktifkan Kembali */}
+                      {isAlumni ? (
+                        <button
+                          type="button"
+                          onClick={() => handleAktifkanSingle(s)}
+                          className="py-1.5 px-2 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <span>Aktifkan</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleLuluskanSingle(s)}
+                          className="py-1.5 px-2 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <GraduationCap className="w-3.5 h-3.5" />
+                          <span>Luluskan</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => {
@@ -711,10 +1037,10 @@ export default function RegistrasiSiswa() {
                           setCurrentSlot(0);
                           window.scrollTo({ top: 0, behavior: "smooth" });
                         }}
-                        className="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        className="py-1.5 px-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         <Camera className="w-3.5 h-3.5" />
-                        <span>Rekam Ulang</span>
+                        <span>Rekam</span>
                       </button>
 
                       <button
@@ -729,7 +1055,8 @@ export default function RegistrasiSiswa() {
                       <button
                         type="button"
                         onClick={() => setDeletingSiswa(s)}
-                        className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
+                        className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer ml-auto"
+                        title="Hapus Permanen"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Hapus</span>
@@ -743,11 +1070,23 @@ export default function RegistrasiSiswa() {
 
           {/* 2. Desktop Table View (>= md) */}
           <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[560px] flex-1 border border-slate-100 rounded-xl">
-            <table className="w-full text-left border-collapse text-xs min-w-[500px]">
+            <table className="w-full text-left border-collapse text-xs min-w-[580px]">
               <thead className="sticky top-0 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 z-10">
                 <tr>
+                  <th className="p-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isSomeSelected;
+                      }}
+                      onChange={toggleSelectAll}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      title="Pilih Semua Siswa pada Daftar"
+                    />
+                  </th>
                   <th className="p-3">Siswa</th>
-                  <th className="p-3">Kelas & Jurusan</th>
+                  <th className="p-3">Kelas & Status</th>
                   <th className="p-3">Biometrik Wajah</th>
                   <th className="p-3 text-right">Kelola / Aksi</th>
                 </tr>
@@ -756,7 +1095,7 @@ export default function RegistrasiSiswa() {
                 {filteredSiswa.length === 0 ? (
                   <tr>
                     <td
-                      colSpan="4"
+                      colSpan="5"
                       className="text-center py-12 text-slate-400"
                     >
                       Tidak ada siswa ditemukan.
@@ -764,12 +1103,24 @@ export default function RegistrasiSiswa() {
                   </tr>
                 ) : (
                   filteredSiswa.map((s) => {
-                    const jurInfo = getJurusanInfo(s.kelas);
+                    const isSelected = selectedIds.includes(s.id);
+                    const isAlumni = s.status === "Alumni";
+
                     return (
                       <tr
                         key={s.id}
-                        className="hover:bg-slate-50/60 transition-colors"
+                        className={`transition-colors ${
+                          isSelected ? "bg-blue-50/50" : "hover:bg-slate-50/60"
+                        }`}
                       >
+                        <td className="p-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelectSiswa(s.id)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          />
+                        </td>
                         <td className="p-3">
                           <p className="font-bold text-slate-900">{s.nama}</p>
                           <p className="text-[11px] text-slate-400 font-mono">
@@ -781,6 +1132,16 @@ export default function RegistrasiSiswa() {
                             <span className="font-bold text-slate-800 text-xs">
                               {s.kelas}
                             </span>
+                            {/* Badge Status Aktif / Alumni */}
+                            {isAlumni ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span>Alumni</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <span>Aktif</span>
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="p-3">
@@ -796,6 +1157,25 @@ export default function RegistrasiSiswa() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Toggle Status: Luluskan atau Aktifkan */}
+                            {isAlumni ? (
+                              <button
+                                title="Aktifkan Kembali Siswa Ini"
+                                onClick={() => handleAktifkanSingle(s)}
+                                className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors border border-emerald-200 cursor-pointer"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                title="Luluskan Siswa Ini ke Status Alumni"
+                                onClick={() => handleLuluskanSingle(s)}
+                                className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors border border-indigo-200 cursor-pointer"
+                              >
+                                <GraduationCap className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
                             {/* Rekam Wajah */}
                             <button
                               title="Rekam Ulang Sampel Wajah"
@@ -822,9 +1202,9 @@ export default function RegistrasiSiswa() {
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* Hapus Siswa (Lulus) */}
+                            {/* Hapus Siswa Permanen */}
                             <button
-                              title="Hapus Siswa Lulus"
+                              title="Hapus Permanen dari Database"
                               onClick={() => setDeletingSiswa(s)}
                               className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors border border-rose-200 cursor-pointer"
                             >
@@ -842,11 +1222,79 @@ export default function RegistrasiSiswa() {
         </div>
       </div>
 
-      {/* Modal Hapus Siswa (Konfirmasi) */}
+      {/* Floating Action Bar saat ada siswa dipilih */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl shadow-2xl p-2.5 sm:p-3 flex items-center gap-2 sm:gap-3 border border-slate-700 animate-in slide-in-from-bottom-5 duration-200 max-w-[95vw] overflow-x-auto">
+          <div className="px-2.5 py-1.5 rounded-xl bg-slate-800 text-slate-200 text-xs font-bold flex items-center gap-1.5 whitespace-nowrap">
+            <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+            <span>{selectedIds.length} Siswa Dipilih</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLuluskanSelected}
+            disabled={actionLoading}
+            className="py-1.5 px-3 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+          >
+            <span>Luluskan ke Alumni</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAktifkanSelected}
+            disabled={actionLoading}
+            className="py-1.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+          >
+            <span>Aktifkan Kembali</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBulkDeleting(true)}
+            disabled={actionLoading}
+            className="py-1.5 px-3 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs whitespace-nowrap"
+          >
+            <span>Hapus</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedIds([])}
+            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Batalkan Pilihan"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Modal Kelulusan Siswa (Tingkat XII, Terpilih, atau Tunggal) */}
+      <LuluskanModal
+        isOpen={luluskanModalData.isOpen}
+        onClose={() =>
+          setLuluskanModalData({
+            isOpen: false,
+            type: "tingkat_xii",
+            targetSiswa: null,
+          })
+        }
+        onConfirm={confirmLuluskanModal}
+        type={luluskanModalData.type}
+        targetSiswa={luluskanModalData.targetSiswa}
+        selectedCount={selectedIds.length}
+        loading={actionLoading}
+      />
+
+      {/* Modal Hapus Siswa (Single & Bulk) */}
       <DeleteSiswaModal
         deletingSiswa={deletingSiswa}
         setDeletingSiswa={setDeletingSiswa}
         confirmDeleteSiswa={confirmDeleteSiswa}
+        isBulk={bulkDeleting}
+        selectedCount={selectedIds.length}
+        confirmBulkDelete={confirmBulkDelete}
+        onCloseBulk={() => setBulkDeleting(false)}
+        loading={actionLoading}
       />
 
       {/* Modal Edit Siswa */}

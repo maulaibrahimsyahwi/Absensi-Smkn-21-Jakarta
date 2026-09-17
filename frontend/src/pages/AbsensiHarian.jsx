@@ -17,6 +17,7 @@ import {
   Navigation,
   AlertTriangle,
   RefreshCw,
+  Sun,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import {
@@ -35,10 +36,31 @@ export default function AbsensiHarian() {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [isLiveVerified, setIsLiveVerified] = useState(false);
   const [eyeState, setEyeState] = useState("UNKNOWN");
+  const [screenFillLight, setScreenFillLight] = useState(true); // Lampu pendaran layar putih otomatis
   const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
   const canvasRef = useRef(null);
   const baselineOpenScoreRef = useRef(null);
   const openSamplesRef = useRef([]);
+
+  // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
+  useEffect(() => {
+    let wakeLock = null;
+    const requestWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch (err) {
+        // Abaikan jika ditolak peramban
+      }
+    };
+    requestWakeLock();
+    return () => {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, []);
 
   // GPS Geofence State (Radius 15m SMKN 21)
   const [geoState, setGeoState] = useState({
@@ -375,8 +397,18 @@ export default function AbsensiHarian() {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         }}
-        className="w-full h-full object-cover"
+        className={`w-full h-full object-cover transition-all duration-300 ${
+          screenFillLight ? "brightness-110 contrast-105" : ""
+        }`}
       />
+
+      {/* Pendaran Cahaya Layar Putih (Screen Fill Light / Flash Layar Otomatis) */}
+      {screenFillLight && (
+        <div
+          className="pointer-events-none absolute inset-0 border-[20px] sm:border-[36px] md:border-[48px] border-white/95 shadow-[inset_0_0_80px_rgba(255,255,255,0.9),0_0_100px_rgba(255,255,255,0.85)] z-10 animate-in fade-in duration-300"
+          aria-hidden="true"
+        />
+      )}
 
       {/* 2. Efek Garis Laser Scanner */}
       <div className="scanner-line"></div>
@@ -393,17 +425,46 @@ export default function AbsensiHarian() {
 
       {/* 4. Top Floating Bar */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
-        <Link
-          to="/"
-          title="Kembali ke Beranda"
-          aria-label="Kembali ke Beranda"
-          className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 active:scale-95 backdrop-blur-md border border-white/20 transition-all shadow-lg group"
-        >
-          <ArrowLeft
-            className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
-            strokeWidth={2.5}
-          />
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/"
+            title="Kembali ke Beranda"
+            aria-label="Kembali ke Beranda"
+            className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 active:scale-95 backdrop-blur-md border border-white/20 transition-all shadow-lg group"
+          >
+            <ArrowLeft
+              className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
+              strokeWidth={2.5}
+            />
+          </Link>
+
+          {/* Tombol Lampu Layar (Screen Fill Light) */}
+          <button
+            type="button"
+            onClick={() => setScreenFillLight((prev) => !prev)}
+            title={
+              screenFillLight
+                ? "Matikan Lampu Layar"
+                : "Nyalakan Lampu Layar (Penerang Wajah Otomatis)"
+            }
+            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl backdrop-blur-md border text-xs font-semibold transition-all cursor-pointer shadow-lg active:scale-95 ${
+              screenFillLight
+                ? "bg-amber-400 text-slate-950 border-amber-300 shadow-amber-400/25"
+                : "bg-black/60 hover:bg-black/80 text-white border-white/20"
+            }`}
+          >
+            <Sun
+              className={`w-4 h-4 ${
+                screenFillLight
+                  ? "text-slate-950 animate-spin-slow"
+                  : "text-amber-400"
+              }`}
+            />
+            <span className="hidden sm:inline font-bold">
+              {screenFillLight ? "Lampu ON" : "Lampu OFF"}
+            </span>
+          </button>
+        </div>
 
         {/* GPS Geofence Pill */}
         {geoState.loading ? (
