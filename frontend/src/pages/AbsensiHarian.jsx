@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import Webcam from "react-webcam";
-import axios from "axios";
+import api from "../services/api";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -195,8 +195,8 @@ export default function AbsensiHarian() {
       const frameData = getLightweightFrame();
       if (!frameData) return;
 
-      const res = await axios.post(
-        "http://localhost:5000/api/detect_liveness",
+      const res = await api.post(
+        "/detect_liveness",
         {
           image: frameData,
         },
@@ -311,18 +311,15 @@ export default function AbsensiHarian() {
     setResult(null);
 
     try {
-      const response = await axios.post(
-        "http://localhost:5000/api/verify_harian",
-        {
-          image: imageSrc,
-          latitude: geoState.latitude,
-          longitude: geoState.longitude,
-          accuracy: geoState.accuracy,
-          distance: geoState.distanceMeters,
-          simulated: geoState.simulated,
-          is_mock: geoState.isMock || false,
-        },
-      );
+      const response = await api.post("/verify_harian", {
+        image: imageSrc,
+        latitude: geoState.latitude,
+        longitude: geoState.longitude,
+        accuracy: geoState.accuracy,
+        distance: geoState.distanceMeters,
+        simulated: geoState.simulated,
+        is_mock: geoState.isMock || false,
+      });
       setResult({ success: true, message: response.data.message });
       // Setelah berhasil, beri waktu 3 detik agar terbaca, lalu otomatis siap untuk siswa berikutnya
       setTimeout(() => {

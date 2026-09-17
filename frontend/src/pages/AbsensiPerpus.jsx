@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import Webcam from "react-webcam";
-import axios from "axios";
+import api from "../services/api";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -238,8 +238,8 @@ export default function AbsensiPerpus() {
       const frameData = getLightweightFrame();
       if (!frameData) return;
 
-      const res = await axios.post(
-        "http://localhost:5000/api/detect_liveness",
+      const res = await api.post(
+        "/detect_liveness",
         {
           image: frameData,
         },
@@ -401,19 +401,16 @@ export default function AbsensiPerpus() {
     setResult(null);
 
     try {
-      const response = await axios.post(
-        "http://localhost:5000/api/verify_perpus",
-        {
-          image: capturedImage,
-          keperluan: finalKeperluan,
-          latitude: geoState.latitude,
-          longitude: geoState.longitude,
-          accuracy: geoState.accuracy,
-          distance: geoState.distanceMeters,
-          simulated: geoState.simulated,
-          is_mock: geoState.isMock || false,
-        },
-      );
+      const response = await api.post("/verify_perpus", {
+        image: capturedImage,
+        keperluan: finalKeperluan,
+        latitude: geoState.latitude,
+        longitude: geoState.longitude,
+        accuracy: geoState.accuracy,
+        distance: geoState.distanceMeters,
+        simulated: geoState.simulated,
+        is_mock: geoState.isMock || false,
+      });
       setResult({ success: true, message: response.data.message });
       setTimeout(() => {
         setResult(null);

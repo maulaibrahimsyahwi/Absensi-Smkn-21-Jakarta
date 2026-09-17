@@ -81,14 +81,18 @@ export default function DashboardPeriodFilter({
             <span>Data Siswa</span>
           </Link>
           <button
-            onClick={onRefresh}
+            type="button"
+            onClick={() => onRefresh && onRefresh(true)}
             disabled={loading}
             className="inline-flex items-center justify-center cursor-pointer gap-1.5 sm:gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50 flex-shrink-0"
+            title="Segarkan data rekapitulasi"
           >
             <RefreshCw
               className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
             />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">
+              {loading ? "Menyegarkan..." : "Refresh"}
+            </span>
           </button>
 
           {/* Dropdown Menu Unduh Rekap (XLSX, XLS, CSV) */}

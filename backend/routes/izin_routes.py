@@ -1,0 +1,166 @@
+from datetime import datetime, time, timedelta
+from flask import Blueprint, request, jsonify
+from models import db, Siswa, AbsensiHarian, PengajuanIzin
+
+izin_bp = Blueprint('izin', __name__)
+
+# ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
+
+@izin_bp.route('/api/pengajuan_izin', methods=['POST'])
+def submit_pengajuan_izin():
+    data = request.json or {}
+    nis = str(data.get('nis', '')).strip()
+    jenis = str(data.get('jenis', '')).strip()  # "Sakit" atau "Izin"
+    tgl_mulai_str = str(data.get('tanggal_mulai', '')).strip()
+    tgl_selesai_str = str(data.get('tanggal_selesai', '')).strip()
+    alasan = str(data.get('alasan', '')).strip()
+    surat_bukti = data.get('surat_bukti')  # base64 data uri string
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    lokasi_teks = data.get('lokasi_teks')
+
+    try:
+        if latitude is not None and latitude != '':
+            latitude = float(latitude)
+        else:
+            latitude = None
+        if longitude is not None and longitude != '':
+            longitude = float(longitude)
+        else:
+            longitude = None
+    except (ValueError, TypeError):
+        latitude = None
+        longitude = None
+
+    if not nis:
+        return jsonify({"success": False, "message": "NIS siswa wajib diisi."}), 400
+    
+    siswa = Siswa.query.filter_by(nis=nis).first()
+    if not siswa:
+        return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan dalam database."}), 404
+    if getattr(siswa, 'status', 'Aktif') == 'Alumni':
+        return jsonify({
+            "success": False,
+            "message": f"Siswa {siswa.nama} ({siswa.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mengajukan perizinan."
+        }), 400
+
+    if jenis not in ["Sakit", "Izin"]:
+        return jsonify({"success": False, "message": "Jenis pengajuan harus 'Sakit' atau 'Izin'."}), 400
+
+    if not tgl_mulai_str or not tgl_selesai_str:
+        return jsonify({"success": False, "message": "Tanggal mulai dan selesai harus diisi."}), 400
+
+    try:
+        tgl_mulai = datetime.strptime(tgl_mulai_str, "%Y-%m-%d").date()
+        tgl_selesai = datetime.strptime(tgl_selesai_str, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"success": False, "message": "Format tanggal tidak valid. Gunakan format YYYY-MM-DD."}), 400
+
+    if tgl_selesai < tgl_mulai:
+        return jsonify({"success": False, "message": "Tanggal selesai tidak boleh sebelum tanggal mulai."}), 400
+
+    if not alasan:
+        return jsonify({"success": False, "message": "Alasan / keterangan ketidakhadiran wajib diisi."}), 400
+
+    MAX_ALASAN_LENGTH = 200
+    if len(alasan) > MAX_ALASAN_LENGTH:
+        return jsonify({
+            "success": False,
+            "message": f"Alasan ketidakhadiran terlalu panjang (maksimal {MAX_ALASAN_LENGTH} karakter, terisi {len(alasan)} karakter)."
+        }), 400
+
+    # Validasi Wajib GPS
+    if latitude is None or longitude is None:
+        return jsonify({
+            "success": False,
+            "message": "Titik koordinat lokasi GPS wajib disertakan saat mengajukan surat izin / sakit. Harap aktifkan sensor lokasi (GPS) pada perangkat Anda."
+        }), 400
+
+    try:
+        pengajuan = PengajuanIzin(
+            siswa_id=siswa.id,
+            jenis=jenis,
+            tanggal_mulai=tgl_mulai,
+            tanggal_selesai=tgl_selesai,
+            alasan=alasan,
+            surat_bukti=surat_bukti,
+            latitude=latitude,
+            longitude=longitude,
+            lokasi_teks=lokasi_teks,
+            status_pengajuan="Menunggu"
+        )
+        db.session.add(pengajuan)
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Pengajuan {jenis} atas nama {siswa.nama} ({siswa.kelas}) berhasil dikirim dan sedang menunggu verifikasi guru.",
+            "data": pengajuan.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@izin_bp.route('/api/pengajuan_izin', methods=['GET'])
+def get_pengajuan_izin():
+    status = request.args.get('status')
+    query = PengajuanIzin.query
+    if status and status != 'ALL':
+        query = query.filter_by(status_pengajuan=status)
+    pengajuan_list = query.order_by(PengajuanIzin.created_at.desc()).all()
+    return jsonify([p.to_dict() for p in pengajuan_list])
+
+
+@izin_bp.route('/api/pengajuan_izin/<int:id>/verifikasi', methods=['POST'])
+def verifikasi_pengajuan_izin(id):
+    pengajuan = PengajuanIzin.query.get(id)
+    if not pengajuan:
+        return jsonify({"success": False, "message": "Data pengajuan tidak ditemukan."}), 404
+
+    data = request.json or {}
+    aksi = str(data.get('aksi', '')).strip()  # "Disetujui" atau "Ditolak"
+    catatan = str(data.get('catatan', '')).strip()
+
+    if aksi not in ["Disetujui", "Ditolak"]:
+        return jsonify({"success": False, "message": "Aksi harus 'Disetujui' atau 'Ditolak'."}), 400
+
+    try:
+        pengajuan.status_pengajuan = aksi
+        pengajuan.catatan_guru = catatan
+
+        # Jika disetujui, generasikan rekaman AbsensiHarian untuk rentang tanggal tersebut
+        if aksi == "Disetujui":
+            curr = pengajuan.tanggal_mulai
+            while curr <= pengajuan.tanggal_selesai:
+                start_day = datetime.combine(curr, time.min)
+                end_day = datetime.combine(curr, time.max)
+                
+                # Cek apakah sudah ada presensi harian untuk siswa di hari ini
+                existing = AbsensiHarian.query.filter(
+                    AbsensiHarian.siswa_id == pengajuan.siswa_id,
+                    AbsensiHarian.waktu >= start_day,
+                    AbsensiHarian.waktu <= end_day
+                ).first()
+
+                if existing:
+                    existing.status = pengajuan.jenis
+                else:
+                    absensi_baru = AbsensiHarian(
+                        siswa_id=pengajuan.siswa_id,
+                        waktu=datetime.combine(curr, time(7, 0, 0)),
+                        status=pengajuan.jenis
+                    )
+                    db.session.add(absensi_baru)
+                
+                curr += timedelta(days=1)
+
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Pengajuan {pengajuan.jenis} siswa {pengajuan.siswa.nama} berhasil di-{aksi.lower()}.",
+            "data": pengajuan.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+

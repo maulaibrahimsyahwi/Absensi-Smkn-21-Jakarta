@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import api from "../services/api";
 import {
   ArrowLeft,
   FileText,
@@ -111,8 +111,8 @@ export default function PengajuanIzin() {
       setCheckingNis(true);
       setNisError("");
       try {
-        const res = await axios.get(
-          `http://localhost:5000/api/cek_siswa_nis/${encodeURIComponent(trimmedNis)}`,
+        const res = await api.get(
+          `/cek_siswa_nis/${encodeURIComponent(trimmedNis)}`,
         );
         if (res.data && res.data.success) {
           setSiswaData(res.data.siswa);
@@ -245,7 +245,7 @@ export default function PengajuanIzin() {
 
     setLoading(true);
     try {
-      const res = await axios.post("http://localhost:5000/api/pengajuan_izin", {
+      const res = await api.post("/pengajuan_izin", {
         nis: siswaData.nis,
         jenis,
         tanggal_mulai: tanggalMulai,

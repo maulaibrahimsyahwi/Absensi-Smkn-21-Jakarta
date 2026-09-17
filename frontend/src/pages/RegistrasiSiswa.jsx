@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Webcam from "react-webcam";
-import axios from "axios";
+import api from "../services/api";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -80,13 +80,29 @@ export default function RegistrasiSiswa() {
   const [deletingSiswa, setDeletingSiswa] = useState(null);
   const [reRecordingSiswa, setReRecordingSiswa] = useState(null);
 
-  const fetchSiswa = async () => {
+  const fetchSiswa = async (isManual = false) => {
     setLoadingList(true);
     try {
-      const res = await axios.get("http://localhost:5000/api/siswa");
-      setSiswaList(res.data || []);
+      const delayPromise = isManual
+        ? new Promise((resolve) => setTimeout(resolve, 450))
+        : Promise.resolve();
+      const [res] = await Promise.all([api.get("/siswa"), delayPromise]);
+      const data = res.data || [];
+      setSiswaList(data);
+      if (isManual) {
+        setNotification({
+          type: "success",
+          message: `Data siswa berhasil diperbarui (${data.length} siswa terdaftar).`,
+        });
+      }
     } catch (err) {
       console.error("Gagal mengambil data siswa:", err);
+      if (isManual) {
+        setNotification({
+          type: "error",
+          message: "Gagal memperbarui data siswa. Periksa koneksi backend.",
+        });
+      }
     } finally {
       setLoadingList(false);
     }
@@ -192,7 +208,7 @@ export default function RegistrasiSiswa() {
 
       // Buat siswa baru jika bukan rekam ulang
       if (!targetId) {
-        const createRes = await axios.post("http://localhost:5000/api/siswa", {
+        const createRes = await api.post("/siswa", {
           nis: cleanNis,
           nama: cleanNama,
           kelas: cleanKelas,
@@ -201,13 +217,10 @@ export default function RegistrasiSiswa() {
       }
 
       // Kirim seluruh sampel wajah ke backend (multi-sample)
-      const faceRes = await axios.post(
-        "http://localhost:5000/api/register_face",
-        {
-          siswa_id: targetId,
-          images: samples,
-        },
-      );
+      const faceRes = await api.post("/register_face", {
+        siswa_id: targetId,
+        images: samples,
+      });
 
       setNotification({
         type: "success",
@@ -265,10 +278,9 @@ export default function RegistrasiSiswa() {
     setActionLoading(true);
     try {
       if (luluskanModalData.type === "tingkat_xii") {
-        const res = await axios.post(
-          "http://localhost:5000/api/siswa/luluskan_tingkat",
-          { tingkat: "XII" },
-        );
+        const res = await api.post("/siswa/luluskan_tingkat", {
+          tingkat: "XII",
+        });
         setNotification({
           type: "success",
           message:
@@ -276,10 +288,10 @@ export default function RegistrasiSiswa() {
             "Seluruh siswa kelas XII berhasil diluluskan menjadi Alumni.",
         });
       } else if (luluskanModalData.type === "selected") {
-        const res = await axios.post(
-          "http://localhost:5000/api/siswa/bulk_status",
-          { siswa_ids: selectedIds, status: "Alumni" },
-        );
+        const res = await api.post("/siswa/bulk_status", {
+          siswa_ids: selectedIds,
+          status: "Alumni",
+        });
         setNotification({
           type: "success",
           message:
@@ -291,8 +303,8 @@ export default function RegistrasiSiswa() {
         luluskanModalData.type === "single" &&
         luluskanModalData.targetSiswa
       ) {
-        const res = await axios.patch(
-          `http://localhost:5000/api/siswa/${luluskanModalData.targetSiswa.id}/status`,
+        const res = await api.patch(
+          `/siswa/${luluskanModalData.targetSiswa.id}/status`,
           { status: "Alumni" },
         );
         setNotification({
@@ -324,13 +336,10 @@ export default function RegistrasiSiswa() {
     if (selectedIds.length === 0) return;
     setActionLoading(true);
     try {
-      const res = await axios.post(
-        "http://localhost:5000/api/siswa/bulk_status",
-        {
-          siswa_ids: selectedIds,
-          status: "Aktif",
-        },
-      );
+      const res = await api.post("/siswa/bulk_status", {
+        siswa_ids: selectedIds,
+        status: "Aktif",
+      });
       setNotification({
         type: "success",
         message:
@@ -351,10 +360,9 @@ export default function RegistrasiSiswa() {
 
   const handleAktifkanSingle = async (siswa) => {
     try {
-      const res = await axios.patch(
-        `http://localhost:5000/api/siswa/${siswa.id}/status`,
-        { status: "Aktif" },
-      );
+      const res = await api.patch(`/siswa/${siswa.id}/status`, {
+        status: "Aktif",
+      });
       setNotification({
         type: "success",
         message:
@@ -375,10 +383,9 @@ export default function RegistrasiSiswa() {
     if (selectedIds.length === 0) return;
     setActionLoading(true);
     try {
-      const res = await axios.post(
-        "http://localhost:5000/api/siswa/bulk_delete",
-        { siswa_ids: selectedIds },
-      );
+      const res = await api.post("/siswa/bulk_delete", {
+        siswa_ids: selectedIds,
+      });
       setNotification({
         type: "success",
         message:
@@ -404,7 +411,7 @@ export default function RegistrasiSiswa() {
   const confirmDeleteSiswa = async () => {
     if (!deletingSiswa) return;
     try {
-      await axios.delete(`http://localhost:5000/api/siswa/${deletingSiswa.id}`);
+      await api.delete(`/siswa/${deletingSiswa.id}`);
       setNotification({
         type: "success",
         message: `Siswa ${deletingSiswa.nama} berhasil dihapus dari database.`,
@@ -455,7 +462,7 @@ export default function RegistrasiSiswa() {
     }
 
     try {
-      await axios.put(`http://localhost:5000/api/siswa/${editingSiswa.id}`, {
+      await api.put(`/siswa/${editingSiswa.id}`, {
         nis: cleanNis,
         nama: cleanNama,
         kelas: cleanKelas,
@@ -549,14 +556,16 @@ export default function RegistrasiSiswa() {
         </div>
 
         <button
-          onClick={fetchSiswa}
+          type="button"
+          onClick={() => fetchSiswa(true)}
           disabled={loadingList}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs self-start sm:self-auto cursor-pointer"
+          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs self-start sm:self-auto cursor-pointer disabled:opacity-50"
+          title="Segarkan data siswa"
         >
           <RefreshCw
             className={`w-4 h-4 ${loadingList ? "animate-spin text-blue-600" : ""}`}
           />
-          <span>Refresh</span>
+          <span>{loadingList ? "Menyegarkan..." : "Refresh"}</span>
         </button>
       </div>
 

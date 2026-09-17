@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import axios from "axios";
+import api from "../services/api";
 import {
   ClipboardCheck,
   Search,
@@ -222,7 +222,7 @@ export default function GuruPiket() {
     const fetchSiswa = async () => {
       setLoadingSiswa(true);
       try {
-        const res = await axios.get("http://localhost:5000/api/siswa", {
+        const res = await api.get("/siswa", {
           params: { status: "Aktif" },
         });
         setSiswaList(res.data || []);
@@ -246,7 +246,7 @@ export default function GuruPiket() {
         tglParam = filterTanggalCustom;
       }
 
-      const res = await axios.get("http://localhost:5000/api/piket/izin", {
+      const res = await api.get("/piket/izin", {
         params: {
           tanggal: tglParam,
           search: riwayatSearch.trim() || undefined,
@@ -339,10 +339,7 @@ export default function GuruPiket() {
         petugas_piket: petugasPiket.trim(),
       };
 
-      const res = await axios.post(
-        "http://localhost:5000/api/piket/izin",
-        payload,
-      );
+      const res = await api.post("/piket/izin", payload);
 
       if (res.data && res.data.success) {
         const createdData = res.data.data;
@@ -382,9 +379,7 @@ export default function GuruPiket() {
     if (!deletingIzin) return;
     setDeletingLoading(true);
     try {
-      await axios.delete(
-        `http://localhost:5000/api/piket/izin/${deletingIzin.id}`,
-      );
+      await api.delete(`/piket/izin/${deletingIzin.id}`);
       fetchRiwayat();
       setNotification({
         type: "success",

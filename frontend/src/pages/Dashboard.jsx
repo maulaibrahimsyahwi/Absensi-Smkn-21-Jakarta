@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import api from "../services/api";
 import {
   Users,
   CheckCircle2,
@@ -9,6 +9,9 @@ import {
   Filter,
   FileText,
   ClipboardCheck,
+  Info,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
@@ -59,8 +62,8 @@ export default function Dashboard() {
 
   // Ambil daftar tahun dinamis dari database
   useEffect(() => {
-    axios
-      .get("http://localhost:5000/api/rekap/available_years")
+    api
+      .get("/rekap/available_years")
       .then((res) => {
         if (Array.isArray(res.data) && res.data.length > 0) {
           setAvailableYears(res.data);
@@ -103,43 +106,58 @@ export default function Dashboard() {
   const [pengajuanList, setPengajuanList] = useState([]);
   const [izinPiketList, setIzinPiketList] = useState([]);
 
+  const [notification, setNotification] = useState(null);
+
+  // Auto-dismiss floating toast notification setelah 5 detik
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notification]);
+
   // Reset pagination saat ganti filter/tab
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchTerm, kelasFilter, statusIzinFilter, displayLimit]);
 
-  const fetchData = async () => {
+  const fetchData = async (isManual = false) => {
     setLoading(true);
     try {
+      const delayPromise = isManual
+        ? new Promise((resolve) => setTimeout(resolve, 450))
+        : Promise.resolve();
       const [resPeriode, resHarian, resPerpus, resPengajuan, resPiket] =
         await Promise.all([
-          axios.get("http://localhost:5000/api/rekap", {
+          api.get("/rekap/siswa_periode", {
             params: {
               mode: periodeMode,
               bulan: selectedBulan,
               tahun: selectedTahun,
             },
           }),
-          axios.get("http://localhost:5000/api/absensi_harian", {
+          api.get("/rekap/harian", {
             params: {
               mode: periodeMode,
               bulan: selectedBulan,
               tahun: selectedTahun,
             },
           }),
-          axios.get("http://localhost:5000/api/absensi_perpus", {
+          api.get("/rekap/perpus", {
             params: {
               mode: periodeMode,
               bulan: selectedBulan,
               tahun: selectedTahun,
             },
           }),
-          axios.get("http://localhost:5000/api/pengajuan_izin"),
-          axios.get("http://localhost:5000/api/piket/izin", {
+          api.get("/pengajuan_izin"),
+          api.get("/piket/izin", {
             params: {
               tanggal: "ALL",
             },
           }),
+          delayPromise,
         ]);
 
       setSiswaPeriode(resPeriode.data || { statistik: {}, daftar: [] });
@@ -147,8 +165,22 @@ export default function Dashboard() {
       setRiwayatPerpus(resPerpus.data || []);
       setPengajuanList(resPengajuan.data || []);
       setIzinPiketList(resPiket.data || []);
+
+      if (isManual) {
+        setNotification({
+          type: "success",
+          message: "Data rekapitulasi & riwayat kehadiran berhasil diperbarui!",
+        });
+      }
     } catch (err) {
       console.error("Gagal mengambil data rekap:", err);
+      if (isManual) {
+        setNotification({
+          type: "error",
+          message:
+            "Gagal memperbarui data rekapitulasi. Periksa koneksi backend.",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -162,7 +194,7 @@ export default function Dashboard() {
     )
       return;
     try {
-      await axios.delete(`http://localhost:5000/api/piket/izin/${id}`);
+      await api.delete(`/piket/izin/${id}`);
       fetchData();
     } catch (err) {
       alert("Gagal menghapus surat izin piket.");
@@ -172,13 +204,10 @@ export default function Dashboard() {
   const handleVerifikasi = async (id, aksi, catatan = "") => {
     setVerifyingId(id);
     try {
-      const res = await axios.post(
-        `http://localhost:5000/api/pengajuan_izin/${id}/verifikasi`,
-        {
-          aksi,
-          catatan,
-        },
-      );
+      const res = await api.post(`/pengajuan_izin/${id}/verifikasi`, {
+        aksi,
+        catatan,
+      });
       if (res.data && res.data.success) {
         await fetchData();
         setRejectModalItem(null);
@@ -748,6 +777,57 @@ export default function Dashboard() {
         slipData={selectedSlipModal}
         onClose={() => setSelectedSlipModal(null)}
       />
+
+      {/* Floating Bottom-Right Toast Notification */}
+      {notification && (
+        <div className="fixed bottom-5 right-4 sm:right-6 z-50 max-w-sm sm:max-w-md w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-5 fade-in duration-200 pointer-events-auto">
+          <div
+            className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-md flex items-start gap-3 relative ${
+              notification.type === "success"
+                ? "bg-slate-900/95 border-emerald-500/40 text-white shadow-emerald-950/30"
+                : notification.type === "info"
+                  ? "bg-slate-900/95 border-blue-500/40 text-white shadow-blue-950/30"
+                  : "bg-slate-900/95 border-rose-500/40 text-white shadow-rose-950/30"
+            }`}
+          >
+            {notification.type === "success" ? (
+              <div className="p-1 rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            ) : notification.type === "info" ? (
+              <div className="p-1 rounded-xl bg-blue-500/20 text-blue-400 flex-shrink-0 mt-0.5">
+                <Info className="w-5 h-5" />
+              </div>
+            ) : (
+              <div className="p-1 rounded-xl bg-rose-500/20 text-rose-400 flex-shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            )}
+
+            <div className="flex-1 pr-6 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-400">
+                {notification.type === "success"
+                  ? "Berhasil"
+                  : notification.type === "info"
+                    ? "Informasi"
+                    : "Pemberitahuan"}
+              </p>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed text-slate-100 break-words">
+                {notification.message}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              title="Tutup Notifikasi"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
