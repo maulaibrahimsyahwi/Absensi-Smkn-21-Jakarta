@@ -96,7 +96,7 @@ def internal_error(e):
 # Koordinat Resmi SMKN 21 Jakarta & Batas Geofencing
 SEKOLAH_LATITUDE = -6.1587
 SEKOLAH_LONGITUDE = 106.8550
-MAX_RADIUS_SEKOLAH = 15 # meter
+MAX_RADIUS_SEKOLAH = 10 # meter
 
 def calculate_distance_meters(lat1, lon1, lat2, lon2):
     try:
@@ -453,7 +453,7 @@ def verify_harian():
                 "message": f"Presensi ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
             }), 403
 
-    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 15m
+    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 10m
     if not simulated and latitude is not None and longitude is not None:
         dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
         if dist is not None and dist > MAX_RADIUS_SEKOLAH:
@@ -530,7 +530,7 @@ def verify_perpus():
                 "message": f"Presensi perpustakaan ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
             }), 403
 
-    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 15m
+    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 10m
     if not simulated and latitude is not None and longitude is not None:
         dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
         if dist is not None and dist > MAX_RADIUS_SEKOLAH:
@@ -665,7 +665,7 @@ def get_sekolah_lokasi():
         "alamat": "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat",
         "latitude": -6.1587,
         "longitude": 106.8550,
-        "radius_meter": 15
+        "radius_meter": 10
     })
 
 @app.route('/api/pengajuan_izin', methods=['GET'])
@@ -768,6 +768,9 @@ def create_izin_piket():
     if not alasan:
         return jsonify({"success": False, "message": "Alasan izin wajib diisi."}), 400
 
+    if len(alasan) > 80:
+        return jsonify({"success": False, "message": "Alasan izin maksimal 70-80 karakter agar pas pada lembar format E-Slip."}), 400
+
     if not petugas_piket:
         return jsonify({"success": False, "message": "Nama petugas piket wajib diisi."}), 400
 
@@ -778,6 +781,10 @@ def create_izin_piket():
             tgl = date.today()
     except ValueError:
         tgl = date.today()
+
+    # Validasi hari libur sekolah (Sabtu & Minggu)
+    if tgl.weekday() in [5, 6]:
+        return jsonify({"success": False, "message": "Surat izin piket tidak dapat diterbitkan pada hari Sabtu atau Minggu (hari libur sekolah)."}), 400
 
     if not hari:
         nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]

@@ -20,12 +20,14 @@ import {
   RefreshCw,
   Sparkles,
   Filter,
+  Info,
 } from "lucide-react";
 import CustomDatePicker, {
   formatTanggalIndo,
 } from "../components/CustomDatePicker";
 import CustomDropdown from "../components/CustomDropdown";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
+import DeleteIzinModal from "../components/piket/DeleteIzinModal";
 
 const NAMA_HARI_MAP = [
   "Minggu",
@@ -37,43 +39,76 @@ const NAMA_HARI_MAP = [
   "Sabtu",
 ];
 
-const JAM_PELAJARAN_OPTIONS = [
-  { value: "Jam ke-1", label: "Jam ke-1 (06.45 - 07.30)" },
-  { value: "Jam ke-2", label: "Jam ke-2 (07.30 - 08.15)" },
-  { value: "Jam ke-3", label: "Jam ke-3 (08.15 - 09.00)" },
-  { value: "Jam ke-4", label: "Jam ke-4 (09.00 - 09.45)" },
-  { value: "Istirahat ke-1", label: "Istirahat ke-1 (09.45 - 10.00)" },
-  { value: "Jam ke-5", label: "Jam ke-5 (10.00 - 10.40)" },
-  { value: "Jam ke-6", label: "Jam ke-6 (10.40 - 11.20)" },
-  { value: "Jam ke-7", label: "Jam ke-7 (11.20 - 12.00)" },
-  { value: "Istirahat ke-2", label: "Istirahat ke-2 (12.00 - 12.45)" },
-  { value: "Jam ke-8", label: "Jam ke-8 (12.45 - 13.30)" },
-  { value: "Jam ke-9", label: "Jam ke-9 (13.30 - 14.15)" },
-  { value: "Jam ke-10", label: "Jam ke-10 (14.15 - 15.00)" },
-  { value: "Jam ke-1 s/d 2", label: "Jam ke-1 s/d 2" },
-  { value: "Jam ke-3 s/d 4", label: "Jam ke-3 s/d 4" },
-  { value: "Jam ke-5 s/d 6", label: "Jam ke-5 s/d 6" },
-  { value: "Jam ke-7 s/d 8", label: "Jam ke-7 s/d 8" },
+const JAM_LIST = [
+  { num: 1, label: "Jam ke-1", waktu: "06.45 - 07.30" },
+  { num: 2, label: "Jam ke-2", waktu: "07.30 - 08.15" },
+  { num: 3, label: "Jam ke-3", waktu: "08.15 - 09.00" },
+  { num: 4, label: "Jam ke-4", waktu: "09.00 - 09.45" },
+  { num: 5, label: "Jam ke-5", waktu: "10.00 - 10.40" },
+  { num: 6, label: "Jam ke-6", waktu: "10.40 - 11.20" },
+  { num: 7, label: "Jam ke-7", waktu: "11.20 - 12.00" },
+  { num: 8, label: "Jam ke-8", waktu: "12.45 - 13.30" },
+  { num: 9, label: "Jam ke-9", waktu: "13.30 - 14.15" },
+  { num: 10, label: "Jam ke-10", waktu: "14.15 - 15.00" },
+];
+
+const JAM_MULAI_OPTIONS = JAM_LIST.map((j) => ({
+  value: String(j.num),
+  label: `${j.label} (${j.waktu})`,
+}));
+
+const QUICK_JAM_PRESETS = [
+  { label: "Jam 1", mulai: "1", selesai: "1" },
+  { label: "Jam 2", mulai: "2", selesai: "2" },
+  { label: "Jam 1 s/d 2", mulai: "1", selesai: "2" },
+  { label: "Jam 1 s/d 4", mulai: "1", selesai: "4" },
+  { label: "Jam 1 s/d 6", mulai: "1", selesai: "6" },
+  { label: "Jam 3 s/d 6", mulai: "3", selesai: "6" },
+  { label: "Jam 5 s/d Selesai", mulai: "5", selesai: "Selesai" },
+  { label: "Jam 1 s/d Selesai", mulai: "1", selesai: "Selesai" },
 ];
 
 const QUICK_ALASAN_MASUK = [
-  "Terlambat bangun / macet perjalanan",
-  "Kendala kendaraan / ban bocor",
-  "Urusan keluarga mendesak pagi hari",
-  "Menyelesaikan keperluan administrasi",
-  "Kondisi fisik kurang fit di pagi hari",
+  "Macet di jalan",
+  "Ban motor bocor",
+  "Urusan keluarga",
+  "Kondisi kurang fit",
+  "Kendala transportasi",
+  "Terlambat bangun",
 ];
 
 const QUICK_ALASAN_KELUAR = [
-  "Sakit / istirahat di ruang UKS",
-  "Urusan administrasi perbankan / KJP",
-  "Dispensasi kegiatan lomba / dinas luar",
-  "Urusan keluarga mendadak & mendesak",
-  "Pemeriksaan kesehatan ke Puskesmas/RS",
+  "Sakit (istirahat di UKS)",
+  "Urusan Bank DKI / KJP",
+  "Dispensasi lomba",
+  "Urusan keluarga",
+  "Ke Puskesmas / RS",
+  "Keperluan dinas luar",
 ];
 
+const computeJamKeString = (mulai, selesai) => {
+  const m = Number(mulai);
+  if (selesai === "Selesai") {
+    return `Jam ke-${m} s/d Selesai`;
+  }
+  const s = Number(selesai);
+  if (s > m) {
+    return `Jam ke-${m} s/d Jam ke-${s}`;
+  }
+  return `Jam ke-${m}`;
+};
+
+const getInitialWeekday = () => {
+  const d = new Date();
+  const day = d.getDay(); // 0: Minggu, 6: Sabtu
+  if (day === 6)
+    d.setDate(d.getDate() - 1); // Mundur ke Jumat
+  else if (day === 0) d.setDate(d.getDate() + 1); // Maju ke Senin
+  return d.toISOString().split("T")[0];
+};
+
 export default function GuruPiket() {
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayStr = useMemo(() => getInitialWeekday(), []);
 
   // State Daftar Siswa Aktif untuk Autocomplete
   const [siswaList, setSiswaList] = useState([]);
@@ -86,12 +121,57 @@ export default function GuruPiket() {
 
   // State Formulir Penerbitan Surat
   const [tipe, setTipe] = useState("Izin Masuk"); // "Izin Masuk" atau "Izin Meninggalkan Kelas"
-  const [tanggal, setTanggal] = useState(todayStr);
+  const [tanggal, setTanggal] = useState(getInitialWeekday);
+  const [jamMulai, setJamMulai] = useState("1");
+  const [jamSelesai, setJamSelesai] = useState("1");
   const [jamKe, setJamKe] = useState("Jam ke-1");
   const [alasan, setAlasan] = useState("");
   const [petugasPiket, setPetugasPiket] = useState(() => {
     return localStorage.getItem("smkn21_petugas_piket") || "";
   });
+
+  // Opsi Jam Selesai dinamis berdasarkan Jam Mulai
+  const jamSelesaiOptions = useMemo(() => {
+    const numM = Number(jamMulai) || 1;
+    const opts = [];
+    for (let i = numM; i <= 10; i++) {
+      const item = JAM_LIST.find((j) => j.num === i);
+      opts.push({
+        value: String(i),
+        label:
+          i === numM
+            ? `${item.label} (Hanya 1 Jam)`
+            : `${item.label} (s/d ${item.waktu.split(" - ")[1]})`,
+      });
+    }
+    opts.push({
+      value: "Selesai",
+      label: "Sampai Selesai (Pulang Sekolah)",
+    });
+    return opts;
+  }, [jamMulai]);
+
+  const handleJamMulaiChange = (val) => {
+    setJamMulai(val);
+    const numM = Number(val);
+    let newSelesai = jamSelesai;
+    if (jamSelesai !== "Selesai" && Number(jamSelesai) < numM) {
+      newSelesai = val;
+      setJamSelesai(val);
+    }
+    setJamKe(computeJamKeString(val, newSelesai));
+  };
+
+  const handleJamSelesaiChange = (val) => {
+    setJamSelesai(val);
+    setJamKe(computeJamKeString(jamMulai, val));
+  };
+
+  const handlePresetJam = (mulai, selesai) => {
+    setJamMulai(mulai);
+    setJamSelesai(selesai);
+    setJamKe(computeJamKeString(mulai, selesai));
+  };
 
   // State Riwayat Izin Meja Piket
   const [riwayatList, setRiwayatList] = useState([]);
@@ -103,10 +183,21 @@ export default function GuruPiket() {
   // Modal E-Slip
   const [selectedSlip, setSelectedSlip] = useState(null);
 
-  // Form Submitting & Alert
+  // Form Submitting, Modal Hapus, & Floating Notification
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [successToast, setSuccessToast] = useState("");
+  const [notification, setNotification] = useState(null);
+  const [deletingIzin, setDeletingIzin] = useState(null);
+  const [deletingLoading, setDeletingLoading] = useState(false);
+
+  // Auto-dismiss notification setelah 5 detik
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   // Hitung Hari Otomatis dari Tanggal
   const computedHari = useMemo(() => {
@@ -210,16 +301,29 @@ export default function GuruPiket() {
 
     if (!selectedSiswa) {
       setFormError("Silakan pilih siswa yang mengajukan izin.");
+      setNotification({
+        type: "error",
+        message:
+          "Silakan pilih siswa yang mengajukan surat izin terlebih dahulu.",
+      });
       return;
     }
 
     if (!petugasPiket.trim()) {
       setFormError("Nama Petugas Piket wajib diisi.");
+      setNotification({
+        type: "error",
+        message: "Nama Petugas Guru Piket wajib diisi.",
+      });
       return;
     }
 
     if (!alasan.trim()) {
       setFormError("Alasan keperluan izin wajib diisi.");
+      setNotification({
+        type: "error",
+        message: "Alasan keperluan izin wajib diisi.",
+      });
       return;
     }
 
@@ -250,40 +354,52 @@ export default function GuruPiket() {
         setSelectedSiswa(null);
         setSiswaSearchInput("");
         setAlasan("");
-        setSuccessToast(
-          `Surat ${tipe} untuk ${createdData.nama} berhasil diterbitkan!`,
-        );
+        setNotification({
+          type: "success",
+          message: `Surat ${tipe} untuk ${createdData.nama} (${createdData.kelas}) berhasil diterbitkan!`,
+        });
 
         // Refresh riwayat
         fetchRiwayat();
       }
     } catch (err) {
       console.error("Gagal menerbitkan surat izin:", err);
-      setFormError(
+      const errMsg =
         err.response?.data?.message ||
-          "Terjadi kesalahan saat menerbitkan surat izin.",
-      );
+        "Terjadi kesalahan saat menerbitkan surat izin.";
+      setFormError(errMsg);
+      setNotification({
+        type: "error",
+        message: errMsg,
+      });
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Hapus Izin Piket
-  const handleDeleteIzin = async (id, namaSiswa) => {
-    if (
-      !window.confirm(
-        `Apakah Anda yakin ingin menghapus surat izin untuk ${namaSiswa}?`,
-      )
-    ) {
-      return;
-    }
-
+  // Konfirmasi & Eksekusi Hapus Izin Piket via Modal
+  const confirmDeleteIzin = async () => {
+    if (!deletingIzin) return;
+    setDeletingLoading(true);
     try {
-      await axios.delete(`http://localhost:5000/api/piket/izin/${id}`);
+      await axios.delete(
+        `http://localhost:5000/api/piket/izin/${deletingIzin.id}`,
+      );
       fetchRiwayat();
-      setSuccessToast("Surat izin berhasil dihapus dari sistem.");
+      setNotification({
+        type: "success",
+        message: `Surat izin untuk ${deletingIzin.nama} (${deletingIzin.kelas}) berhasil dihapus dari sistem.`,
+      });
+      setDeletingIzin(null);
     } catch (err) {
-      alert("Gagal menghapus surat izin piket.");
+      console.error("Gagal menghapus surat izin:", err);
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal menghapus surat izin piket.",
+      });
+    } finally {
+      setDeletingLoading(false);
     }
   };
 
@@ -316,28 +432,11 @@ export default function GuruPiket() {
             type="text"
             value={petugasPiket}
             onChange={(e) => handlePetugasChange(e.target.value)}
-            placeholder="Ketik Nama Anda / Guru Piket"
+            placeholder="Ketik Nama Guru Piket"
             className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 flex-1"
           />
         </div>
       </div>
-
-      {/* ================= TOAST NOTIFICATION ================= */}
-      {successToast && (
-        <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl flex items-center justify-between text-xs sm:text-sm animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-            <span className="font-semibold">{successToast}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessToast("")}
-            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* ================= MAIN 2-COLUMN LAYOUT ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -534,49 +633,111 @@ export default function GuruPiket() {
                 </div>
               </div>
 
-              {/* STEP 3: TANGGAL & HARI */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    3. Tanggal Surat
-                  </label>
-                  <CustomDatePicker
-                    value={tanggal}
-                    onChange={(val) => setTanggal(val)}
-                  />
-                </div>
-              </div>
-
-              {/* STEP 4: JAM PELAJARAN KE- */}
+              {/* STEP 3: TANGGAL & HARI (FULL WIDTH TANPA RUANG KOSONG) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  4. Jam Pelajaran Ke- <span className="text-rose-500">*</span>
-                </label>
-                <CustomDropdown
-                  className="w-full text-xs sm:text-sm rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all shadow-2xs"
-                  value={jamKe}
-                  onChange={(val) => setJamKe(val)}
-                  options={JAM_PELAJARAN_OPTIONS}
-                  placeholder="Pilih Jam Pelajaran..."
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    3. Tanggal Surat <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                    Hari {computedHari}
+                  </span>
+                </div>
+                <CustomDatePicker
+                  className="w-full"
+                  value={tanggal}
+                  onChange={(val) => setTanggal(val)}
+                  disableWeekends={true}
                 />
               </div>
 
-              {/* STEP 5: ALASAN KEPERLUAN & QUICK CHIPS */}
+              {/* STEP 4: JAM PELAJARAN KE- (RENTANG JAM FLEKSIBEL: MISAL JAM 1 S/D JAM 6) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    4. Jam Pelajaran Ke-{" "}
+                    <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+                    {jamKe}
+                  </span>
+                </div>
+
+                {/* Dual Dropdown: Dari Jam .. Sampai Jam .. */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      Dari Jam ke-
+                    </label>
+                    <CustomDropdown
+                      className="w-full text-xs sm:text-sm rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all shadow-2xs"
+                      value={jamMulai}
+                      onChange={handleJamMulaiChange}
+                      options={JAM_MULAI_OPTIONS}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-slate-500 mb-1">
+                      Sampai Jam ke-
+                    </label>
+                    <CustomDropdown
+                      className="w-full text-xs sm:text-sm rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all shadow-2xs"
+                      value={jamSelesai}
+                      onChange={handleJamSelesaiChange}
+                      options={jamSelesaiOptions}
+                    />
+                  </div>
+                </div>
+
+                {/* Preset Cepat Jam Pelajaran */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] font-medium text-slate-400 mr-0.5">
+                    Preset
+                  </span>
+                  {QUICK_JAM_PRESETS.map((p) => {
+                    const isActive =
+                      jamMulai === p.mulai && jamSelesai === p.selesai;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => handlePresetJam(p.mulai, p.selesai)}
+                        className={`text-[10px] px-2 py-1 rounded-lg border font-semibold transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* STEP 5: ALASAN KEPERLUAN & SARAN RINGKAS */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-slate-700">
                     5. Alasan Keperluan <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[10px] text-slate-400">
-                    Pilih saran cepat atau ketik sendiri
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      alasan.length >= 80
+                        ? "text-rose-600 font-bold"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    {alasan.length} / 80 karakter
                   </span>
                 </div>
 
                 <textarea
                   rows={2}
+                  maxLength={80}
                   value={alasan}
                   onChange={(e) => setAlasan(e.target.value)}
-                  placeholder="Contoh: Ban motor kempes di jalan, urusan bank KJP, atau sakit kepala..."
+                  placeholder="Contoh: Macet di jalan, ban motor bocor, atau sakit UKS..."
                   className="w-full text-xs sm:text-sm p-3 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 transition-all shadow-2xs resize-none"
                 />
               </div>
@@ -635,7 +796,7 @@ export default function GuruPiket() {
                   loadingRiwayat ? "animate-spin text-blue-600" : ""
                 }`}
               />
-              <span>Segarkan</span>
+              <span>Refresh</span>
             </button>
           </div>
 
@@ -742,11 +903,6 @@ export default function GuruPiket() {
                               : "bg-amber-50 text-amber-700 border border-amber-200"
                           }`}
                         >
-                          {isMasuk ? (
-                            <LogIn className="w-3 h-3" />
-                          ) : (
-                            <LogOut className="w-3 h-3" />
-                          )}
                           <span>{item.tipe}</span>
                         </span>
 
@@ -791,9 +947,9 @@ export default function GuruPiket() {
 
                       <button
                         type="button"
-                        onClick={() => handleDeleteIzin(item.id, item.nama)}
+                        onClick={() => setDeletingIzin(item)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Hapus Izin"
+                        title="Hapus Surat Izin"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -812,6 +968,65 @@ export default function GuruPiket() {
         slipData={selectedSlip}
         onClose={() => setSelectedSlip(null)}
       />
+
+      {/* ================= MODAL KONFIRMASI HAPUS SURAT IZIN ================= */}
+      <DeleteIzinModal
+        deletingIzin={deletingIzin}
+        onClose={() => setDeletingIzin(null)}
+        onConfirm={confirmDeleteIzin}
+        loading={deletingLoading}
+      />
+
+      {/* ================= FLOATING BOTTOM-RIGHT TOAST NOTIFICATION ================= */}
+      {notification && (
+        <div className="fixed bottom-5 right-4 sm:right-6 z-50 max-w-sm sm:max-w-md w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-5 fade-in duration-200 pointer-events-auto">
+          <div
+            className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-md flex items-start gap-3 relative ${
+              notification.type === "success"
+                ? "bg-slate-900/95 border-emerald-500/40 text-white shadow-emerald-950/30"
+                : notification.type === "info"
+                  ? "bg-slate-900/95 border-blue-500/40 text-white shadow-blue-950/30"
+                  : "bg-slate-900/95 border-rose-500/40 text-white shadow-rose-950/30"
+            }`}
+          >
+            {notification.type === "success" ? (
+              <div className="p-1 rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            ) : notification.type === "info" ? (
+              <div className="p-1 rounded-xl bg-blue-500/20 text-blue-400 flex-shrink-0 mt-0.5">
+                <Info className="w-5 h-5" />
+              </div>
+            ) : (
+              <div className="p-1 rounded-xl bg-rose-500/20 text-rose-400 flex-shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            )}
+
+            <div className="flex-1 pr-6 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-400">
+                {notification.type === "success"
+                  ? "Berhasil"
+                  : notification.type === "info"
+                    ? "Informasi"
+                    : "Pemberitahuan"}
+              </p>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed text-slate-100 break-words">
+                {notification.message}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              title="Tutup Notifikasi"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

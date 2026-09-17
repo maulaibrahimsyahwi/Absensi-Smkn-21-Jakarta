@@ -5,7 +5,7 @@ export const SMKN21_COORDINATES = {
   longitude: 106.855,
   lat: -6.1587,
   lng: 106.855,
-  radiusMeters: 15, // Batas radius resmi: 15 meter
+  radiusMeters: 10, // Batas radius resmi: 10 meter
   name: "SMKN 21 Jakarta",
   alamat: "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat",
 };

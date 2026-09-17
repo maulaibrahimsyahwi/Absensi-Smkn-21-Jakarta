@@ -743,7 +743,7 @@ export default function PengajuanIzin() {
                         {geoLoc.loading
                           ? "Mendeteksi Titik GPS..."
                           : geoLoc.latitude
-                            ? "Titik GPS Terdeteksi (Valid)"
+                            ? "Titik GPS Terdeteksi"
                             : "Akses GPS Diperlukan"}
                       </span>
                     </div>

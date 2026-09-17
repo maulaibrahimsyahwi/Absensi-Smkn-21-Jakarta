@@ -7,6 +7,7 @@ import {
   UserPlus,
   ChevronDown,
   FileSpreadsheet,
+  FileText,
   Calendar,
 } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
@@ -119,7 +120,29 @@ export default function DashboardPeriodFilter({
                   </p>
                 </div>
 
-                {/* 1. Format Excel Modern (.xlsx) */}
+                {/* 1. Format Dokumen PDF Resmi (.pdf) */}
+                <button
+                  type="button"
+                  onClick={() => handleExportClick("pdf")}
+                  className="w-full text-left px-3.5 py-2.5 text-xs text-slate-700 hover:bg-rose-50 hover:text-rose-900 flex items-center gap-3 transition-colors cursor-pointer group"
+                >
+                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xs group-hover:bg-rose-600 group-hover:text-white transition-colors flex-shrink-0">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 group-hover:text-rose-800 flex items-center gap-1.5">
+                      <span>Dokumen PDF </span>
+                      <span className="text-[10px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded">
+                        .pdf
+                      </span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 truncate">
+                      Lengkap dengan KOP SMKN 21
+                    </p>
+                  </div>
+                </button>
+
+                {/* 2. Format Excel Modern (.xlsx) */}
                 <button
                   type="button"
                   onClick={() => handleExportClick("xlsx")}

@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
-import { exportSpreadsheet } from "../utils/exportUtils";
+import { exportSpreadsheet, exportPdf } from "../utils/exportUtils";
 
 // Modular Subcomponents
 import DashboardPeriodFilter from "../components/dashboard/DashboardPeriodFilter";
@@ -44,7 +44,7 @@ const BULAN_OPTIONS = [
 
 const BULAN_DROPDOWN_OPTIONS = BULAN_OPTIONS.map((b) => ({
   value: b.value,
-  label: `Bulan ${b.label}`,
+  label: `${b.label}`,
 }));
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -74,7 +74,7 @@ export default function Dashboard() {
   const tahunDropdownOptions = useMemo(() => {
     return availableYears.map((t) => ({
       value: t,
-      label: `Tahun ${t}`,
+      label: `${t}`,
     }));
   }, [availableYears]);
 
@@ -155,7 +155,12 @@ export default function Dashboard() {
   };
 
   const handleDeleteIzinPiket = async (id, nama) => {
-    if (!window.confirm(`Apakah Anda yakin ingin menghapus surat izin untuk ${nama}?`)) return;
+    if (
+      !window.confirm(
+        `Apakah Anda yakin ingin menghapus surat izin untuk ${nama}?`,
+      )
+    )
+      return;
     try {
       await axios.delete(`http://localhost:5000/api/piket/izin/${id}`);
       fetchData();
@@ -342,24 +347,42 @@ export default function Dashboard() {
     return filteredIzinPiket.slice(startIndex, endIndex);
   }, [activeTab, filteredIzinPiket, startIndex, endIndex]);
 
-  // Ekspor Data Laporan (Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
+  // Ekspor Data Laporan (PDF .pdf, Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
   const handleExport = (format = "xlsx") => {
-    exportSpreadsheet(
-      format,
-      activeTab,
-      {
-        filteredSiswa,
-        filteredHarian,
-        filteredPerpus,
-        filteredPengajuan,
-        filteredIzinPiket,
-      },
-      {
-        periodeMode,
-        namaBulanTerpilih,
-        selectedTahun,
-      },
-    );
+    if (format === "pdf") {
+      exportPdf(
+        activeTab,
+        {
+          filteredSiswa,
+          filteredHarian,
+          filteredPerpus,
+          filteredPengajuan,
+          filteredIzinPiket,
+        },
+        {
+          periodeMode,
+          namaBulanTerpilih,
+          selectedTahun,
+        },
+      );
+    } else {
+      exportSpreadsheet(
+        format,
+        activeTab,
+        {
+          filteredSiswa,
+          filteredHarian,
+          filteredPerpus,
+          filteredPengajuan,
+          filteredIzinPiket,
+        },
+        {
+          periodeMode,
+          namaBulanTerpilih,
+          selectedTahun,
+        },
+      );
+    }
   };
 
   const stats = siswaPeriode.statistik || {};

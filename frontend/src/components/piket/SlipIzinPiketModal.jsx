@@ -89,7 +89,7 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
                 </span>
               </div>
               <div className="flex items-baseline gap-2 flex-1 sm:flex-initial min-w-[140px]">
-                <span className="font-bold w-16 sm:text-right">Tanggal </span>
+                <span className="font-bold w-18 sm:text-right">Tanggal :</span>
                 <span className="font-sans font-semibold border-b border-dotted border-slate-400 pb-0.5 flex-1 sm:w-36 text-center">
                   {slipData.tanggal_formatted || slipData.tanggal}
                 </span>
@@ -138,7 +138,10 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
                   </>
                 )}
                 <span className="ml-1.5 font-bold">
-                  jam pelajaran ke : {slipData.jam_ke}
+                  jam pelajaran ke :{" "}
+                  {slipData.jam_ke
+                    ? slipData.jam_ke.replace(/Jam ke-/gi, "").trim()
+                    : "-"}
                 </span>
               </div>
             </div>
@@ -146,7 +149,7 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
             <div className="flex items-start gap-2 pt-1">
               <span className="font-bold w-24 flex-shrink-0">Alasan</span>
               <span className="font-bold">:</span>
-              <div className="font-sans text-slate-800 border-b border-dotted border-slate-400 pb-0.5 flex-1 italic">
+              <div className="font-sans text-slate-800 border-b border-dotted border-slate-400 pb-0.5 flex-1 italic break-words line-clamp-2">
                 {slipData.alasan}
               </div>
             </div>

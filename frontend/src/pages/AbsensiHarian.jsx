@@ -17,7 +17,6 @@ import {
   Navigation,
   AlertTriangle,
   RefreshCw,
-  Sun,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import {
@@ -36,7 +35,6 @@ export default function AbsensiHarian() {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [isLiveVerified, setIsLiveVerified] = useState(false);
   const [eyeState, setEyeState] = useState("UNKNOWN");
-  const [screenFillLight, setScreenFillLight] = useState(true); // Lampu pendaran layar putih otomatis
   const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
   const canvasRef = useRef(null);
   const baselineOpenScoreRef = useRef(null);
@@ -62,7 +60,7 @@ export default function AbsensiHarian() {
     };
   }, []);
 
-  // GPS Geofence State (Radius 15m SMKN 21)
+  // GPS Geofence State (Radius 10m SMKN 21)
   const [geoState, setGeoState] = useState({
     loading: true,
     latitude: null,
@@ -397,20 +395,10 @@ export default function AbsensiHarian() {
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         }}
-        className={`w-full h-full object-cover transition-all duration-300 ${
-          screenFillLight ? "brightness-110 contrast-105" : ""
-        }`}
+        className="w-full h-full object-cover"
       />
 
-      {/* Pendaran Cahaya Layar Putih (Screen Fill Light / Flash Layar Otomatis) */}
-      {screenFillLight && (
-        <div
-          className="pointer-events-none absolute inset-0 border-[20px] sm:border-[36px] md:border-[48px] border-white/95 shadow-[inset_0_0_80px_rgba(255,255,255,0.9),0_0_100px_rgba(255,255,255,0.85)] z-10 animate-in fade-in duration-300"
-          aria-hidden="true"
-        />
-      )}
-
-      {/* 2. Efek Garis Laser Scanner */}
+      {/* 2. Garis Laser Pemindai Animasi */}
       <div className="scanner-line"></div>
 
       {/* 3. Presisi Siluet Kontur Wajah Manusia (Bukan Hanya Kotak) */}
@@ -425,51 +413,22 @@ export default function AbsensiHarian() {
 
       {/* 4. Top Floating Bar */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
-        <div className="flex items-center gap-2">
-          <Link
-            to="/"
-            title="Kembali ke Beranda"
-            aria-label="Kembali ke Beranda"
-            className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 active:scale-95 backdrop-blur-md border border-white/20 transition-all shadow-lg group"
-          >
-            <ArrowLeft
-              className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
-              strokeWidth={2.5}
-            />
-          </Link>
-
-          {/* Tombol Lampu Layar (Screen Fill Light) */}
-          <button
-            type="button"
-            onClick={() => setScreenFillLight((prev) => !prev)}
-            title={
-              screenFillLight
-                ? "Matikan Lampu Layar"
-                : "Nyalakan Lampu Layar (Penerang Wajah Otomatis)"
-            }
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl backdrop-blur-md border text-xs font-semibold transition-all cursor-pointer shadow-lg active:scale-95 ${
-              screenFillLight
-                ? "bg-amber-400 text-slate-950 border-amber-300 shadow-amber-400/25"
-                : "bg-black/60 hover:bg-black/80 text-white border-white/20"
-            }`}
-          >
-            <Sun
-              className={`w-4 h-4 ${
-                screenFillLight
-                  ? "text-slate-950 animate-spin-slow"
-                  : "text-amber-400"
-              }`}
-            />
-            <span className="hidden sm:inline font-bold">
-              {screenFillLight ? "Lampu ON" : "Lampu OFF"}
-            </span>
-          </button>
-        </div>
+        <Link
+          to="/"
+          title="Kembali ke Beranda"
+          aria-label="Kembali ke Beranda"
+          className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95"
+        >
+          <ArrowLeft
+            className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
+            strokeWidth={2.5}
+          />
+        </Link>
 
         {/* GPS Geofence Pill */}
         {geoState.loading ? (
           <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
             <span className="hidden sm:inline">GPS:</span>{" "}
             <span>Cek Radius...</span>
           </div>
@@ -485,7 +444,7 @@ export default function AbsensiHarian() {
           </button>
         ) : geoState.isWithinRadius ? (
           <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-xs font-semibold">
-            <MapPin className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+            <MapPin className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
             <span className="hidden sm:inline">Area SMKN 21:</span>{" "}
             <span>{Math.round(geoState.distanceMeters || 0)}m</span>
           </div>
@@ -499,7 +458,7 @@ export default function AbsensiHarian() {
 
         <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-          <span className="text-blue-300 font-bold text-[11px] sm:text-xs">
+          <span className="font-bold text-[11px] sm:text-xs text-blue-300">
             {currentTime || "00:00:00 WIB"}
           </span>
         </div>
@@ -578,14 +537,14 @@ export default function AbsensiHarian() {
                 className="w-full py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer shadow-md"
               >
                 <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;15m)</span>
+                <span>Simulasi di SMKN 21 (&le;10m)</span>
               </button>
             </div>
           )}
         </div>
       )}
 
-      {/* 7B. Geofence Lock Screen Overlay (Jika di luar radius 15m atau sensor GPS error) */}
+      {/* 7B. Geofence Lock Screen Overlay (Jika di luar radius 10m atau sensor GPS error) */}
       {isGpsBlocked && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-300 overflow-y-auto max-h-screen py-8">
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center mb-4 sm:mb-5">
@@ -598,7 +557,7 @@ export default function AbsensiHarian() {
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-4 leading-relaxed">
             Presensi biometrik wajah hanya dapat dilakukan saat Anda berada di
-            lingkungan sekolah SMKN 21 Jakarta (radius &le; 15 meter).
+            lingkungan sekolah SMKN 21 Jakarta (radius &le; 10 meter).
             {geoState.distanceMeters != null && (
               <span className="block mt-2 font-bold text-rose-300 bg-rose-950/60 border border-rose-800/60 rounded-lg py-1.5 px-3">
                 Jarak Anda saat ini: ~{formatDistance(geoState.distanceMeters)}{" "}
@@ -607,7 +566,7 @@ export default function AbsensiHarian() {
             )}
             {geoState.error && (
               <span className="block mt-2 font-bold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded-lg py-1.5 px-3">
-                Kendala Sensor GPS: {geoState.error}
+                Kendala GPS: {geoState.error}
               </span>
             )}
           </p>
@@ -649,7 +608,7 @@ export default function AbsensiHarian() {
                 className="w-full py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer"
               >
                 <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;15m)</span>
+                <span>Simulasi di SMKN 21 (&le;10m)</span>
               </button>
             </div>
           )}

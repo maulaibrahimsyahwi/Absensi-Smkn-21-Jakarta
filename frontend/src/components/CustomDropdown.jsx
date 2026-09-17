@@ -26,7 +26,21 @@ export default function CustomDropdown({
   size = "md", // "sm", "md", "lg"
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
   const dropdownRef = useRef(null);
+
+  // Auto detect placement (flip upward if space below is tight)
+  useEffect(() => {
+    if (isOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 260 && rect.top > spaceBelow) {
+        setOpenUpward(true);
+      } else {
+        setOpenUpward(false);
+      }
+    }
+  }, [isOpen]);
 
   // Close on outside click
   useEffect(() => {
@@ -122,6 +136,8 @@ export default function CustomDropdown({
     setIsOpen(false);
   };
 
+  const isFullWidth = Boolean(className && className.includes("w-full"));
+
   return (
     <div
       ref={dropdownRef}
@@ -138,8 +154,8 @@ export default function CustomDropdown({
             : "hover:bg-slate-50/80 active:scale-[0.99]"
         } ${isOpen ? "ring-2 ring-blue-500/20 border-blue-500 bg-blue-50/20" : ""} ${buttonClassName}`}
       >
-        <div className="flex items-center gap-2 min-w-0 truncate">
-          {icon && <span className="text-slate-400 flex-shrink-0">{icon}</span>}
+        <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+          {icon && <span className="flex-shrink-0">{icon}</span>}
           <span className="truncate">{displayLabel}</span>
         </div>
         <ChevronDown
@@ -154,7 +170,11 @@ export default function CustomDropdown({
         <div
           className={`absolute ${
             align === "right" ? "right-0" : "left-0"
-          } top-full mt-1.5 min-w-full w-max max-w-[calc(100vw-2rem)] sm:max-w-md bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-900/10 z-50 p-1.5 max-h-72 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
+          } ${openUpward ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${
+            isFullWidth
+              ? "w-full min-w-full max-w-full"
+              : "min-w-full w-max max-w-[calc(100vw-2rem)] sm:max-w-md"
+          } bg-white rounded-2xl border border-slate-200/90 shadow-xl shadow-slate-900/10 z-50 p-1.5 max-h-72 overflow-y-auto overscroll-contain animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
         >
           {normalizedGroups.map((grp, gIdx) => (
             <div
@@ -193,7 +213,7 @@ export default function CustomDropdown({
                             : "text-slate-700 hover:bg-slate-100/80 hover:text-slate-900"
                         }`}
                       >
-                        <div className="flex flex-col truncate">
+                        <div className="flex flex-col min-w-0 flex-1 truncate">
                           <span className="truncate">{item.label}</span>
                           {item.sublabel && (
                             <span className="text-[10px] text-slate-400 font-normal truncate">

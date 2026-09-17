@@ -73,6 +73,7 @@ export default function CustomDatePicker({
   maxDate = null,
   placeholder = "Pilih tanggal...",
   disabled = false,
+  disableWeekends = false,
   className = "",
   align = "left", // "left" | "right"
   size = "md", // "sm" | "md" | "lg"
@@ -217,10 +218,15 @@ export default function CustomDatePicker({
     }
   };
 
-  // Pengecekan disabled berdasarkan minDate / maxDate
+  // Pengecekan disabled berdasarkan minDate / maxDate / disableWeekends
   const isDateDisabled = (ymd) => {
     if (minDate && ymd < minDate) return true;
     if (maxDate && ymd > maxDate) return true;
+    if (disableWeekends) {
+      const [y, m, d] = ymd.split("-").map(Number);
+      const dayOfWeek = new Date(y, m - 1, d).getDay(); // 0 is Sunday, 6 is Saturday
+      if (dayOfWeek === 0 || dayOfWeek === 6) return true;
+    }
     return false;
   };
 
@@ -299,6 +305,11 @@ export default function CustomDatePicker({
           <div className="flex flex-col truncate">
             {value ? (
               <>
+                {size !== "sm" && (
+                  <span className="text-[10px] text-blue-600 font-semibold truncate -mt-0.5">
+                    {formatTanggalIndo(value, true).split(",")[0]}
+                  </span>
+                )}
                 <span
                   className={`font-bold text-slate-900 truncate ${
                     size === "sm" ? "text-xs" : ""
@@ -306,11 +317,6 @@ export default function CustomDatePicker({
                 >
                   {formatTanggalIndo(value, false)}
                 </span>
-                {size !== "sm" && (
-                  <span className="text-[10px] text-blue-600 font-semibold truncate -mt-0.5">
-                    {formatTanggalIndo(value, true).split(",")[0]}
-                  </span>
-                )}
               </>
             ) : (
               <span className="text-slate-400 font-normal">{placeholder}</span>
@@ -434,16 +440,25 @@ export default function CustomDatePicker({
             <>
               {/* Header Nama Hari (Senin s/d Minggu) */}
               <div className="grid grid-cols-7 gap-1 mb-1.5 text-center">
-                {NAMA_HARI_SINGKAT.map((h, i) => (
-                  <div
-                    key={h}
-                    className={`text-[11px] font-bold py-1 ${
-                      i === 6 ? "text-rose-500" : "text-slate-400"
-                    }`}
-                  >
-                    {h}
-                  </div>
-                ))}
+                {NAMA_HARI_SINGKAT.map((h, i) => {
+                  const isWeekend = i === 5 || i === 6;
+                  return (
+                    <div
+                      key={h}
+                      className={`text-[11px] font-bold py-1 ${
+                        isWeekend
+                          ? disableWeekends
+                            ? "text-rose-400 font-bold"
+                            : i === 6
+                              ? "text-rose-500"
+                              : "text-slate-500"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {h}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Grid Tanggal Kalender */}
@@ -459,9 +474,16 @@ export default function CustomDatePicker({
                       type="button"
                       disabled={disabledDay}
                       onClick={() => handleSelectDate(item.ymd)}
+                      title={
+                        disabledDay &&
+                        disableWeekends &&
+                        (index % 7 === 5 || index % 7 === 6)
+                          ? "Sabtu & Minggu libur sekolah"
+                          : ""
+                      }
                       className={`h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all relative cursor-pointer ${
                         disabledDay
-                          ? "text-slate-300 bg-transparent cursor-not-allowed opacity-40 line-through"
+                          ? "text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-35 line-through"
                           : isSelected
                             ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-md shadow-blue-500/25 scale-105 z-10"
                             : isToday
@@ -482,15 +504,23 @@ export default function CustomDatePicker({
                 <div className="flex items-center gap-1.5">
                   <button
                     type="button"
+                    disabled={isDateDisabled(todayYMD)}
                     onClick={() => handleQuickSelect(0)}
-                    className="px-2.5 py-1 rounded-lg font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Hari Ini
                   </button>
                   <button
                     type="button"
+                    disabled={(() => {
+                      const t = new Date();
+                      t.setDate(t.getDate() + 1);
+                      return isDateDisabled(
+                        formatYMD(t.getFullYear(), t.getMonth(), t.getDate()),
+                      );
+                    })()}
                     onClick={() => handleQuickSelect(1)}
-                    className="px-2.5 py-1 rounded-lg font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     Besok
                   </button>

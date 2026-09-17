@@ -8,6 +8,7 @@ import {
   Camera,
   CheckCircle2,
   AlertCircle,
+  Info,
   Users,
   ShieldCheck,
   RefreshCw,
@@ -94,6 +95,15 @@ export default function RegistrasiSiswa() {
   useEffect(() => {
     fetchSiswa();
   }, []);
+
+  // Auto-dismiss floating toast notification setelah 5 detik
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   // Ambil foto untuk slot yang aktif
   const takeSamplePhoto = useCallback(() => {
@@ -550,36 +560,6 @@ export default function RegistrasiSiswa() {
         </button>
       </div>
 
-      {/* Notification banner */}
-      {notification && (
-        <div
-          className={`p-4 rounded-xl border mb-6 flex items-start justify-between gap-3 animate-in fade-in duration-150 ${
-            notification.type === "success"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-              : notification.type === "info"
-                ? "bg-blue-50 border-blue-200 text-blue-900"
-                : "bg-rose-50 border-rose-200 text-rose-900"
-          }`}
-        >
-          <div className="flex items-start gap-3">
-            {notification.type === "success" ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            )}
-            <div className="text-xs sm:text-sm font-medium leading-relaxed">
-              {notification.message}
-            </div>
-          </div>
-          <button
-            onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-slate-600 p-1"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Main Grid: Form & Multi-Sample Capture Left, Student Management Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
         {/* Kolom Kiri: Form & Kamera Perekam Multi-Sampel */}
@@ -914,7 +894,6 @@ export default function RegistrasiSiswa() {
                 }
                 className="py-2 px-3 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap flex-shrink-0"
               >
-                <GraduationCap className="w-4 h-4 text-indigo-600" />
                 <span className="hidden sm:inline">Luluskan Kelas XII</span>
                 <span className="sm:hidden">Luluskan XII</span>
                 <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
@@ -1304,6 +1283,57 @@ export default function RegistrasiSiswa() {
         handleUpdateSiswa={handleUpdateSiswa}
         groups={KELAS_GROUPS_DROPDOWN}
       />
+
+      {/* Floating Bottom-Right Toast Notification */}
+      {notification && (
+        <div className="fixed bottom-5 right-4 sm:right-6 z-50 max-w-sm sm:max-w-md w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-5 fade-in duration-200 pointer-events-auto">
+          <div
+            className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-md flex items-start gap-3 relative ${
+              notification.type === "success"
+                ? "bg-slate-900/95 border-emerald-500/40 text-white shadow-emerald-950/30"
+                : notification.type === "info"
+                  ? "bg-slate-900/95 border-blue-500/40 text-white shadow-blue-950/30"
+                  : "bg-slate-900/95 border-rose-500/40 text-white shadow-rose-950/30"
+            }`}
+          >
+            {notification.type === "success" ? (
+              <div className="p-1 rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0 mt-0.5">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+            ) : notification.type === "info" ? (
+              <div className="p-1 rounded-xl bg-blue-500/20 text-blue-400 flex-shrink-0 mt-0.5">
+                <Info className="w-5 h-5" />
+              </div>
+            ) : (
+              <div className="p-1 rounded-xl bg-rose-500/20 text-rose-400 flex-shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            )}
+
+            <div className="flex-1 pr-6 min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-400">
+                {notification.type === "success"
+                  ? "Berhasil"
+                  : notification.type === "info"
+                    ? "Informasi"
+                    : "Pemberitahuan"}
+              </p>
+              <p className="text-xs sm:text-sm font-medium leading-relaxed text-slate-100 break-words">
+                {notification.message}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              title="Tutup Notifikasi"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
