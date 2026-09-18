@@ -4,18 +4,63 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
-class Siswa(db.Model):
+class User(db.Model):
+    """
+    Model pengguna untuk Staf Admin dan Guru Piket SMKN 21 Jakarta.
+    """
+    __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    nis = db.Column(db.String(20), unique=True, nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    password = db.Column(db.String(100), nullable=False)
+    nama = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="piket")  # "admin" atau "piket"
+    tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG signature
+    foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "nama": self.nama,
+            "role": self.role,
+            "tanda_tangan": self.tanda_tangan,
+            "foto_profil": self.foto_profil,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None
+        }
+
+
+class Siswa(db.Model):
+    """
+    Model data siswa SMKN 21 Jakarta.
+    """
+    __tablename__ = 'siswa'
+    id = db.Column(db.Integer, primary_key=True)
+    nis = db.Column(db.String(20), unique=True, nullable=False, index=True)
     nama = db.Column(db.String(100), nullable=False)
     kelas = db.Column(db.String(50), nullable=False)
-    status = db.Column(db.String(20), default="Aktif", nullable=False, index=True) # "Aktif" atau "Alumni"
-    face_encoding = db.Column(db.Text, nullable=True) # Stored as JSON string (single encoding or list of encodings)
+    status = db.Column(db.String(20), default="Aktif", nullable=False, index=True)  # "Aktif" atau "Alumni"
+    tanggal_lulus = db.Column(db.DateTime, nullable=True)  # Waktu siswa diluluskan menjadi Alumni
+    password = db.Column(db.String(100), nullable=True)  # Password login siswa (default: NIS)
+    tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG digital signature siswa
+    foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil siswa
+    face_encoding = db.Column(db.Text, nullable=True)  # Stored as JSON string (single encoding or list of encodings)
     
     def get_encoding(self):
         if self.face_encoding:
             return json.loads(self.face_encoding)
         return None
+
+    def is_alumni_expired(self):
+        """
+        Mengecek apakah masa tenggang akun alumni telah berakhir (> 1 tahun / 365 hari sejak kelulusan).
+        """
+        if getattr(self, 'status', 'Aktif') != 'Alumni':
+            return False
+        if not self.tanggal_lulus:
+            return False
+        delta = datetime.now() - self.tanggal_lulus
+        return delta.days >= 365
 
     def to_dict(self):
         sample_count = 0
@@ -35,15 +80,24 @@ class Siswa(db.Model):
             "nama": self.nama,
             "kelas": self.kelas,
             "status": self.status or "Aktif",
+            "tanggal_lulus": self.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if self.tanggal_lulus else None,
+            "is_alumni_expired": self.is_alumni_expired(),
+            "tanda_tangan": self.tanda_tangan,
+            "foto_profil": self.foto_profil,
             "terdaftar": bool(self.face_encoding),
             "sample_count": sample_count
         }
 
+
 class AbsensiHarian(db.Model):
+    """
+    Rekaman riwayat presensi harian siswa.
+    """
+    __tablename__ = 'absensi_harian'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
     waktu = db.Column(db.DateTime, default=datetime.now, index=True)
-    status = db.Column(db.String(20), nullable=False) # "Tepat Waktu" atau "Terlambat"
+    status = db.Column(db.String(20), nullable=False)  # "Tepat Waktu", "Terlambat", "Sakit", "Izin"
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_harian', lazy=True))
 
@@ -57,11 +111,16 @@ class AbsensiHarian(db.Model):
             "status": self.status
         }
 
+
 class AbsensiPerpustakaan(db.Model):
+    """
+    Rekaman kunjungan perpustakaan SMKN 21.
+    """
+    __tablename__ = 'absensi_perpustakaan'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
     waktu = db.Column(db.DateTime, default=datetime.now, index=True)
-    keperluan = db.Column(db.String(100), nullable=False) # "Meminjam Buku", "Mengembalikan Buku", "Belajar", dll
+    keperluan = db.Column(db.String(100), nullable=False)  # "Meminjam Buku", "Mengembalikan Buku", dll
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_perpus', lazy=True))
 
@@ -75,17 +134,22 @@ class AbsensiPerpustakaan(db.Model):
             "keperluan": self.keperluan
         }
 
+
 class PengajuanIzin(db.Model):
+    """
+    Rekaman pengajuan izin / sakit mandiri oleh siswa dengan bukti surat dan GPS.
+    """
     __tablename__ = 'pengajuan_izin'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
-    jenis = db.Column(db.String(20), nullable=False) # "Sakit" atau "Izin"
+    jenis = db.Column(db.String(20), nullable=False)  # "Sakit" atau "Izin"
     tanggal_mulai = db.Column(db.Date, nullable=False)
     tanggal_selesai = db.Column(db.Date, nullable=False)
     alasan = db.Column(db.Text, nullable=False)
-    surat_bukti = db.Column(db.Text, nullable=True) # Data URI base64 foto surat
-    status_pengajuan = db.Column(db.String(20), default="Menunggu", index=True) # "Menunggu", "Disetujui", "Ditolak"
+    surat_bukti = db.Column(db.Text, nullable=True)  # Data URI base64 foto surat
+    status_pengajuan = db.Column(db.String(20), default="Menunggu", index=True)  # "Menunggu", "Disetujui", "Ditolak"
     catatan_guru = db.Column(db.Text, nullable=True)
+    tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     lokasi_teks = db.Column(db.String(255), nullable=True)
@@ -109,6 +173,7 @@ class PengajuanIzin(db.Model):
             "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d"),
             "alasan": self.alasan,
             "surat_bukti": self.surat_bukti,
+            "tanda_tangan_siswa": self.tanda_tangan_siswa,
             "status_pengajuan": self.status_pengajuan,
             "catatan_guru": self.catatan_guru,
             "latitude": self.latitude,
@@ -118,16 +183,22 @@ class PengajuanIzin(db.Model):
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
 
+
 class IzinPiket(db.Model):
+    """
+    Rekaman Surat Izin Masuk / Meninggalkan Kelas yang diterbitkan di Meja Guru Piket (E-Slip).
+    """
     __tablename__ = 'izin_piket'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
-    hari = db.Column(db.String(20), nullable=False) # "Senin", "Selasa", dll
+    hari = db.Column(db.String(20), nullable=False)  # "Senin", "Selasa", dll
     tanggal = db.Column(db.Date, nullable=False, index=True)
-    tipe = db.Column(db.String(50), nullable=False) # "Izin Masuk" atau "Izin Meninggalkan Kelas"
-    jam_ke = db.Column(db.String(50), nullable=False) # "3", "Jam ke-3", dll
+    tipe = db.Column(db.String(50), nullable=False)  # "Izin Masuk" atau "Izin Meninggalkan Kelas"
+    jam_ke = db.Column(db.String(50), nullable=False)  # "3", "Jam ke-3", dll
     alasan = db.Column(db.Text, nullable=False)
     petugas_piket = db.Column(db.String(100), nullable=False)
+    tanda_tangan_petugas = db.Column(db.Text, nullable=True)  # Base64 digital signature guru piket
+    tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature siswa
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('izin_piket', lazy=True))
@@ -146,5 +217,47 @@ class IzinPiket(db.Model):
             "jam_ke": self.jam_ke,
             "alasan": self.alasan,
             "petugas_piket": self.petugas_piket,
+            "tanda_tangan_petugas": self.tanda_tangan_petugas,
+            "tanda_tangan_siswa": self.tanda_tangan_siswa,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
+
+
+class PelanggaranSiswa(db.Model):
+    """
+    Rekaman Buku Catatan Pelanggaran Siswa/i SMKN 21 Jakarta (Diisi oleh siswa yang bersangkutan).
+    Mencatat pengakuan pelanggaran disiplin beserta bobot poin dan e-signature siswa.
+    """
+    __tablename__ = 'pelanggaran_siswa'
+    id = db.Column(db.Integer, primary_key=True)
+    siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=True, index=True)
+    nis = db.Column(db.String(30), nullable=False, index=True)
+    nama_siswa = db.Column(db.String(150), nullable=False, index=True)
+    kelas = db.Column(db.String(50), nullable=False, index=True)
+    tanggal_waktu = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    jenis_pelanggaran = db.Column(db.String(255), nullable=False, index=True)
+    poin = db.Column(db.Integer, nullable=False, default=5)
+    nama_penanggung_jawab = db.Column(db.String(150), nullable=False)
+    tanda_tangan_siswa = db.Column(db.Text, nullable=False)  # Base64 digital signature kanvas
+    keterangan = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+
+    siswa = db.relationship('Siswa', backref=db.backref('catatan_pelanggaran', lazy=True))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "siswa_id": self.siswa_id,
+            "nis": self.nis,
+            "nama_siswa": self.nama_siswa,
+            "kelas": self.kelas,
+            "tanggal_waktu": self.tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S"),
+            "tanggal_waktu_formatted": self.tanggal_waktu.strftime("%d-%b-%Y %I:%M %p"),
+            "jenis_pelanggaran": self.jenis_pelanggaran,
+            "poin": self.poin,
+            "nama_penanggung_jawab": self.nama_penanggung_jawab,
+            "tanda_tangan_siswa": self.tanda_tangan_siswa,
+            "keterangan": self.keterangan,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+

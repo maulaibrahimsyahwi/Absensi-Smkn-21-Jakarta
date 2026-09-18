@@ -25,6 +25,8 @@ import {
   CheckSquare,
   Square,
   UserCheck,
+  KeyRound,
+  PenTool,
 } from "lucide-react";
 import CustomDropdown from "../components/CustomDropdown";
 import EditSiswaModal from "../components/registrasi/EditSiswaModal";
@@ -75,10 +77,14 @@ export default function RegistrasiSiswa() {
   const [currentSlot, setCurrentSlot] = useState(0); // 0, 1, or 2
   const [notification, setNotification] = useState(null);
 
-  // Edit / Delete State
+  // Edit / Delete / Reset Password State
   const [editingSiswa, setEditingSiswa] = useState(null);
   const [deletingSiswa, setDeletingSiswa] = useState(null);
   const [reRecordingSiswa, setReRecordingSiswa] = useState(null);
+  const [resettingPasswordSiswa, setResettingPasswordSiswa] = useState(null);
+  const [resettingFaceSiswa, setResettingFaceSiswa] = useState(null);
+  const [resettingSignatureSiswa, setResettingSignatureSiswa] = useState(null);
+  const [resettingLoading, setResettingLoading] = useState(false);
 
   const fetchSiswa = async (isManual = false) => {
     setLoadingList(true);
@@ -220,6 +226,7 @@ export default function RegistrasiSiswa() {
       const faceRes = await api.post("/register_face", {
         siswa_id: targetId,
         images: samples,
+        admin_override: true,
       });
 
       setNotification({
@@ -482,6 +489,85 @@ export default function RegistrasiSiswa() {
     }
   };
 
+  const handleResetPasswordConfirm = async () => {
+    if (!resettingPasswordSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(
+        `/siswa/${resettingPasswordSiswa.id}/reset_password`,
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Kata sandi ${resettingPasswordSiswa.nama} berhasil direset ke default (NIS: ${resettingPasswordSiswa.nis})`,
+      });
+      setResettingPasswordSiswa(null);
+    } catch (err) {
+      console.error("Gagal reset kata sandi siswa:", err);
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal mereset kata sandi siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  const handleResetFaceConfirm = async () => {
+    if (!resettingFaceSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(`/siswa/${resettingFaceSiswa.id}/reset_face`);
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Biometrik wajah ${resettingFaceSiswa.nama} berhasil direset. Siswa dapat mendaftarkan ulang wajahnya.`,
+      });
+      setResettingFaceSiswa(null);
+      fetchSiswa();
+    } catch (err) {
+      console.error("Gagal reset biometrik wajah siswa:", err);
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal mereset biometrik wajah siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  const handleResetSignatureConfirm = async () => {
+    if (!resettingSignatureSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(
+        `/siswa/${resettingSignatureSiswa.id}/reset_signature`,
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Tanda tangan digital ${resettingSignatureSiswa.nama} berhasil direset.`,
+      });
+      setResettingSignatureSiswa(null);
+      fetchSiswa();
+    } catch (err) {
+      console.error("Gagal reset tanda tangan digital siswa:", err);
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Gagal mereset tanda tangan digital siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
   const totalAktif = siswaList.filter(
     (s) => (s.status || "Aktif") === "Aktif",
   ).length;
@@ -540,7 +626,8 @@ export default function RegistrasiSiswa() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3">
           <Link
-            to="/"
+            to="/portal-admin"
+            title="Kembali ke Beranda Admin"
             className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -1042,6 +1129,40 @@ export default function RegistrasiSiswa() {
 
                       <button
                         type="button"
+                        onClick={() => setResettingPasswordSiswa(s)}
+                        className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Reset Password ke Default (NIS)"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Reset Sandi</span>
+                      </button>
+
+                      {s.face_encoding && (
+                        <button
+                          type="button"
+                          onClick={() => setResettingFaceSiswa(s)}
+                          className="py-1.5 px-2 rounded-lg text-xs font-semibold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Reset Biometrik Wajah"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Reset Wajah</span>
+                        </button>
+                      )}
+
+                      {s.tanda_tangan && (
+                        <button
+                          type="button"
+                          onClick={() => setResettingSignatureSiswa(s)}
+                          className="py-1.5 px-2 rounded-lg text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Reset Tanda Tangan"
+                        >
+                          <PenTool className="w-3.5 h-3.5" />
+                          <span>Reset TTD</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
                         onClick={() => setDeletingSiswa(s)}
                         className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer ml-auto"
                         title="Hapus Permanen"
@@ -1190,6 +1311,37 @@ export default function RegistrasiSiswa() {
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
 
+                            {/* Reset Password ke Default (NIS) */}
+                            <button
+                              title={`Reset Kata Sandi ${s.nama} ke Default (NIS: ${s.nis})`}
+                              onClick={() => setResettingPasswordSiswa(s)}
+                              className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors border border-amber-200 cursor-pointer"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Reset Wajah */}
+                            {s.face_encoding && (
+                              <button
+                                title={`Reset Biometrik Wajah ${s.nama}`}
+                                onClick={() => setResettingFaceSiswa(s)}
+                                className="p-1.5 rounded-lg text-cyan-700 hover:bg-cyan-50 transition-colors border border-cyan-200 cursor-pointer"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Reset TTD */}
+                            {s.tanda_tangan && (
+                              <button
+                                title={`Reset Tanda Tangan Digital ${s.nama}`}
+                                onClick={() => setResettingSignatureSiswa(s)}
+                                className="p-1.5 rounded-lg text-purple-700 hover:bg-purple-50 transition-colors border border-purple-200 cursor-pointer"
+                              >
+                                <PenTool className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
                             {/* Hapus Siswa Permanen */}
                             <button
                               title="Hapus Permanen dari Database"
@@ -1292,6 +1444,160 @@ export default function RegistrasiSiswa() {
         handleUpdateSiswa={handleUpdateSiswa}
         groups={KELAS_GROUPS_DROPDOWN}
       />
+
+      {/* Modal Konfirmasi Reset Password Siswa ke Default (NIS) */}
+      {resettingPasswordSiswa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3.5 shadow-xs">
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Reset Kata Sandi Siswa?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Kata sandi untuk <strong>{resettingPasswordSiswa.nama}</strong>{" "}
+                ({resettingPasswordSiswa.kelas}) akan dikembalikan ke default
+                awal:
+              </p>
+              <div className="mt-3 py-2 px-3 bg-amber-50 border border-amber-200 rounded-xl inline-block">
+                <span className="text-xs font-mono font-bold text-amber-800">
+                  Password Default: {resettingPasswordSiswa.nis}
+                </span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResettingPasswordSiswa(null)}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleResetPasswordConfirm}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {resettingLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mereset...</span>
+                  </>
+                ) : (
+                  <span>Ya, Reset Password</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Reset Biometrik Wajah Siswa */}
+      {resettingFaceSiswa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-cyan-100 text-cyan-700 flex items-center justify-center mx-auto mb-3.5 shadow-xs">
+                <Camera className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Reset Biometrik Wajah?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Sampel wajah untuk <strong>{resettingFaceSiswa.nama}</strong> (
+                {resettingFaceSiswa.kelas}) akan dihapus dari sistem biometrik.
+              </p>
+              <div className="mt-3 p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-left">
+                <p className="text-[11px] text-cyan-800 font-medium leading-relaxed">
+                  Siswa ini akan dapat mendaftarkan ulang 3 sampel wajah barunya
+                  melalui Portal Siswa atau direkam ulang oleh Admin.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResettingFaceSiswa(null)}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleResetFaceConfirm}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {resettingLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mereset Wajah...</span>
+                  </>
+                ) : (
+                  <span>Ya, Reset Wajah</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Reset Tanda Tangan Siswa */}
+      {resettingSignatureSiswa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto mb-3.5 shadow-xs">
+                <PenTool className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Reset Tanda Tangan Digital?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Tanda tangan digital untuk{" "}
+                <strong>{resettingSignatureSiswa.nama}</strong> (
+                {resettingSignatureSiswa.kelas}) akan dihapus.
+              </p>
+              <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-xl text-left">
+                <p className="text-[11px] text-purple-800 font-medium leading-relaxed">
+                  Siswa ini akan diminta membuat tanda tangan digital baru saat
+                  membuka portal atau mengajukan surat izin.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResettingSignatureSiswa(null)}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleResetSignatureConfirm}
+                disabled={resettingLoading}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {resettingLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mereset TTD...</span>
+                  </>
+                ) : (
+                  <span>Ya, Reset TTD</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating Bottom-Right Toast Notification */}
       {notification && (

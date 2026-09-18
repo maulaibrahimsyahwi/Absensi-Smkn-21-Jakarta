@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { Link } from "react-router-dom";
 import api from "../services/api";
 import {
   ClipboardCheck,
@@ -15,19 +16,24 @@ import {
   X,
   FileText,
   ShieldCheck,
+  ShieldAlert,
   LogIn,
   LogOut,
   RefreshCw,
   Sparkles,
   Filter,
   Info,
+  PenTool,
+  ArrowLeft,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import CustomDatePicker, {
   formatTanggalIndo,
 } from "../components/CustomDatePicker";
 import CustomDropdown from "../components/CustomDropdown";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import DeleteIzinModal from "../components/piket/DeleteIzinModal";
+import SignaturePadModal from "../components/SignaturePadModal";
 
 const NAMA_HARI_MAP = [
   "Minggu",
@@ -98,17 +104,34 @@ const computeJamKeString = (mulai, selesai) => {
   return `Jam ke-${m}`;
 };
 
-const getInitialWeekday = () => {
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getInitialValidWeekday = () => {
   const d = new Date();
   const day = d.getDay(); // 0: Minggu, 6: Sabtu
   if (day === 6)
-    d.setDate(d.getDate() - 1); // Mundur ke Jumat
+    d.setDate(d.getDate() + 2); // Maju ke Senin berikutnya
   else if (day === 0) d.setDate(d.getDate() + 1); // Maju ke Senin
-  return d.toISOString().split("T")[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const dayStr = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${dayStr}`;
 };
 
 export default function GuruPiket() {
-  const todayStr = useMemo(() => getInitialWeekday(), []);
+  const { user, isPiket, isAdmin, saveSignature } = useAuth();
+  const backTarget = isPiket
+    ? "/portal-piket"
+    : isAdmin
+      ? "/portal-admin"
+      : "/";
+  const todayStr = useMemo(() => getTodayStr(), []);
 
   // State Daftar Siswa Aktif untuk Autocomplete
   const [siswaList, setSiswaList] = useState([]);
@@ -121,14 +144,39 @@ export default function GuruPiket() {
 
   // State Formulir Penerbitan Surat
   const [tipe, setTipe] = useState("Izin Masuk"); // "Izin Masuk" atau "Izin Meninggalkan Kelas"
-  const [tanggal, setTanggal] = useState(getInitialWeekday);
+  const [tanggal, setTanggal] = useState(getInitialValidWeekday);
   const [jamMulai, setJamMulai] = useState("1");
   const [jamSelesai, setJamSelesai] = useState("1");
   const [jamKe, setJamKe] = useState("Jam ke-1");
   const [alasan, setAlasan] = useState("");
-  const [petugasPiket, setPetugasPiket] = useState(() => {
-    return localStorage.getItem("smkn21_petugas_piket") || "";
+  const [petugasPiket, setPetugasPiket] = useState(
+    () => user?.nama || "Guru Piket SMKN 21",
+  );
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [localSignature, setLocalSignature] = useState(() => {
+    return localStorage.getItem("smkn21_piket_signature") || "";
   });
+
+  // Selalu sinkronkan nama petugas piket dengan nama akun yang sedang aktif
+  useEffect(() => {
+    if (user?.nama) {
+      setPetugasPiket(user.nama);
+    }
+  }, [user]);
+
+  const currentSignature = user?.tanda_tangan || localSignature;
+
+  const handleSaveSignature = async (sigBase64) => {
+    setLocalSignature(sigBase64);
+    localStorage.setItem("smkn21_piket_signature", sigBase64);
+    if (user) {
+      await saveSignature(sigBase64);
+    }
+    setNotification({
+      type: "success",
+      message: "Tanda tangan digital Guru Piket berhasil disimpan!",
+    });
+  };
 
   // Opsi Jam Selesai dinamis berdasarkan Jam Mulai
   const jamSelesaiOptions = useMemo(() => {
@@ -327,6 +375,19 @@ export default function GuruPiket() {
       return;
     }
 
+    if (!currentSignature) {
+      setFormError(
+        "Guru Piket wajib menyertakan tanda tangan digital sebelum menerbitkan surat izin.",
+      );
+      setShowSignatureModal(true);
+      setNotification({
+        type: "error",
+        message:
+          "Guru Piket wajib membubuhkan tanda tangan digital sebelum menerbitkan surat izin.",
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -336,7 +397,13 @@ export default function GuruPiket() {
         tipe: tipe,
         jam_ke: jamKe,
         alasan: alasan.trim(),
-        petugas_piket: petugasPiket.trim(),
+        petugas_piket: (
+          user?.nama ||
+          petugasPiket ||
+          "Guru Piket SMKN 21"
+        ).trim(),
+        tanda_tangan_petugas: currentSignature,
+        tanda_tangan_siswa: selectedSiswa.tanda_tangan || null,
       };
 
       const res = await api.post("/piket/izin", payload);
@@ -403,9 +470,16 @@ export default function GuruPiket() {
       {/* ================= HEADER SECTION ================= */}
       <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 flex-shrink-0">
-            <ClipboardCheck className="w-6 h-6" />
-          </div>
+          <Link
+            to={backTarget}
+            title={
+              isAdmin ? "Kembali ke Beranda Admin" : "Kembali ke Beranda Piket"
+            }
+            className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 border border-slate-200 transition-colors shadow-2xs flex-shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+
           <div>
             <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
               Surat Ijin Masuk / Meninggalkan Kelas
@@ -416,21 +490,13 @@ export default function GuruPiket() {
           </div>
         </div>
 
-        {/* Input Nama Petugas Piket (Sticky / Quick Setup) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200/80 p-3 rounded-xl w-full sm:w-auto sm:min-w-[260px]">
-          <div className="flex items-center gap-2 text-slate-600">
-            <span className="text-xs font-bold whitespace-nowrap">
-              Petugas Piket
-            </span>
-          </div>
-          <input
-            type="text"
-            value={petugasPiket}
-            onChange={(e) => handlePetugasChange(e.target.value)}
-            placeholder="Ketik Nama Guru Piket"
-            className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 flex-1"
-          />
-        </div>
+        <Link
+          to={backTarget}
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold border border-slate-200/80 transition-all shadow-2xs self-start md:self-center"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Kembali ke Beranda</span>
+        </Link>
       </div>
 
       {/* ================= MAIN 2-COLUMN LAYOUT ================= */}
@@ -455,6 +521,44 @@ export default function GuruPiket() {
                 <span>{formError}</span>
               </div>
             )}
+
+            {!currentSignature && (
+              <div className="mb-4 bg-amber-500/10 border border-amber-500/30 text-slate-800 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs animate-in fade-in shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-700 flex-shrink-0">
+                    <PenTool className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 leading-tight">
+                      Tanda Tangan Guru Piket Diperlukan
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Wajib membubuhkan tanda tangan digital sebelum menerbitkan
+                      surat izin.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowSignatureModal(true)}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer shadow-xs transition-all"
+                >
+                  + Buat TTD
+                </button>
+              </div>
+            )}
+
+            {/* Informasi Petugas Piket yang Sedang Login */}
+            <div className="mb-4 bg-slate-50 border border-slate-200/80 p-3 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <p className="text-[11px] text-slate-500 font-medium leading-tight">
+                  Nama Petugas Piket
+                </p>
+                <p className="font-bold text-slate-800 text-xs truncate">
+                  {user?.nama || "Guru Piket SMKN 21"}
+                </p>
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* STEP 1: CARI & PILIH SISWA */}
@@ -543,12 +647,9 @@ export default function GuruPiket() {
                                   {s.nama}
                                 </p>
                                 <p className="text-[10px] text-slate-400">
-                                  NIS: {s.nis} • {s.kelas}
+                                  NIS {s.nis} • {s.kelas}
                                 </p>
                               </div>
-                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-600 group-hover:bg-blue-100 group-hover:text-blue-700">
-                                Pilih
-                              </span>
                             </button>
                           ))
                         )}
@@ -568,7 +669,7 @@ export default function GuruPiket() {
                   <button
                     type="button"
                     onClick={() => setTipe("Izin Masuk")}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border text-left transition-colors duration-150 cursor-pointer flex flex-col justify-between ${
                       tipe === "Izin Masuk"
                         ? "border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20"
                         : "border-slate-200 hover:border-slate-300 bg-white"
@@ -599,7 +700,7 @@ export default function GuruPiket() {
                   <button
                     type="button"
                     onClick={() => setTipe("Izin Meninggalkan Kelas")}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    className={`p-3 rounded-xl border text-left transition-colors duration-150 cursor-pointer flex flex-col justify-between ${
                       tipe === "Izin Meninggalkan Kelas"
                         ? "border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20"
                         : "border-slate-200 hover:border-slate-300 bg-white"
@@ -634,14 +735,12 @@ export default function GuruPiket() {
                   <label className="block text-xs font-bold text-slate-700">
                     3. Tanggal Surat <span className="text-rose-500">*</span>
                   </label>
-                  <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
-                    Hari {computedHari}
-                  </span>
                 </div>
                 <CustomDatePicker
                   className="w-full"
                   value={tanggal}
                   onChange={(val) => setTanggal(val)}
+                  minDate={todayStr}
                   disableWeekends={true}
                 />
               </div>
@@ -742,7 +841,11 @@ export default function GuruPiket() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] ${
+                    !currentSignature
+                      ? "bg-slate-800 hover:bg-slate-900 shadow-slate-900/20"
+                      : "bg-blue-600 hover:bg-blue-700 shadow-blue-600/20"
+                  }`}
                 >
                   {submitting ? (
                     <>
@@ -756,6 +859,15 @@ export default function GuruPiket() {
                     </>
                   )}
                 </button>
+                {!currentSignature && (
+                  <p className="text-[11px] text-amber-600 font-medium text-center mt-1.5 flex items-center justify-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>
+                      Wajib bubuhkan tanda tangan digital sebelum menerbitkan
+                      surat
+                    </span>
+                  </p>
+                )}
               </div>
             </form>
           </div>
@@ -804,7 +916,7 @@ export default function GuruPiket() {
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("today")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
                     filterTanggalMode === "today"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -815,7 +927,7 @@ export default function GuruPiket() {
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("all")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
                     filterTanggalMode === "all"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -826,7 +938,7 @@ export default function GuruPiket() {
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("custom")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
                     filterTanggalMode === "custom"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -970,6 +1082,16 @@ export default function GuruPiket() {
         onClose={() => setDeletingIzin(null)}
         onConfirm={confirmDeleteIzin}
         loading={deletingLoading}
+      />
+
+      {/* ================= MODAL TANDA TANGAN DIGITAL GURU PIKET ================= */}
+      <SignaturePadModal
+        isOpen={showSignatureModal}
+        onClose={() => setShowSignatureModal(false)}
+        onSave={handleSaveSignature}
+        initialSignature={currentSignature}
+        title="Tanda Tangan Digital Guru Piket"
+        signerName={petugasPiket || "Guru Piket"}
       />
 
       {/* ================= FLOATING BOTTOM-RIGHT TOAST NOTIFICATION ================= */}

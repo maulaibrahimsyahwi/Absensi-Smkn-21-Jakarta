@@ -97,7 +97,7 @@ export default function VerifikasiIzinTab({
                 {/* Details Box */}
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Jenis:</span>
+                    <span className="text-slate-500 font-medium">Jenis</span>
                     <span
                       className={`font-bold px-2 py-0.2 rounded-md ${
                         item.jenis === "Sakit"
@@ -116,7 +116,7 @@ export default function VerifikasiIzinTab({
                   </div>
                   <div className="pt-1 border-t border-slate-200/40">
                     <span className="text-slate-500 font-medium block mb-0.5">
-                      Alasan:
+                      Alasan
                     </span>
                     <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs">
                       "{item.alasan}"
@@ -125,7 +125,7 @@ export default function VerifikasiIzinTab({
                   {item.catatan_guru && (
                     <div className="pt-1 border-t border-slate-200/40 text-slate-600 text-xs">
                       <span className="font-bold text-slate-700">
-                        Catatan Guru:
+                        Catatan Guru
                       </span>{" "}
                       {item.catatan_guru}
                     </div>
@@ -134,7 +134,7 @@ export default function VerifikasiIzinTab({
                     <div className="pt-1.5 border-t border-slate-200/40 flex items-center justify-between">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Lokasi GPS:</span>
+                        <span>Lokasi </span>
                       </span>
                       <a
                         href={
@@ -145,7 +145,8 @@ export default function VerifikasiIzinTab({
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200/70 transition-colors"
                       >
-                        <span>📍 Buka di Google Maps</span>
+                        <MapPin className="w-3 h-3 text-blue-600" />
+                        <span> Maps</span>
                       </a>
                     </div>
                   )}
@@ -160,7 +161,7 @@ export default function VerifikasiIzinTab({
                       className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5" />
-                      <span>Lihat Surat Bukti</span>
+                      <span>Lihat Bukti</span>
                     </button>
                   ) : (
                     <span className="text-[11px] text-slate-400 italic">
@@ -179,9 +180,8 @@ export default function VerifikasiIzinTab({
                         {verifyingId === item.id ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
-                          <Check className="w-3.5 h-3.5" />
+                          <span>Setujui</span>
                         )}
-                        <span>Setujui</span>
                       </button>
                       <button
                         type="button"
@@ -189,7 +189,6 @@ export default function VerifikasiIzinTab({
                         onClick={() => onOpenRejectModal(item)}
                         className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                       >
-                        <X className="w-3.5 h-3.5" />
                         <span>Tolak</span>
                       </button>
                     </div>
@@ -285,7 +284,7 @@ export default function VerifikasiIzinTab({
                       {item.catatan_guru && (
                         <div className="text-[11px] text-slate-600 mt-1.5 flex items-start gap-1 bg-amber-50/70 border border-amber-200/60 p-1.5 rounded-lg">
                           <span className="font-bold text-amber-900 flex-shrink-0">
-                            Catatan:
+                            Catatan
                           </span>
                           <span className="break-words">
                             {item.catatan_guru}

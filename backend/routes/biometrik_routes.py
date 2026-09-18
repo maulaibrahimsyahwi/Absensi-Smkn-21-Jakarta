@@ -11,6 +11,7 @@ biometrik_bp = Blueprint('biometrik', __name__)
 def register_face():
     data = request.json or {}
     siswa_id = data.get('siswa_id')
+    admin_override = data.get('admin_override', False)
     
     # Mendukung array beberapa foto sampel (images) atau single (image)
     images = data.get('images', [])
@@ -20,6 +21,13 @@ def register_face():
     siswa = Siswa.query.get(siswa_id)
     if not siswa:
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
+
+    # Proteksi Anti-Penyalahgunaan: Jika wajah sudah pernah terdaftar, tolak overwrite kecuali ada admin_override
+    if siswa.face_encoding and not admin_override:
+        return jsonify({
+            "success": False,
+            "message": "Data wajah Anda sudah terdaftar dan terkunci demi keamanan presensi sekolah. Untuk merekam ulang sampel wajah, silakan hubungi Admin Sekolah untuk melakukan reset biometrik."
+        }), 403
         
     try:
         encodings = []
@@ -44,6 +52,27 @@ def register_face():
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@biometrik_bp.route('/api/siswa/<int:id>/reset_face', methods=['POST'])
+def reset_siswa_face(id):
+    """
+    Fitur khusus Admin: Mereset data biometrik wajah siswa agar siswa dapat mendaftarkan ulang sampel wajahnya.
+    """
+    try:
+        siswa = Siswa.query.get(id)
+        if not siswa:
+            return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+        
+        siswa.face_encoding = None
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "message": f"Biometrik wajah {siswa.nama} ({siswa.kelas}) berhasil direset. Siswa kini dapat mendaftarkan ulang wajahnya."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal mereset biometrik wajah: {str(e)}"}), 500
 
 
 # ================= DETEKSI KEHADIRAN ORANG & LIVENESS KEDIPAN =================

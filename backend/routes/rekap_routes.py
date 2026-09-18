@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from sqlalchemy import extract
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa
 
 rekap_bp = Blueprint('rekap', __name__)
 
@@ -171,4 +171,64 @@ def get_available_years():
         return jsonify(sorted_years)
     except Exception as e:
         return jsonify([datetime.now().year - i for i in range(5)])
+
+
+@rekap_bp.route('/api/rekap/admin_summary', methods=['GET'])
+def get_admin_summary():
+    """
+    Mengambil statistik komprehensif seluruh sekolah untuk Beranda Administrator.
+    """
+    today = date.today()
+    try:
+        # 1. Data Siswa
+        total_siswa = Siswa.query.count()
+        siswa_aktif = Siswa.query.filter((Siswa.status == 'Aktif') | (Siswa.status == None)).count()
+        siswa_alumni = Siswa.query.filter(Siswa.status == 'Alumni').count()
+        siswa_biometrik = Siswa.query.filter(Siswa.face_encoding.isnot(None), Siswa.face_encoding != '').count()
+
+        # 2. Kehadiran Hari Ini
+        presensi_today = AbsensiHarian.query.filter(db.func.date(AbsensiHarian.waktu) == today).all()
+        total_hadir_today = len(presensi_today)
+        tepat_waktu = sum(1 for p in presensi_today if p.status == 'Tepat Waktu')
+        terlambat = sum(1 for p in presensi_today if p.status == 'Terlambat')
+        sakit = sum(1 for p in presensi_today if p.status == 'Sakit')
+        izin = sum(1 for p in presensi_today if p.status == 'Izin')
+
+        persentase_kehadiran = round((total_hadir_today / siswa_aktif * 100), 1) if siswa_aktif > 0 else 0
+
+        # 3. Pengajuan Izin Menunggu
+        izin_menunggu = PengajuanIzin.query.filter(PengajuanIzin.status_pengajuan == 'Menunggu').count()
+
+        # 4. Pelanggaran Bulan Ini
+        now = datetime.now()
+        pelanggaran_bulan_ini = PelanggaranSiswa.query.filter(
+            extract('year', PelanggaranSiswa.tanggal_waktu) == now.year,
+            extract('month', PelanggaranSiswa.tanggal_waktu) == now.month
+        ).count()
+
+        # 5. Aktivitas Presensi Terbaru Hari Ini
+        recent_presensi = AbsensiHarian.query.filter(db.func.date(AbsensiHarian.waktu) == today)\
+            .order_by(AbsensiHarian.waktu.desc()).limit(6).all()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "total_siswa": total_siswa,
+                "siswa_aktif": siswa_aktif,
+                "siswa_alumni": siswa_alumni,
+                "siswa_biometrik": siswa_biometrik,
+                "persentase_biometrik": round((siswa_biometrik / siswa_aktif * 100), 1) if siswa_aktif > 0 else 0,
+                "total_hadir_today": total_hadir_today,
+                "tepat_waktu": tepat_waktu,
+                "terlambat": terlambat,
+                "sakit": sakit,
+                "izin": izin,
+                "persentase_kehadiran": persentase_kehadiran,
+                "izin_menunggu": izin_menunggu,
+                "pelanggaran_bulan_ini": pelanggaran_bulan_ini,
+                "recent_presensi": [r.to_dict() for r in recent_presensi]
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
 

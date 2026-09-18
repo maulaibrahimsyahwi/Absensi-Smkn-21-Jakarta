@@ -76,6 +76,13 @@ def submit_pengajuan_izin():
             "message": "Titik koordinat lokasi GPS wajib disertakan saat mengajukan surat izin / sakit. Harap aktifkan sensor lokasi (GPS) pada perangkat Anda."
         }), 400
 
+    tanda_tangan_siswa = data.get('tanda_tangan_siswa')
+    if not tanda_tangan_siswa:
+        return jsonify({
+            "success": False,
+            "message": "Siswa wajib membubuhkan tanda tangan digital pada surat pengajuan izin / sakit."
+        }), 400
+
     try:
         pengajuan = PengajuanIzin(
             siswa_id=siswa.id,
@@ -84,6 +91,7 @@ def submit_pengajuan_izin():
             tanggal_selesai=tgl_selesai,
             alasan=alasan,
             surat_bukti=surat_bukti,
+            tanda_tangan_siswa=tanda_tangan_siswa,
             latitude=latitude,
             longitude=longitude,
             lokasi_teks=lokasi_teks,

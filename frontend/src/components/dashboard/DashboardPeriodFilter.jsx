@@ -57,7 +57,7 @@ export default function DashboardPeriodFilter({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to="/"
+            to="/portal-admin"
             className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />

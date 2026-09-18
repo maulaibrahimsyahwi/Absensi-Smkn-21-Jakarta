@@ -160,12 +160,20 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
             {/* Petugas Piket */}
             <div className="flex flex-col items-center">
               <p className="font-bold mb-1">Petugas Piket</p>
-              {/* Paraf / Stempel Verifikasi Digital */}
+              {/* Paraf / Stempel Verifikasi Digital / Tanda Tangan */}
               <div className="h-16 flex items-center justify-center relative">
-                <div className="border border-emerald-600 text-emerald-700 rounded-lg px-2 py-1 text-[10px] font-sans font-bold flex items-center gap-1 uppercase rotate-[-4deg] bg-emerald-50/50 shadow-2xs">
-                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                  <span>TERVERIFIKASI PIKET</span>
-                </div>
+                {slipData.tanda_tangan_petugas ? (
+                  <img
+                    src={slipData.tanda_tangan_petugas}
+                    alt="TTD Petugas Piket"
+                    className="h-14 max-w-[130px] object-contain"
+                  />
+                ) : (
+                  <div className="border border-emerald-600 text-emerald-700 rounded-lg px-2 py-1 text-[10px] font-sans font-bold flex items-center gap-1 uppercase rotate-[-4deg] bg-emerald-50/50 shadow-2xs">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                    <span>TERVERIFIKASI PIKET</span>
+                  </div>
+                )}
               </div>
               <p className="font-sans font-bold border-b border-slate-800 pb-0.5 px-3 min-w-[120px]">
                 {slipData.petugas_piket || "Petugas Piket"}
@@ -176,9 +184,17 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
             <div className="flex flex-col items-center">
               <p className="font-bold mb-1">Siswa YBS</p>
               <div className="h-16 flex items-center justify-center">
-                <span className="text-[11px] text-slate-300 italic font-sans">
-                  (Paraf Siswa)
-                </span>
+                {slipData.tanda_tangan_siswa ? (
+                  <img
+                    src={slipData.tanda_tangan_siswa}
+                    alt="TTD Siswa"
+                    className="h-14 max-w-[130px] object-contain"
+                  />
+                ) : (
+                  <span className="text-[11px] text-slate-300 italic font-sans">
+                    (Paraf Siswa)
+                  </span>
+                )}
               </div>
               <p className="font-sans font-bold border-b border-slate-800 pb-0.5 px-3 min-w-[120px]">
                 {slipData.nama}
