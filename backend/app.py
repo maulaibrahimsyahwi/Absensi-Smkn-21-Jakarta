@@ -89,11 +89,12 @@ def check_and_migrate_db():
 
                 conn.commit()
 
-            # 4. Inisialisasi Akun Staf Default (Admin & Guru Piket)
+            # 4. Inisialisasi Akun Staf Default (Admin & Guru Piket) dengan password ter-hash aman
+            from werkzeug.security import generate_password_hash
             if not User.query.filter_by(username='admin').first():
                 admin_user = User(
                     username='admin',
-                    password='admin123',
+                    password=generate_password_hash('admin123', method='scrypt'),
                     nama='Administrator SMKN 21',
                     role='admin'
                 )
@@ -102,7 +103,7 @@ def check_and_migrate_db():
             if not User.query.filter_by(username='piket').first():
                 piket_user = User(
                     username='piket',
-                    password='piket123',
+                    password=generate_password_hash('piket123', method='scrypt'),
                     nama='Guru Piket SMKN 21',
                     role='piket'
                 )

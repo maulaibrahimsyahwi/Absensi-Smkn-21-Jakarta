@@ -1,13 +1,16 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket, PelanggaranSiswa
 from utils.helpers import validate_siswa_input
+from utils.auth_middleware import token_required, role_required
 
 siswa_bp = Blueprint('siswa', __name__)
 
 # ================= ROUTES SISWA (CRUD & STATUS) =================
 
 @siswa_bp.route('/api/siswa', methods=['GET'])
+@token_required
+@role_required(['admin', 'piket'])
 def get_siswa():
     status_filter = request.args.get('status')
     query = Siswa.query
@@ -18,6 +21,8 @@ def get_siswa():
 
 
 @siswa_bp.route('/api/siswa', methods=['POST'])
+@token_required
+@role_required(['admin'])
 def add_siswa():
     data = request.json or {}
     nis = str(data.get('nis', '')).strip()
@@ -48,6 +53,8 @@ def add_siswa():
 
 
 @siswa_bp.route('/api/siswa/<int:id>', methods=['PUT'])
+@token_required
+@role_required(['admin'])
 def update_siswa(id):
     siswa = Siswa.query.get(id)
     if not siswa:
@@ -84,6 +91,8 @@ def update_siswa(id):
 
 
 @siswa_bp.route('/api/siswa/<int:id>/status', methods=['PATCH'])
+@token_required
+@role_required(['admin'])
 def update_siswa_status(id):
     siswa = Siswa.query.get(id)
     if not siswa:
@@ -111,6 +120,8 @@ def update_siswa_status(id):
 
 
 @siswa_bp.route('/api/siswa/bulk_status', methods=['POST'])
+@token_required
+@role_required(['admin'])
 def bulk_update_siswa_status():
     data = request.json or {}
     siswa_ids = data.get('siswa_ids', [])
@@ -144,6 +155,8 @@ def bulk_update_siswa_status():
 
 
 @siswa_bp.route('/api/siswa/luluskan_tingkat', methods=['POST'])
+@token_required
+@role_required(['admin'])
 def luluskan_tingkat():
     data = request.json or {}
     tingkat = str(data.get('tingkat', 'XII')).strip().upper()
@@ -182,6 +195,8 @@ def luluskan_tingkat():
 
 
 @siswa_bp.route('/api/siswa/bulk_delete', methods=['POST'])
+@token_required
+@role_required(['admin'])
 def bulk_delete_siswa():
     data = request.json or {}
     siswa_ids = data.get('siswa_ids', [])
@@ -190,11 +205,12 @@ def bulk_delete_siswa():
         return jsonify({"success": False, "message": "Daftar siswa_ids wajib disertakan."}), 400
 
     try:
-        # Hapus riwayat absensi, perpustakaan, pengajuan izin, dan izin piket terkait terlebih dahulu
+        # Hapus riwayat absensi, perpustakaan, pengajuan izin, izin piket, dan pelanggaran siswa terkait
         AbsensiHarian.query.filter(AbsensiHarian.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
         AbsensiPerpustakaan.query.filter(AbsensiPerpustakaan.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
         PengajuanIzin.query.filter(PengajuanIzin.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
         IzinPiket.query.filter(IzinPiket.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
+        PelanggaranSiswa.query.filter(PelanggaranSiswa.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
         
         deleted_count = Siswa.query.filter(Siswa.id.in_(siswa_ids)).delete(synchronize_session=False)
         db.session.commit()
@@ -209,17 +225,20 @@ def bulk_delete_siswa():
 
 
 @siswa_bp.route('/api/siswa/<int:id>', methods=['DELETE'])
+@token_required
+@role_required(['admin'])
 def delete_siswa(id):
     siswa = Siswa.query.get(id)
     if not siswa:
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
     try:
         nama_siswa = siswa.nama
-        # Hapus riwayat absensi, perpustakaan, pengajuan izin, dan izin piket terkait jika ada
+        # Hapus seluruh riwayat terkait termasuk pelanggaran siswa
         AbsensiHarian.query.filter_by(siswa_id=id).delete()
         AbsensiPerpustakaan.query.filter_by(siswa_id=id).delete()
         PengajuanIzin.query.filter_by(siswa_id=id).delete()
         IzinPiket.query.filter_by(siswa_id=id).delete()
+        PelanggaranSiswa.query.filter_by(siswa_id=id).delete()
         db.session.delete(siswa)
         db.session.commit()
         return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil dihapus dari database."})
@@ -229,6 +248,7 @@ def delete_siswa(id):
 
 
 @siswa_bp.route('/api/cek_siswa_nis/<nis>', methods=['GET'])
+@token_required
 def cek_siswa_nis(nis):
     nis = str(nis or '').strip()
     siswa = Siswa.query.filter_by(nis=nis).first()

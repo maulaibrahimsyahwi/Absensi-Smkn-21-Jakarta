@@ -462,7 +462,7 @@ export default function PortalAdmin() {
               Aktivitas Presensi Terkini Hari Ini
             </h3>
             <p className="text-xs text-slate-500">
-              Pembaruan live scan wajah dan kehadiran siswa
+              Pembaruan scan wajah dan kehadiran siswa
             </p>
           </div>
           <Link
@@ -470,7 +470,7 @@ export default function PortalAdmin() {
             className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
           >
             <span>Lihat Semua Rekap</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 

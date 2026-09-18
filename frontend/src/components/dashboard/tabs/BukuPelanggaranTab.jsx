@@ -31,6 +31,7 @@ import {
 import DashboardPagination from "../DashboardPagination";
 import CustomDropdown from "../../CustomDropdown";
 import CustomDatePicker from "../../CustomDatePicker";
+import { Skeleton } from "../../common/Skeleton";
 
 export default function BukuPelanggaranTab() {
   const [activeSubTab, setActiveSubTab] = useState("riwayat"); // "riwayat" atau "rekap_poin"
@@ -487,22 +488,47 @@ export default function BukuPelanggaranTab() {
                 );
               })}
 
-              {records.length === 0 && (
+              {loading && (
+                <>
+                  {Array.from({ length: 5 }).map((_, idx) => (
+                    <tr key={`skel-row-${idx}`} className="animate-pulse">
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-28" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-36 mb-1" />
+                        <Skeleton className="h-3 w-20" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-16" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-44" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-5 w-12 rounded-md" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-4 w-28" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-7 w-7 rounded-lg" />
+                      </td>
+                      <td className="px-4 py-3.5">
+                        <Skeleton className="h-7 w-16 rounded-lg mx-auto" />
+                      </td>
+                    </tr>
+                  ))}
+                </>
+              )}
+
+              {!loading && records.length === 0 && (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-16 text-center text-slate-400"
+                    className="px-4 py-16 text-center text-slate-400 font-medium text-xs"
                   >
-                    {loading ? (
-                      <div className="flex flex-col items-center justify-center py-6">
-                        <Loader2 className="w-7 h-7 text-rose-600 animate-spin mb-2" />
-                        <p className="text-xs font-semibold text-slate-600">
-                          Memuat data catatan pelanggaran...
-                        </p>
-                      </div>
-                    ) : (
-                      "Belum ada catatan pelanggaran yang sesuai."
-                    )}
+                    Belum ada catatan pelanggaran yang sesuai.
                   </td>
                 </tr>
               )}

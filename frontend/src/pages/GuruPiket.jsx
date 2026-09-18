@@ -27,6 +27,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import Skeleton from "../components/common/Skeleton";
 import CustomDatePicker, {
   formatTanggalIndo,
 } from "../components/CustomDatePicker";
@@ -976,9 +977,20 @@ export default function GuruPiket() {
           {/* List Cards Riwayat Izin Piket */}
           <div className="flex-1 overflow-y-auto max-h-[600px] space-y-3 pr-1">
             {loadingRiwayat ? (
-              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                <p className="text-xs">Memuat riwayat izin meja piket...</p>
+              <div className="space-y-2.5 py-1">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-4 w-36 rounded-md" />
+                      <Skeleton className="h-4 w-16 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-48 rounded-md" />
+                    <Skeleton className="h-3 w-full rounded-md" />
+                  </div>
+                ))}
               </div>
             ) : riwayatList.length === 0 ? (
               <div className="py-12 text-center text-slate-400 border border-dashed border-slate-200 rounded-xl">

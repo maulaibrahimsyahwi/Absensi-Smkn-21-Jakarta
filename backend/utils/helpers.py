@@ -2,7 +2,7 @@ import re
 import math
 import json
 from datetime import datetime
-from config import WAKTU_BATAS_MASUK
+from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import Siswa
 
 def validate_siswa_input(nis, nama, kelas):
@@ -55,12 +55,23 @@ def calculate_distance_meters(lat1, lon1, lat2, lon2):
     return round(R * c)
 
 
-def check_status_kehadiran():
+def is_presensi_open(dt=None):
+    """
+    Mengecek apakah presensi harian sudah dibuka (mulai pukul 05:00 WIB).
+    Jika sebelum pukul 05:00 WIB, presensi belum dibuka.
+    """
+    now = dt if dt is not None else datetime.now()
+    return now.time() >= WAKTU_MULAI_MASUK
+
+
+def check_status_kehadiran(dt=None):
     """
     Menentukan status kehadiran harian siswa ('Tepat Waktu' atau 'Terlambat')
-    berdasarkan batas jam masuk SMKN 21 (06:30 WIB).
+    berdasarkan batas jam masuk SMKN 21:
+    - 05:00 - 06:30 WIB: Tepat Waktu
+    - Lewat 06:30 WIB: Terlambat
     """
-    now = datetime.now()
+    now = dt if dt is not None else datetime.now()
     if now.time() <= WAKTU_BATAS_MASUK:
         return "Tepat Waktu"
     return "Terlambat"

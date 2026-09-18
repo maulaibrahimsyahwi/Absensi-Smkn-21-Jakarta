@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import api from "../../../services/api";
+import { SkeletonTable } from "../../common/Skeleton";
 import {
   Users,
   UserPlus,
@@ -371,12 +372,7 @@ export default function ManajemenPiketTab() {
       {/* Tabel Data Staf / Guru Piket */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden min-h-[380px]">
         {loading ? (
-          <div className="py-16 min-h-[380px] flex flex-col items-center justify-center text-center text-slate-400">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-2" />
-            <p className="text-xs font-semibold text-slate-600">
-              Memuat data akun staf guru piket...
-            </p>
-          </div>
+          <SkeletonTable rows={4} cols={6} className="min-h-[380px]" />
         ) : filteredStaf.length === 0 ? (
           <div className="py-16 min-h-[380px] flex flex-col items-center justify-center text-center text-slate-400 p-4">
             <Users className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />

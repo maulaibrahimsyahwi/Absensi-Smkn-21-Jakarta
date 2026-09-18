@@ -5,7 +5,6 @@ import {
   Route,
   useLocation,
 } from "react-router-dom";
-import { Loader2 } from "lucide-react";
 import Navbar from "./components/Navbar";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -23,16 +22,9 @@ const PortalSiswa = React.lazy(() => import("./pages/PortalSiswa"));
 const PortalPiket = React.lazy(() => import("./pages/PortalPiket"));
 const PortalAdmin = React.lazy(() => import("./pages/PortalAdmin"));
 const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
 
-// Shared loading fallback shown while lazy chunks are being fetched
-function PageLoader() {
-  return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-3 text-slate-400">
-      <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-      <span className="text-sm font-medium">Memuat halaman...</span>
-    </div>
-  );
-}
+import PageSkeleton from "./components/common/Skeleton";
 
 function AppLayout() {
   const location = useLocation();
@@ -57,7 +49,7 @@ function AppLayout() {
             : "flex-1 flex flex-col"
         }
       >
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<PageSkeleton />}>
           <Routes>
             {/* Rute Publik Terbatas */}
             <Route path="/" element={<Home />} />
@@ -81,11 +73,11 @@ function AppLayout() {
               }
             />
 
-            {/* Rute Terproteksi Khusus Siswa & Admin */}
+            {/* Rute Terproteksi Khusus Siswa */}
             <Route
               path="/portal-siswa"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "admin"]}>
+                <ProtectedRoute allowedRoles={["siswa"]}>
                   <PortalSiswa />
                 </ProtectedRoute>
               }
@@ -154,6 +146,9 @@ function AppLayout() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Rute Catch-All 404 Not Found */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </main>

@@ -1,16 +1,18 @@
 from datetime import datetime, time, date
 from flask import Blueprint, request, jsonify
-from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_INFO
+from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
 from face_utils import verify_face
-from utils.helpers import calculate_distance_meters, check_status_kehadiran, get_flattened_known_faces
+from utils.helpers import calculate_distance_meters, check_status_kehadiran, is_presensi_open, get_flattened_known_faces
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
+from utils.auth_middleware import token_required
 
 presensi_bp = Blueprint('presensi', __name__)
 
 # ================= VERIFIKASI PRESENSI & LOKASI SEKOLAH =================
 
 @presensi_bp.route('/api/presensi/status_today', methods=['GET'])
+@token_required
 def get_status_today():
     """
     Memeriksa apakah siswa sudah melakukan presensi harian pada hari ini.
@@ -31,10 +33,14 @@ def get_status_today():
         AbsensiHarian.waktu <= today_end
     ).first()
 
+    now_dt = datetime.now()
     if absen_today:
         return jsonify({
             "success": True,
             "already_attended": True,
+            "is_presensi_open": is_presensi_open(now_dt),
+            "jam_buka": "05:00 WIB",
+            "jam_batas": "06:30 WIB",
             "data": {
                 "id": absen_today.id,
                 "nama": siswa.nama,
@@ -47,11 +53,15 @@ def get_status_today():
         return jsonify({
             "success": True,
             "already_attended": False,
+            "is_presensi_open": is_presensi_open(now_dt),
+            "jam_buka": "05:00 WIB",
+            "jam_batas": "06:30 WIB",
             "data": None
         })
 
 
 @presensi_bp.route('/api/verify_harian', methods=['POST'])
+@token_required
 def verify_harian():
     import json
     data = request.json or {}
@@ -63,27 +73,50 @@ def verify_harian():
     simulated = data.get('simulated', False)
     expected_siswa_id = data.get('expected_siswa_id')
 
-    if expected_siswa_id:
+    # Validasi Jam Operasional: Presensi baru dibuka mulai pukul 05:00 WIB
+    now_dt = datetime.now()
+    if not is_presensi_open(now_dt):
+        return jsonify({
+            "success": False,
+            "message": f"Presensi harian belum dibuka! Presensi kehadiran SMKN 21 dibuka mulai pukul 05:00 WIB (05:00 - 06:30 WIB Tepat Waktu, lewat 06:30 WIB Terlambat). Jam saat ini: {now_dt.strftime('%H:%M:%S')} WIB."
+        }), 400
+
+    current_user = getattr(request, 'current_user', {})
+    user_role = current_user.get('role')
+    user_id = current_user.get('user_id')
+
+    # Jika pemanggil adalah siswa, kunci expected_siswa_id ke ID miliknya sendiri (mencegah impersonasi)
+    if user_role == 'siswa':
+        expected_siswa_id = user_id
+    elif expected_siswa_id:
         try:
             expected_siswa_id = int(expected_siswa_id)
         except (ValueError, TypeError):
             expected_siswa_id = None
 
     # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
-    if not simulated:
-        if is_mock:
+    if is_mock:
+        return jsonify({
+            "success": False,
+            "message": "Presensi ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
+        }), 403
+    if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
+        return jsonify({
+            "success": False,
+            "message": f"Presensi ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
+        }), 403
+
+    # Validasi Geofence:
+    # Untuk presensi mandiri siswa atau perangkat non-admin/piket, koordinat GPS WAJIB disertakan
+    is_admin_or_piket = user_role in ['admin', 'piket']
+    if expected_siswa_id or not is_admin_or_piket:
+        if latitude is None or longitude is None:
             return jsonify({
                 "success": False,
-                "message": "Presensi ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
-            }), 403
-        if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
-            return jsonify({
-                "success": False,
-                "message": f"Presensi ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
+                "message": "Presensi ditolak! Akses lokasi (GPS) wajib diaktifkan untuk memastikan Anda berada di lingkungan sekolah SMKN 21."
             }), 403
 
-    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 10m
-    if not simulated and latitude is not None and longitude is not None:
+    if latitude is not None and longitude is not None:
         dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
         if dist is not None and dist > MAX_RADIUS_SEKOLAH:
             return jsonify({
@@ -174,8 +207,8 @@ def verify_harian():
                     "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
                 }), 400
 
-            status = check_status_kehadiran()
             now_dt = datetime.now()
+            status = check_status_kehadiran(now_dt)
             absen = AbsensiHarian(siswa_id=siswa_id, status=status, waktu=now_dt)
             db.session.add(absen)
 
@@ -209,6 +242,7 @@ def verify_harian():
 
 
 @presensi_bp.route('/api/verify_perpus', methods=['POST'])
+@token_required
 def verify_perpus():
     data = request.json or {}
     image_data = data.get('image')
@@ -223,20 +257,19 @@ def verify_perpus():
         return jsonify({"success": False, "message": "Keperluan kunjungan belum diisi."}), 400
 
     # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
-    if not simulated:
-        if is_mock:
-            return jsonify({
-                "success": False,
-                "message": "Presensi perpustakaan ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
-            }), 403
-        if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
-            return jsonify({
-                "success": False,
-                "message": f"Presensi perpustakaan ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
-            }), 403
+    if is_mock:
+        return jsonify({
+            "success": False,
+            "message": "Presensi perpustakaan ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
+        }), 403
+    if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
+        return jsonify({
+            "success": False,
+            "message": f"Presensi perpustakaan ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
+        }), 403
 
-    # Validasi Geofence: Jika bukan simulasi dev, pastikan berada dalam radius 10m
-    if not simulated and latitude is not None and longitude is not None:
+    # Validasi Geofence: Pastikan siswa berada dalam radius resmi sekolah
+    if latitude is not None and longitude is not None:
         dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
         if dist is not None and dist > MAX_RADIUS_SEKOLAH:
             return jsonify({

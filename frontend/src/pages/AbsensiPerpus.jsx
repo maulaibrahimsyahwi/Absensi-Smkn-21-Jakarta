@@ -25,12 +25,9 @@ import {
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
-import {
-  SMKN21_COORDINATES,
-  calculateDistanceMeters,
-  formatDistance,
-  getCurrentLocation,
-} from "../utils/geoUtils";
+import { SMKN21_COORDINATES, formatDistance } from "../utils/geoUtils";
+import { useAudioFeedback, useLivenessDetector } from "../hooks/useFaceScanner";
+import useGeofence from "../hooks/useGeofence";
 
 const KEPERLUAN_OPTIONS = [
   {
@@ -83,13 +80,8 @@ export default function AbsensiPerpus() {
   const [customKeperluan, setCustomKeperluan] = useState("");
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // 3 detik
-  const [isFaceDetected, setIsFaceDetected] = useState(false);
-  const [isLiveVerified, setIsLiveVerified] = useState(false);
-  const [eyeState, setEyeState] = useState("UNKNOWN");
-  const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
-  const canvasRef = useRef(null);
-  const baselineOpenScoreRef = useRef(null);
-  const openSamplesRef = useRef([]);
+
+  const { playSound } = useAudioFeedback();
 
   // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
   useEffect(() => {
@@ -111,89 +103,15 @@ export default function AbsensiPerpus() {
     };
   }, []);
 
-  // GPS Geofence State (Radius 10m SMKN 21)
-  const [geoState, setGeoState] = useState({
-    loading: true,
-    latitude: null,
-    longitude: null,
-    accuracy: null,
-    distanceMeters: null,
-    isWithinRadius: false,
-    error: null,
-    simulated: false,
-    isMock: false,
-  });
-
-  const checkGeofence = useCallback(async () => {
-    setGeoState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const loc = await getCurrentLocation({
-        enableHighAccuracy: true,
-        timeout: 10000,
-      });
-      const dist = calculateDistanceMeters(
-        loc.latitude,
-        loc.longitude,
-        SMKN21_COORDINATES.latitude,
-        SMKN21_COORDINATES.longitude,
-      );
-      const isWithin = dist <= SMKN21_COORDINATES.radiusMeters;
-      setGeoState({
-        loading: false,
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        accuracy: loc.accuracy,
-        distanceMeters: dist,
-        isWithinRadius: isWithin,
-        error: null,
-        simulated: false,
-        isMock: loc.isMock || false,
-      });
-    } catch (err) {
-      setGeoState((prev) => ({
-        ...prev,
-        loading: false,
-        error: err.message || "Gagal memperoleh titik koordinat GPS",
-      }));
-    }
-  }, []);
-
-  useEffect(() => {
-    checkGeofence();
-  }, [checkGeofence]);
-
-  const toggleSimulation = () => {
-    setGeoState((prev) => {
-      const nextSim = !prev.simulated;
-      if (nextSim) {
-        return {
-          loading: false,
-          simulated: true,
-          isWithinRadius: true,
-          distanceMeters: 8,
-          accuracy: 5,
-          error: null,
-          latitude: SMKN21_COORDINATES.latitude,
-          longitude: SMKN21_COORDINATES.longitude,
-          isMock: false,
-        };
-      } else {
-        checkGeofence();
-        return { ...prev, simulated: false };
-      }
-    });
-  };
-
-  // Status Validitas GPS: HANYA BENAR JIKA SUDAH SELESAI MENGAMBIL LOKASI DAN BERADA DALAM RADIUS
-  const isGpsValid =
-    !geoState.loading && (geoState.isWithinRadius || geoState.simulated);
-
-  // Sedang menunggu sinyal GPS (wajib tunggu GPS sebelum bisa absen perpus)
-  const isGpsWaiting = geoState.loading;
-
-  // Terblokir karena di luar radius sekolah atau terjadi error pada sensor GPS
-  const isGpsBlocked =
-    !geoState.loading && !geoState.isWithinRadius && !geoState.simulated;
+  // GPS Geofence Hook (SMKN 21)
+  const {
+    geoState,
+    checkGeofence,
+    toggleSimulation,
+    isGpsValid,
+    isGpsWaiting,
+    isGpsBlocked,
+  } = useGeofence(SMKN21_COORDINATES);
 
   // Live clock
   useEffect(() => {
@@ -210,148 +128,14 @@ export default function AbsensiPerpus() {
     return () => clearInterval(timer);
   }, []);
 
-  // Frame Ringan (<12KB) untuk responsivitas tinggi (8-10 FPS)
-  const getLightweightFrame = useCallback(() => {
-    if (!webcamRef.current) return null;
-    const video = webcamRef.current.video;
-    if (!video || video.readyState < 2) return null;
-
-    try {
-      if (!canvasRef.current) {
-        canvasRef.current = document.createElement("canvas");
-        canvasRef.current.width = 320;
-        canvasRef.current.height = 240;
-      }
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, 320, 240);
-      return canvas.toDataURL("image/jpeg", 0.6);
-    } catch (err) {
-      return webcamRef.current.getScreenshot();
-    }
-  }, []);
-
-  // 1. Deteksi Keberadaan Wajah & Liveness Kedipan Mata Cepat & Adaptif
-  const checkLiveness = useCallback(async () => {
-    if (
-      !webcamRef.current ||
-      loading ||
-      showPopup ||
-      result ||
-      !isGpsValid ||
-      isLiveVerified
-    )
-      return;
-
-    try {
-      const frameData = getLightweightFrame();
-      if (!frameData) return;
-
-      const res = await api.post(
-        "/detect_liveness",
-        {
-          image: frameData,
-        },
-        { timeout: 2500 },
-      );
-
-      const data = res.data;
-      if (!data.face_detected) {
-        setIsFaceDetected(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
-        return;
-      }
-
-      setIsFaceDetected(true);
-      const score = Number(data.openness_score || 0);
-
-      // Logika adaptif personal baseline + threshold absolut
-      const isClosedAbs = data.eye_state === "CLOSED" || score < 11.5;
-      const isClosedRel =
-        baselineOpenScoreRef.current &&
-        score < baselineOpenScoreRef.current * 0.72;
-      const isEyeClosed = isClosedAbs || isClosedRel;
-
-      const isOpenAbs = data.eye_state === "OPEN" && score >= 11.5;
-      const isOpenRel =
-        baselineOpenScoreRef.current &&
-        score >= baselineOpenScoreRef.current * 0.85;
-      const isEyeOpen = isOpenAbs || isOpenRel;
-
-      if (isEyeOpen && !isEyeClosed) {
-        setEyeState("OPEN");
-
-        // Kalibrasi baseline pribadi mata terbuka
-        if (openSamplesRef.current.length < 6) {
-          openSamplesRef.current.push(score);
-          const sum = openSamplesRef.current.reduce((a, b) => a + b, 0);
-          baselineOpenScoreRef.current = sum / openSamplesRef.current.length;
-        }
-
-        if (!blinkCycleRef.current.hasBeenOpen) {
-          blinkCycleRef.current.hasBeenOpen = true;
-        } else if (
-          blinkCycleRef.current.hasBeenOpen &&
-          blinkCycleRef.current.hasClosed
-        ) {
-          // Siklus Kedipan Berhasil: OPEN -> CLOSED -> OPEN
-          setIsLiveVerified(true);
-          setCountdown(3);
-        }
-      } else if (isEyeClosed) {
-        setEyeState("CLOSED");
-        if (blinkCycleRef.current.hasBeenOpen) {
-          blinkCycleRef.current.hasClosed = true;
-        }
-      }
-    } catch (err) {
-      // Abaikan kendala jaringan sesaat selama polling cepat
-    }
-  }, [
-    loading,
-    showPopup,
-    result,
-    isGpsValid,
-    isLiveVerified,
-    getLightweightFrame,
-  ]);
-
-  // Polling deteksi keaktifan cepat (~120ms jeda) agar kedipan 150-250ms pasti tertangkap
-  useEffect(() => {
-    let isMounted = true;
-    let timerId = null;
-
-    if (loading || showPopup || result || !isGpsValid || isLiveVerified) {
-      if (!isLiveVerified) {
-        setIsFaceDetected(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
-      }
-      return;
-    }
-
-    const runLivenessLoop = async () => {
-      if (!isMounted) return;
-      if (!loading && !showPopup && !result && isGpsValid && !isLiveVerified) {
-        await checkLiveness();
-      }
-      if (isMounted && !isLiveVerified) {
-        timerId = setTimeout(runLivenessLoop, 120);
-      }
-    };
-
-    runLivenessLoop();
-
-    return () => {
-      isMounted = false;
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [loading, showPopup, result, isGpsValid, isLiveVerified, checkLiveness]);
+  // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
+  const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
+    useLivenessDetector({
+      webcamRef,
+      isActive: !loading && !showPopup && !result && isGpsValid,
+      onLiveVerified: () => setCountdown(3),
+      pollIntervalMs: 600,
+    });
 
   const captureFace = useCallback(() => {
     if (!isGpsValid) return;
@@ -420,20 +204,17 @@ export default function AbsensiPerpus() {
         simulated: geoState.simulated,
         is_mock: geoState.isMock || false,
       });
+      playSound("success");
       setResult({ success: true, message: response.data.message });
       setTimeout(() => {
         setResult(null);
         setCustomKeperluan("");
         setKeperluan("Membaca/Belajar");
         setCountdown(3);
-        setIsFaceDetected(false);
-        setIsLiveVerified(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
+        resetLiveness();
       }, 4000);
     } catch (err) {
+      playSound("error");
       setResult({
         success: false,
         message:
@@ -443,12 +224,7 @@ export default function AbsensiPerpus() {
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
-        setIsFaceDetected(false);
-        setIsLiveVerified(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
+        resetLiveness();
       }, 3000);
     } finally {
       setLoading(false);
@@ -733,15 +509,7 @@ export default function AbsensiPerpus() {
                 onClick={() => {
                   setShowPopup(false);
                   setCountdown(3);
-                  setIsFaceDetected(false);
-                  setIsLiveVerified(false);
-                  setEyeState("UNKNOWN");
-                  blinkCycleRef.current = {
-                    hasBeenOpen: false,
-                    hasClosed: false,
-                  };
-                  baselineOpenScoreRef.current = null;
-                  openSamplesRef.current = [];
+                  resetLiveness();
                 }}
                 className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
               >
