@@ -4,6 +4,7 @@ import api from "../services/api";
 const AuthContext = createContext(null);
 
 const STORAGE_KEY = "smkn21_auth_user";
+const TOKEN_KEY = "smkn21_auth_token";
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -23,32 +24,59 @@ export function AuthProvider({ children }) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     } else {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TOKEN_KEY);
     }
   }, [user]);
 
   /**
    * Login pengguna (Admin, Guru Piket, atau Siswa)
    */
-  const login = async (username, password, role = "") => {
+  const login = async (
+    username,
+    password,
+    role = "",
+    totpCode = "",
+    hpField = "",
+  ) => {
     setLoadingAuth(true);
     try {
       const res = await api.post("/auth/login", {
         username,
         password,
         role,
+        totp_code: totpCode,
+        hp_field: hpField,
       });
 
       if (res.data && res.data.success) {
+        if (res.data.token) {
+          localStorage.setItem(TOKEN_KEY, res.data.token);
+        }
         setUser(res.data.user);
         return {
           success: true,
           message: res.data.message,
           user: res.data.user,
         };
+      } else if (res.data?.requires_2fa) {
+        return {
+          success: false,
+          requires_2fa: true,
+          role: res.data.role,
+          message:
+            res.data.message || "Autentikasi Dua Faktor (2FA) diperlukan.",
+        };
       } else {
         return { success: false, message: res.data?.message || "Login gagal." };
       }
     } catch (err) {
+      if (err.response?.data?.requires_2fa) {
+        return {
+          success: false,
+          requires_2fa: true,
+          message: err.response.data.message || "Kode 2FA salah.",
+        };
+      }
       const msg =
         err.response?.data?.message || "Terjadi kesalahan saat login.";
       return { success: false, message: msg };
@@ -63,6 +91,7 @@ export function AuthProvider({ children }) {
   const logout = () => {
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(TOKEN_KEY);
   };
 
   /**

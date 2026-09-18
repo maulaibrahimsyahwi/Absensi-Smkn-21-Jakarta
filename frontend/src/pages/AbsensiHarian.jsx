@@ -21,12 +21,9 @@ import {
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
-import {
-  SMKN21_COORDINATES,
-  calculateDistanceMeters,
-  formatDistance,
-  getCurrentLocation,
-} from "../utils/geoUtils";
+import { SMKN21_COORDINATES, formatDistance } from "../utils/geoUtils";
+import { useAudioFeedback, useLivenessDetector } from "../hooks/useFaceScanner";
+import useGeofence from "../hooks/useGeofence";
 
 export default function AbsensiHarian() {
   const { user, isSiswa, isPiket, isAdmin } = useAuth();
@@ -42,14 +39,9 @@ export default function AbsensiHarian() {
   const [result, setResult] = useState(null);
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // Countdown 3 detik
-  const [isFaceDetected, setIsFaceDetected] = useState(false);
-  const [isLiveVerified, setIsLiveVerified] = useState(false);
-  const [eyeState, setEyeState] = useState("UNKNOWN");
   const [attendanceToday, setAttendanceToday] = useState(null);
-  const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
-  const canvasRef = useRef(null);
-  const baselineOpenScoreRef = useRef(null);
-  const openSamplesRef = useRef([]);
+
+  const { playSound } = useAudioFeedback();
 
   // Pengecekan Presensi Hari Ini: Jika siswa sudah absen hari ini, cegah absen berulang
   useEffect(() => {
@@ -59,7 +51,7 @@ export default function AbsensiHarian() {
           const res = await api.get("/presensi/status_today", {
             params: { siswa_id: user.id },
           });
-          if (res.data?.already_attended) {
+          if (res.data) {
             setAttendanceToday(res.data);
           }
         } catch (err) {
@@ -90,89 +82,15 @@ export default function AbsensiHarian() {
     };
   }, []);
 
-  // GPS Geofence State (Radius 10m SMKN 21)
-  const [geoState, setGeoState] = useState({
-    loading: true,
-    latitude: null,
-    longitude: null,
-    accuracy: null,
-    distanceMeters: null,
-    isWithinRadius: false,
-    error: null,
-    simulated: false,
-    isMock: false,
-  });
-
-  const checkGeofence = useCallback(async () => {
-    setGeoState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const loc = await getCurrentLocation({
-        enableHighAccuracy: true,
-        timeout: 10000,
-      });
-      const dist = calculateDistanceMeters(
-        loc.latitude,
-        loc.longitude,
-        SMKN21_COORDINATES.latitude,
-        SMKN21_COORDINATES.longitude,
-      );
-      const isWithin = dist <= SMKN21_COORDINATES.radiusMeters;
-      setGeoState({
-        loading: false,
-        latitude: loc.latitude,
-        longitude: loc.longitude,
-        accuracy: loc.accuracy,
-        distanceMeters: dist,
-        isWithinRadius: isWithin,
-        error: null,
-        simulated: false,
-        isMock: loc.isMock || false,
-      });
-    } catch (err) {
-      setGeoState((prev) => ({
-        ...prev,
-        loading: false,
-        error: err.message || "Gagal memperoleh titik koordinat GPS",
-      }));
-    }
-  }, []);
-
-  useEffect(() => {
-    checkGeofence();
-  }, [checkGeofence]);
-
-  const toggleSimulation = () => {
-    setGeoState((prev) => {
-      const nextSim = !prev.simulated;
-      if (nextSim) {
-        return {
-          loading: false,
-          simulated: true,
-          isWithinRadius: true,
-          distanceMeters: 8,
-          accuracy: 5,
-          error: null,
-          latitude: SMKN21_COORDINATES.latitude,
-          longitude: SMKN21_COORDINATES.longitude,
-          isMock: false,
-        };
-      } else {
-        checkGeofence();
-        return { ...prev, simulated: false };
-      }
-    });
-  };
-
-  // Status Validitas GPS: HANYA BENAR JIKA SUDAH SELESAI MENGAMBIL LOKASI DAN BERADA DALAM RADIUS
-  const isGpsValid =
-    !geoState.loading && (geoState.isWithinRadius || geoState.simulated);
-
-  // Sedang menunggu sinyal GPS (wajib tunggu GPS sebelum bisa absen)
-  const isGpsWaiting = geoState.loading;
-
-  // Terblokir karena di luar radius sekolah atau terjadi error pada sensor GPS
-  const isGpsBlocked =
-    !geoState.loading && !geoState.isWithinRadius && !geoState.simulated;
+  // GPS Geofence Hook (SMKN 21)
+  const {
+    geoState,
+    checkGeofence,
+    toggleSimulation,
+    isGpsValid,
+    isGpsWaiting,
+    isGpsBlocked,
+  } = useGeofence(SMKN21_COORDINATES);
 
   // Live clock
   useEffect(() => {
@@ -189,166 +107,15 @@ export default function AbsensiHarian() {
     return () => clearInterval(timer);
   }, []);
 
-  // Frame Ringan (<12KB) untuk responsivitas tinggi (8-10 FPS)
-  const getLightweightFrame = useCallback(() => {
-    if (!webcamRef.current) return null;
-    const video = webcamRef.current.video;
-    if (!video || video.readyState < 2) return null;
-
-    try {
-      if (!canvasRef.current) {
-        canvasRef.current = document.createElement("canvas");
-        canvasRef.current.width = 320;
-        canvasRef.current.height = 240;
-      }
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(video, 0, 0, 320, 240);
-      return canvas.toDataURL("image/jpeg", 0.6);
-    } catch (err) {
-      return webcamRef.current.getScreenshot();
-    }
-  }, []);
-
-  // 1. Deteksi Kehadiran Wajah & Liveness Kedipan Mata Cepat & Adaptif
-  const checkLiveness = useCallback(async () => {
-    if (
-      !webcamRef.current ||
-      loading ||
-      result ||
-      !isGpsValid ||
-      isLiveVerified
-    )
-      return;
-
-    try {
-      const frameData = getLightweightFrame();
-      if (!frameData) return;
-
-      const res = await api.post(
-        "/detect_liveness",
-        {
-          image: frameData,
-        },
-        { timeout: 2500 },
-      );
-
-      const data = res.data;
-      if (!data.face_detected) {
-        setIsFaceDetected(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
-        return;
-      }
-
-      setIsFaceDetected(true);
-      const score = Number(data.openness_score || 0);
-
-      // Logika adaptif personal baseline + threshold absolut
-      const isClosedAbs = data.eye_state === "CLOSED" || score < 11.5;
-      const isClosedRel =
-        baselineOpenScoreRef.current &&
-        score < baselineOpenScoreRef.current * 0.72;
-      const isEyeClosed = isClosedAbs || isClosedRel;
-
-      const isOpenAbs = data.eye_state === "OPEN" && score >= 11.5;
-      const isOpenRel =
-        baselineOpenScoreRef.current &&
-        score >= baselineOpenScoreRef.current * 0.85;
-      const isEyeOpen = isOpenAbs || isOpenRel;
-
-      if (isEyeOpen && !isEyeClosed) {
-        setEyeState("OPEN");
-
-        // Kalibrasi baseline pribadi mata terbuka
-        if (openSamplesRef.current.length < 6) {
-          openSamplesRef.current.push(score);
-          const sum = openSamplesRef.current.reduce((a, b) => a + b, 0);
-          baselineOpenScoreRef.current = sum / openSamplesRef.current.length;
-        }
-
-        if (!blinkCycleRef.current.hasBeenOpen) {
-          blinkCycleRef.current.hasBeenOpen = true;
-        } else if (
-          blinkCycleRef.current.hasBeenOpen &&
-          blinkCycleRef.current.hasClosed
-        ) {
-          // Siklus Kedipan Berhasil: OPEN -> CLOSED -> OPEN
-          setIsLiveVerified(true);
-          setCountdown(3);
-        }
-      } else if (isEyeClosed) {
-        setEyeState("CLOSED");
-        if (blinkCycleRef.current.hasBeenOpen) {
-          blinkCycleRef.current.hasClosed = true;
-        }
-      }
-    } catch (err) {
-      // Abaikan kendala jaringan sesaat selama polling cepat
-    }
-  }, [
-    loading,
-    result,
-    isGpsValid,
-    isLiveVerified,
-    attendanceToday,
-    getLightweightFrame,
-  ]);
-
-  // Polling deteksi keaktifan cepat (~120ms jeda) agar kedipan 150-250ms pasti tertangkap
-  useEffect(() => {
-    let isMounted = true;
-    let timerId = null;
-
-    if (
-      loading ||
-      result ||
-      !isGpsValid ||
-      isLiveVerified ||
-      attendanceToday?.already_attended
-    ) {
-      if (!isLiveVerified) {
-        setIsFaceDetected(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
-      }
-      return;
-    }
-
-    const runLivenessLoop = async () => {
-      if (!isMounted) return;
-      if (
-        !loading &&
-        !result &&
-        isGpsValid &&
-        !isLiveVerified &&
-        !attendanceToday?.already_attended
-      ) {
-        await checkLiveness();
-      }
-      if (isMounted && !isLiveVerified && !attendanceToday?.already_attended) {
-        timerId = setTimeout(runLivenessLoop, 120);
-      }
-    };
-
-    runLivenessLoop();
-
-    return () => {
-      isMounted = false;
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [
-    loading,
-    result,
-    isGpsValid,
-    isLiveVerified,
-    attendanceToday,
-    checkLiveness,
-  ]);
+  // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
+  const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
+    useLivenessDetector({
+      webcamRef,
+      isActive:
+        !loading && !result && isGpsValid && !attendanceToday?.already_attended,
+      onLiveVerified: () => setCountdown(3),
+      pollIntervalMs: 600,
+    });
 
   const captureAndVerify = useCallback(async () => {
     if (!isGpsValid) return;
@@ -360,33 +127,24 @@ export default function AbsensiHarian() {
         success: false,
         message: "Kamera belum siap mengambil gambar. Menyiapkan ulang...",
       });
-      setCountdown(3);
       return;
     }
 
     setLoading(true);
-    setResult(null);
-
     try {
       const payload = {
         image: imageSrc,
         latitude: geoState.latitude,
         longitude: geoState.longitude,
         accuracy: geoState.accuracy,
-        distance: geoState.distanceMeters,
-        simulated: geoState.simulated,
-        is_mock: geoState.isMock || false,
+        is_mock: geoState.isMock,
+        expected_siswa_id: isSiswa ? user?.id : null,
       };
 
-      // Jika presensi mandiri oleh siswa yang login, kunci pencocokan HANYA ke wajah siswa tersebut
-      if (isSiswa && user?.id) {
-        payload.expected_siswa_id = user.id;
-      }
+      const res = await api.post("/verify_harian", payload);
+      playSound("success");
+      setResult(res.data);
 
-      const response = await api.post("/verify_harian", payload);
-      setResult({ success: true, message: response.data.message });
-
-      // Jika siswa mandiri, langsung tandai sudah absen hari ini
       if (isSiswa) {
         setAttendanceToday({
           already_attended: true,
@@ -402,14 +160,10 @@ export default function AbsensiHarian() {
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
-        setIsFaceDetected(false);
-        setIsLiveVerified(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
+        resetLiveness();
       }, 3000);
     } catch (err) {
+      playSound("error");
       if (err.response?.data?.already_attended) {
         setAttendanceToday({
           already_attended: true,
@@ -429,17 +183,21 @@ export default function AbsensiHarian() {
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
-        setIsFaceDetected(false);
-        setIsLiveVerified(false);
-        setEyeState("UNKNOWN");
-        blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
-        baselineOpenScoreRef.current = null;
-        openSamplesRef.current = [];
+        resetLiveness();
       }, 3500);
     } finally {
       setLoading(false);
     }
-  }, [webcamRef, isGpsValid, geoState, isSiswa, user, attendanceToday]);
+  }, [
+    webcamRef,
+    isGpsValid,
+    geoState,
+    isSiswa,
+    user,
+    attendanceToday,
+    playSound,
+    resetLiveness,
+  ]);
 
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
   useEffect(() => {
@@ -497,11 +255,11 @@ export default function AbsensiHarian() {
           </div>
           <div className="pt-2">
             <Link
-              to={"/portal-alumni"}
+              to={"/portal-siswa"}
               className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
             >
               <ArrowLeft className="w-4 h-4" />
-              Kembali ke Portal Alumni
+              Kembali ke Portal Siswa
             </Link>
           </div>
         </div>
@@ -583,11 +341,17 @@ export default function AbsensiHarian() {
           </div>
         )}
 
-        <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-          <span className="font-bold text-[11px] sm:text-xs text-blue-300">
-            {currentTime || "00:00:00 WIB"}
-          </span>
+        <div className="flex items-center gap-2">
+          <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
+            <Clock className="w-3.5 h-3.5 text-blue-400" />
+            <span>05:00 - 06:30 WIB</span>
+          </div>
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            <span className="font-bold text-[11px] sm:text-xs text-blue-300">
+              {currentTime || "00:00:00 WIB"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -680,6 +444,58 @@ export default function AbsensiHarian() {
           </div>
         </div>
       )}
+
+      {/* Overlay: Presensi Harian Belum Dibuka (< 05:00 WIB) */}
+      {attendanceToday &&
+        attendanceToday.is_presensi_open === false &&
+        !attendanceToday.already_attended && (
+          <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mb-5 shadow-xl shadow-amber-950/50">
+              <Clock className="w-10 h-10 sm:w-12 sm:h-12" />
+            </div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-400/30 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2">
+              <span>Presensi Belum Dibuka</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
+              Presensi Dibuka Pukul 05:00 WIB
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
+              Sistem presensi kehadiran harian SMKN 21 Jakarta dibuka setiap
+              hari mulai pukul <strong>05:00 WIB</strong> sampai{" "}
+              <strong>06:30 WIB</strong> (Tepat Waktu), dan lewat 06:30 WIB
+              dihitung Terlambat.
+            </p>
+
+            <div className="bg-white/10 border border-white/15 rounded-2xl p-4 w-full max-w-sm mb-6 text-left space-y-2.5 backdrop-blur-md">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Waktu Saat Ini</span>
+                <span className="font-bold text-amber-300 font-mono">
+                  {currentTime || "00:00 WIB"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Jadwal Buka Presensi</span>
+                <span className="font-bold text-emerald-400 font-mono">
+                  05:00 - 06:30 WIB
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Status Jam</span>
+                <span className="font-semibold text-rose-300 text-[11px]">
+                  Belum Waktunya Presensi
+                </span>
+              </div>
+            </div>
+
+            <Link
+              to={backTarget}
+              className="w-full max-w-sm py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Kembali ke Portal</span>
+            </Link>
+          </div>
+        )}
 
       {/* 7A. Overlay Menunggu GPS (Wajib tunggu GPS sebelum bisa absen) */}
       {isGpsWaiting && (

@@ -16,6 +16,8 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default="piket")  # "admin" atau "piket"
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG signature
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil
+    two_factor_secret = db.Column(db.String(64), nullable=True)
+    two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
@@ -26,6 +28,7 @@ class User(db.Model):
             "role": self.role,
             "tanda_tangan": self.tanda_tangan,
             "foto_profil": self.foto_profil,
+            "two_factor_enabled": bool(self.two_factor_enabled),
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None
         }
 
@@ -45,6 +48,8 @@ class Siswa(db.Model):
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG digital signature siswa
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil siswa
     face_encoding = db.Column(db.Text, nullable=True)  # Stored as JSON string (single encoding or list of encodings)
+    two_factor_secret = db.Column(db.String(64), nullable=True)
+    two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
     
     def get_encoding(self):
         if self.face_encoding:
@@ -85,7 +90,8 @@ class Siswa(db.Model):
             "tanda_tangan": self.tanda_tangan,
             "foto_profil": self.foto_profil,
             "terdaftar": bool(self.face_encoding),
-            "sample_count": sample_count
+            "sample_count": sample_count,
+            "two_factor_enabled": bool(self.two_factor_enabled)
         }
 
 

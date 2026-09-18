@@ -1,0 +1,19 @@
+# Environment & Secrets
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+backend/venv/
+backend/absensi.db
+
+# Node / Frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# System
+.DS_Store
+Thumbs.db
+

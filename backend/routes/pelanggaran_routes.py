@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from models import db, PelanggaranSiswa, Siswa
+from utils.auth_middleware import token_required, role_required
 
 pelanggaran_bp = Blueprint('pelanggaran_bp', __name__)
 
@@ -126,6 +127,8 @@ def sync_terlambat_ke_pelanggaran():
 
 
 @pelanggaran_bp.route('/api/pelanggaran/sync_terlambat', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
 def handle_sync_terlambat():
     """
     Endpoint manual/admin untuk menyinkronkan data terlambat ke buku saku pelanggaran.
@@ -154,6 +157,8 @@ def get_master_pelanggaran():
 
 
 @pelanggaran_bp.route('/api/pelanggaran', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
 def create_pelanggaran():
     """
     Mencatat pelanggaran siswa baru.
@@ -272,6 +277,7 @@ def create_pelanggaran():
 
 
 @pelanggaran_bp.route('/api/pelanggaran', methods=['GET'])
+@token_required
 def get_pelanggaran_list():
     """
     Mengambil daftar catatan pelanggaran siswa dengan filter:
@@ -290,12 +296,20 @@ def get_pelanggaran_list():
 
     query = PelanggaranSiswa.query
 
-    if siswa_id:
-        query = query.filter_by(siswa_id=siswa_id)
-    if nis:
-        query = query.filter_by(nis=nis)
-    if kelas and kelas != 'ALL':
-        query = query.filter_by(kelas=kelas)
+    current_user = getattr(request, 'current_user', {})
+    user_role = current_user.get('role')
+    user_id = current_user.get('user_id')
+
+    # Jika pemanggil adalah siswa, kunci hanya untuk data miliknya sendiri (mencegah melihat pelanggaran siswa lain)
+    if user_role == 'siswa':
+        query = query.filter_by(siswa_id=user_id)
+    else:
+        if siswa_id:
+            query = query.filter_by(siswa_id=siswa_id)
+        if nis:
+            query = query.filter_by(nis=nis)
+        if kelas and kelas != 'ALL':
+            query = query.filter_by(kelas=kelas)
     if tanggal:
         try:
             target_date = datetime.strptime(tanggal, "%Y-%m-%d").date()
@@ -323,6 +337,8 @@ def get_pelanggaran_list():
 
 
 @pelanggaran_bp.route('/api/pelanggaran/rekap', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
 def get_pelanggaran_rekap():
     """
     Mengambil ringkasan akumulasi poin pelanggaran per siswa,
@@ -389,6 +405,8 @@ def get_pelanggaran_rekap():
 
 
 @pelanggaran_bp.route('/api/pelanggaran/<int:id>', methods=['DELETE'])
+@token_required
+@role_required(['piket', 'admin'])
 def delete_pelanggaran(id):
     """
     Menghapus catatan pelanggaran (hanya dapat dilakukan oleh Guru Piket / Admin).

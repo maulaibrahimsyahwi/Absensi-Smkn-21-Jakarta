@@ -2,12 +2,15 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
+from utils.auth_middleware import token_required, role_required
 
 piket_bp = Blueprint('piket', __name__)
 
 # ================= MEJA GURU PIKET (DISPENSASI MASUK / MENINGGALKAN KELAS) =================
 
 @piket_bp.route('/api/piket/izin', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
 def create_izin_piket():
     data = request.json or {}
     siswa_id = data.get('siswa_id')
@@ -116,6 +119,8 @@ def create_izin_piket():
 
 
 @piket_bp.route('/api/piket/izin', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
 def get_izin_piket():
     tanggal_param = request.args.get('tanggal')
     search = request.args.get('search', '').strip()
@@ -143,6 +148,8 @@ def get_izin_piket():
 
 
 @piket_bp.route('/api/piket/izin/<int:id>', methods=['DELETE'])
+@token_required
+@role_required(['piket', 'admin'])
 def delete_izin_piket(id):
     izin = IzinPiket.query.get(id)
     if not izin:
@@ -157,6 +164,8 @@ def delete_izin_piket(id):
 
 
 @piket_bp.route('/api/piket/summary_today', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
 def get_piket_summary_today():
     """
     Mengambil ringkasan data operasional hari ini untuk Beranda Guru Piket.

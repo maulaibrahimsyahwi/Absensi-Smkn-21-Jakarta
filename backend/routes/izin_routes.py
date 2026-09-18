@@ -1,12 +1,14 @@
 from datetime import datetime, time, timedelta
 from flask import Blueprint, request, jsonify
 from models import db, Siswa, AbsensiHarian, PengajuanIzin
+from utils.auth_middleware import token_required, role_required
 
 izin_bp = Blueprint('izin', __name__)
 
 # ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
 
 @izin_bp.route('/api/pengajuan_izin', methods=['POST'])
+@token_required
 def submit_pengajuan_izin():
     data = request.json or {}
     nis = str(data.get('nis', '')).strip()
@@ -38,6 +40,16 @@ def submit_pengajuan_izin():
     siswa = Siswa.query.filter_by(nis=nis).first()
     if not siswa:
         return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan dalam database."}), 404
+
+    # Proteksi Anti-Impersonasi: Siswa hanya boleh mengajukan izin untuk dirinya sendiri
+    current_user = getattr(request, 'current_user', {})
+    if current_user.get('role') == 'siswa':
+        if str(siswa.id) != str(current_user.get('user_id')) and str(siswa.nis) != str(current_user.get('identifier', '')):
+            return jsonify({
+                "success": False,
+                "message": "Akses ditolak: Anda hanya dapat mengajukan perizinan atas nama akun Anda sendiri."
+            }), 403
+
     if getattr(siswa, 'status', 'Aktif') == 'Alumni':
         return jsonify({
             "success": False,
@@ -58,6 +70,9 @@ def submit_pengajuan_izin():
 
     if tgl_selesai < tgl_mulai:
         return jsonify({"success": False, "message": "Tanggal selesai tidak boleh sebelum tanggal mulai."}), 400
+
+    if (tgl_selesai - tgl_mulai).days > 30:
+        return jsonify({"success": False, "message": "Rentang tanggal pengajuan izin maksimal 30 hari."}), 400
 
     if not alasan:
         return jsonify({"success": False, "message": "Alasan / keterangan ketidakhadiran wajib diisi."}), 400
@@ -110,6 +125,8 @@ def submit_pengajuan_izin():
 
 
 @izin_bp.route('/api/pengajuan_izin', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
 def get_pengajuan_izin():
     status = request.args.get('status')
     query = PengajuanIzin.query
@@ -120,6 +137,8 @@ def get_pengajuan_izin():
 
 
 @izin_bp.route('/api/pengajuan_izin/<int:id>/verifikasi', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
 def verifikasi_pengajuan_izin(id):
     pengajuan = PengajuanIzin.query.get(id)
     if not pengajuan:

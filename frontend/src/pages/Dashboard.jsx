@@ -22,7 +22,6 @@ import {
 import { useAuth } from "../context/AuthContext";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
-import { exportSpreadsheet, exportPdf } from "../utils/exportUtils";
 import SignaturePadModal from "../components/SignaturePadModal";
 
 // Modular Subcomponents
@@ -39,6 +38,7 @@ import BukuPelanggaranTab from "../components/dashboard/tabs/BukuPelanggaranTab"
 import SuratLightboxModal from "../components/dashboard/modals/SuratLightboxModal";
 import RejectIzinModal from "../components/dashboard/modals/RejectIzinModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
+import { SkeletonTable } from "../components/common/Skeleton";
 
 const BULAN_OPTIONS = [
   { value: 1, label: "Januari" },
@@ -475,40 +475,50 @@ export default function Dashboard() {
   }, [activeTab, filteredIzinPiket, startIndex, endIndex]);
 
   // Ekspor Data Laporan (PDF .pdf, Excel .xlsx, Excel .xls, CSV .csv) Sesuai Periode Aktif
-  const handleExport = (format = "xlsx") => {
-    if (format === "pdf") {
-      exportPdf(
-        activeTab,
-        {
-          filteredSiswa,
-          filteredHarian,
-          filteredPerpus,
-          filteredPengajuan,
-          filteredIzinPiket,
-        },
-        {
-          periodeMode,
-          namaBulanTerpilih,
-          selectedTahun,
-        },
-      );
-    } else {
-      exportSpreadsheet(
-        format,
-        activeTab,
-        {
-          filteredSiswa,
-          filteredHarian,
-          filteredPerpus,
-          filteredPengajuan,
-          filteredIzinPiket,
-        },
-        {
-          periodeMode,
-          namaBulanTerpilih,
-          selectedTahun,
-        },
-      );
+  const handleExport = async (format = "xlsx") => {
+    try {
+      const { exportSpreadsheet, exportPdf } =
+        await import("../utils/exportUtils");
+      if (format === "pdf") {
+        exportPdf(
+          activeTab,
+          {
+            filteredSiswa,
+            filteredHarian,
+            filteredPerpus,
+            filteredPengajuan,
+            filteredIzinPiket,
+          },
+          {
+            periodeMode,
+            namaBulanTerpilih,
+            selectedTahun,
+          },
+        );
+      } else {
+        exportSpreadsheet(
+          format,
+          activeTab,
+          {
+            filteredSiswa,
+            filteredHarian,
+            filteredPerpus,
+            filteredPengajuan,
+            filteredIzinPiket,
+          },
+          {
+            periodeMode,
+            namaBulanTerpilih,
+            selectedTahun,
+          },
+        );
+      }
+    } catch (err) {
+      console.error("Gagal memuat modul ekspor:", err);
+      setNotification({
+        type: "error",
+        message: "Gagal memuat modul ekspor data. Silakan coba lagi.",
+      });
     }
   };
 
@@ -549,9 +559,6 @@ export default function Dashboard() {
         >
           <BarChart3 className="w-4 h-4 text-blue-600" />
           <span>Presensi & Kehadiran</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 hidden md:inline">
-            {!isPiket ? "3 Modul" : "1 Modul"}
-          </span>
         </button>
 
         {/* Kategori 2: Perizinan Siswa */}
@@ -566,15 +573,6 @@ export default function Dashboard() {
         >
           <FileText className="w-4 h-4 text-indigo-600" />
           <span>Perizinan Siswa</span>
-          {pendingCount > 0 ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse shadow-xs">
-              {pendingCount} Baru
-            </span>
-          ) : (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 hidden md:inline">
-              2 Modul
-            </span>
-          )}
         </button>
 
         {/* Kategori 3: Tata Tertib & Staf */}
@@ -589,9 +587,6 @@ export default function Dashboard() {
         >
           <ShieldAlert className="w-4 h-4 text-rose-600" />
           <span>Tata Tertib & Staf</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-bold border border-purple-100 hidden md:inline">
-            {isAdmin ? "2 Modul" : "1 Modul"}
-          </span>
         </button>
       </div>
 
@@ -780,25 +775,15 @@ export default function Dashboard() {
         </div>
 
         {/* Tab 6: Buku Catatan Pelanggaran */}
-        <div
-          className={
-            activeTab === "pelanggaran_siswa"
-              ? "p-4 sm:p-6 min-h-[500px]"
-              : "hidden"
-          }
-        >
-          <BukuPelanggaranTab />
-        </div>
+        {activeTab === "pelanggaran_siswa" && (
+          <div className="p-4 sm:p-6 min-h-[500px]">
+            <BukuPelanggaranTab />
+          </div>
+        )}
 
         {/* Tab 7: Manajemen Guru Piket (Khusus Admin) */}
-        {isAdmin && (
-          <div
-            className={
-              activeTab === "manajemen_piket"
-                ? "p-4 sm:p-6 min-h-[500px]"
-                : "hidden"
-            }
-          >
+        {isAdmin && activeTab === "manajemen_piket" && (
+          <div className="p-4 sm:p-6 min-h-[500px]">
             <ManajemenPiketTab />
           </div>
         )}
@@ -868,57 +853,65 @@ export default function Dashboard() {
             endIndex={endIndex}
           />
 
-          {/* Tab 1: Rekap Akumulasi Siswa */}
-          {activeTab === "rekap_siswa" && (
-            <RekapSiswaTab
-              filteredSiswa={filteredSiswa}
-              paginatedSiswa={paginatedSiswa}
-            />
-          )}
+          {loading ? (
+            <div className="p-4 sm:p-6 min-h-[400px]">
+              <SkeletonTable rows={7} cols={6} />
+            </div>
+          ) : (
+            <>
+              {/* Tab 1: Rekap Akumulasi Siswa */}
+              {activeTab === "rekap_siswa" && (
+                <RekapSiswaTab
+                  filteredSiswa={filteredSiswa}
+                  paginatedSiswa={paginatedSiswa}
+                />
+              )}
 
-          {/* Tab 2: Log Detail Presensi Harian */}
-          {activeTab === "riwayat_harian" && (
-            <PresensiHarianTab
-              filteredHarian={filteredHarian}
-              paginatedHarian={paginatedHarian}
-              periodeMode={periodeMode}
-              namaBulanTerpilih={namaBulanTerpilih}
-              selectedTahun={selectedTahun}
-            />
-          )}
+              {/* Tab 2: Log Detail Presensi Harian */}
+              {activeTab === "riwayat_harian" && (
+                <PresensiHarianTab
+                  filteredHarian={filteredHarian}
+                  paginatedHarian={paginatedHarian}
+                  periodeMode={periodeMode}
+                  namaBulanTerpilih={namaBulanTerpilih}
+                  selectedTahun={selectedTahun}
+                />
+              )}
 
-          {/* Tab 3: Log Detail Perpustakaan */}
-          {activeTab === "riwayat_perpus" && (
-            <PerpustakaanTab
-              filteredPerpus={filteredPerpus}
-              paginatedPerpus={paginatedPerpus}
-              periodeMode={periodeMode}
-              namaBulanTerpilih={namaBulanTerpilih}
-              selectedTahun={selectedTahun}
-            />
-          )}
+              {/* Tab 3: Log Detail Perpustakaan */}
+              {activeTab === "riwayat_perpus" && (
+                <PerpustakaanTab
+                  filteredPerpus={filteredPerpus}
+                  paginatedPerpus={paginatedPerpus}
+                  periodeMode={periodeMode}
+                  namaBulanTerpilih={namaBulanTerpilih}
+                  selectedTahun={selectedTahun}
+                />
+              )}
 
-          {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
-          {activeTab === "verifikasi_izin" && (
-            <VerifikasiIzinTab
-              filteredPengajuan={filteredPengajuan}
-              paginatedPengajuan={paginatedPengajuan}
-              statusIzinFilter={statusIzinFilter}
-              verifyingId={verifyingId}
-              onVerifikasi={handleVerifikasi}
-              onOpenRejectModal={(item) => setRejectModalItem(item)}
-              onOpenSuratModal={(item) => setSelectedSuratModal(item)}
-            />
-          )}
+              {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
+              {activeTab === "verifikasi_izin" && (
+                <VerifikasiIzinTab
+                  filteredPengajuan={filteredPengajuan}
+                  paginatedPengajuan={paginatedPengajuan}
+                  statusIzinFilter={statusIzinFilter}
+                  verifyingId={verifyingId}
+                  onVerifikasi={handleVerifikasi}
+                  onOpenRejectModal={(item) => setRejectModalItem(item)}
+                  onOpenSuratModal={(item) => setSelectedSuratModal(item)}
+                />
+              )}
 
-          {/* Tab 5: Izin Meja Piket */}
-          {activeTab === "izin_piket" && (
-            <IzinPiketTab
-              filteredIzinPiket={filteredIzinPiket}
-              paginatedIzinPiket={paginatedIzinPiket}
-              onOpenSlipModal={(item) => setSelectedSlipModal(item)}
-              onDeleteIzin={handleDeleteIzinPiket}
-            />
+              {/* Tab 5: Izin Meja Piket */}
+              {activeTab === "izin_piket" && (
+                <IzinPiketTab
+                  filteredIzinPiket={filteredIzinPiket}
+                  paginatedIzinPiket={paginatedIzinPiket}
+                  onOpenSlipModal={(item) => setSelectedSlipModal(item)}
+                  onDeleteIzin={handleDeleteIzinPiket}
+                />
+              )}
+            </>
           )}
 
           {/* Footer Navigasi Halaman Bawah */}

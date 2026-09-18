@@ -275,32 +275,68 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Right Actions: Role Badge, Logout Button, and Menu Toggle (Ultra-clean across all screen sizes) */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Right Actions: Role Badge, Profile Button, Logout Button, and Menu Toggle */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (
             <>
-              {/* Role Pill Badge */}
+              {/* Tombol Profil Singkat */}
+              <button
+                type="button"
+                onClick={() => {
+                  setProfileInitialTab("profil");
+                  setShowProfileModal(true);
+                }}
+                title="Buka Profil & Pengaturan"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-slate-100/80 hover:bg-slate-200/80 border border-slate-200 rounded-xl transition-all cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+                <span className="hidden sm:inline font-medium">
+                  {user?.nama?.split(" ")[0] || "Profil"}
+                </span>
+              </button>
 
               {/* Tombol Keluar Cepat */}
               <button
                 type="button"
                 onClick={handleLogout}
                 title="Keluar dari akun"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 <span className="hidden sm:inline">Keluar</span>
               </button>
+
+              {/* Tombol Hamburger Toggle Menu */}
+              <button
+                type="button"
+                data-mobile-menu-toggle="true"
+                onClick={() => setMobileMenuOpen((prev) => !prev)}
+                title="Menu Navigasi"
+                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                  mobileMenuOpen
+                    ? "bg-blue-50 border-blue-200 text-blue-600"
+                    : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900"
+                }`}
+                aria-label="Toggle Navigation Menu"
+              >
+                {mobileMenuOpen ? (
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                ) : (
+                  <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
+                )}
+              </button>
             </>
           ) : (
-            <Link
-              to="/login"
-              title="Masuk ke Akun"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs shadow-blue-500/20"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Login</span>
-            </Link>
+            <div className="flex items-center gap-1.5">
+              <Link
+                to="/login"
+                title="Masuk ke Akun"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs shadow-blue-500/20"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Login</span>
+              </Link>
+            </div>
           )}
         </div>
       </div>
