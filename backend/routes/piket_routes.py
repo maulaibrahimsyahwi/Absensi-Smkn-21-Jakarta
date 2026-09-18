@@ -1,6 +1,7 @@
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
-from models import db, Siswa, IzinPiket
+from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa
+from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 
 piket_bp = Blueprint('piket', __name__)
 
@@ -60,9 +61,22 @@ def create_izin_piket():
     if tgl.weekday() in [5, 6]:
         return jsonify({"success": False, "message": "Surat izin piket tidak dapat diterbitkan pada hari Sabtu atau Minggu (hari libur sekolah)."}), 400
 
+    # Validasi tanggal: hanya hari ini dan setelahnya (tidak dapat memilih hari sebelumnya)
+    if tgl < date.today():
+        return jsonify({"success": False, "message": "Surat izin piket hanya dapat diterbitkan untuk hari ini atau setelahnya (tidak dapat memilih tanggal yang telah lewat)."}), 400
+
     if not hari:
         nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
         hari = nama_hari[tgl.weekday()]
+
+    tanda_tangan_petugas = data.get('tanda_tangan_petugas')
+    tanda_tangan_siswa = data.get('tanda_tangan_siswa')
+
+    if not tanda_tangan_petugas:
+        return jsonify({
+            "success": False,
+            "message": "Guru Piket wajib menyertakan tanda tangan digital sebelum menerbitkan surat izin."
+        }), 400
 
     try:
         baru = IzinPiket(
@@ -72,9 +86,24 @@ def create_izin_piket():
             tipe=tipe,
             jam_ke=jam_ke,
             alasan=alasan,
-            petugas_piket=petugas_piket
+            petugas_piket=petugas_piket,
+            tanda_tangan_petugas=tanda_tangan_petugas,
+            tanda_tangan_siswa=tanda_tangan_siswa
         )
         db.session.add(baru)
+
+        # Jika tipe izin adalah "Izin Masuk" (terlambat), otomatis catat ke Buku Saku Pelanggaran Siswa (+5 poin)
+        if tipe == "Izin Masuk":
+            waktu_izin = datetime.combine(tgl, datetime.now().time())
+            catat_pelanggaran_terlambat(
+                siswa=siswa,
+                waktu=waktu_izin,
+                sumber="Meja Guru Piket (Surat Izin Masuk)",
+                petugas=petugas_piket or "Guru Piket SMKN 21",
+                alasan=alasan or f"Terlambat hadir di sekolah (Jam ke-{jam_ke or '-'})",
+                tanda_tangan_siswa=tanda_tangan_siswa
+            )
+
         db.session.commit()
         return jsonify({
             "success": True,
@@ -124,5 +153,56 @@ def delete_izin_piket(id):
         return jsonify({"success": True, "message": "Surat izin piket berhasil dihapus."})
     except Exception as e:
         db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@piket_bp.route('/api/piket/summary_today', methods=['GET'])
+def get_piket_summary_today():
+    """
+    Mengambil ringkasan data operasional hari ini untuk Beranda Guru Piket.
+    """
+    today = date.today()
+    try:
+        # 1. Izin Piket Hari Ini
+        izin_hari_ini = IzinPiket.query.filter(IzinPiket.tanggal == today).all()
+        total_izin = len(izin_hari_ini)
+        izin_masuk = sum(1 for i in izin_hari_ini if i.tipe == "Izin Masuk")
+        izin_keluar = sum(1 for i in izin_hari_ini if i.tipe == "Izin Meninggalkan Kelas")
+
+        # 2. Siswa Terlambat Hari Ini (dari AbsensiHarian & Izin Masuk)
+        terlambat_presensi = AbsensiHarian.query.filter(
+            db.func.date(AbsensiHarian.waktu) == today,
+            AbsensiHarian.status == 'Terlambat'
+        ).count()
+        total_terlambat = max(terlambat_presensi, izin_masuk)
+
+        # 3. Pengajuan Izin Siswa Online yang Menunggu Verifikasi
+        izin_menunggu = PengajuanIzin.query.filter(PengajuanIzin.status_pengajuan == 'Menunggu').count()
+
+        # 4. Pelanggaran Siswa Tercatat Hari Ini
+        pelanggaran_today = PelanggaranSiswa.query.filter(
+            db.func.date(PelanggaranSiswa.tanggal_waktu) == today
+        ).count()
+
+        # 5. Daftar 6 surat izin piket terbaru hari ini
+        recent_records = IzinPiket.query.join(Siswa, IzinPiket.siswa_id == Siswa.id)\
+            .filter(IzinPiket.tanggal == today)\
+            .order_by(IzinPiket.created_at.desc())\
+            .limit(6).all()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "tanggal": today.strftime("%Y-%m-%d"),
+                "total_izin_hari_ini": total_izin,
+                "izin_masuk_hari_ini": izin_masuk,
+                "izin_keluar_hari_ini": izin_keluar,
+                "total_terlambat_hari_ini": total_terlambat,
+                "pengajuan_izin_menunggu": izin_menunggu,
+                "pelanggaran_hari_ini": pelanggaran_today,
+                "recent_izin": [r.to_dict() for r in recent_records]
+            }
+        })
+    except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 

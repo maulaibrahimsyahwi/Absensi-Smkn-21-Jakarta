@@ -17,8 +17,10 @@ import {
   Navigation,
   AlertTriangle,
   RefreshCw,
+  GraduationCap,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
+import { useAuth } from "../context/AuthContext";
 import {
   SMKN21_COORDINATES,
   calculateDistanceMeters,
@@ -27,6 +29,14 @@ import {
 } from "../utils/geoUtils";
 
 export default function AbsensiHarian() {
+  const { user, isSiswa, isPiket, isAdmin } = useAuth();
+  const backTarget = isPiket
+    ? "/portal-piket"
+    : isAdmin
+      ? "/portal-admin"
+      : isSiswa
+        ? "/portal-siswa"
+        : "/";
   const webcamRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -35,10 +45,30 @@ export default function AbsensiHarian() {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [isLiveVerified, setIsLiveVerified] = useState(false);
   const [eyeState, setEyeState] = useState("UNKNOWN");
+  const [attendanceToday, setAttendanceToday] = useState(null);
   const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
   const canvasRef = useRef(null);
   const baselineOpenScoreRef = useRef(null);
   const openSamplesRef = useRef([]);
+
+  // Pengecekan Presensi Hari Ini: Jika siswa sudah absen hari ini, cegah absen berulang
+  useEffect(() => {
+    const checkTodayAttendance = async () => {
+      if (isSiswa && user?.id) {
+        try {
+          const res = await api.get("/presensi/status_today", {
+            params: { siswa_id: user.id },
+          });
+          if (res.data?.already_attended) {
+            setAttendanceToday(res.data);
+          }
+        } catch (err) {
+          // Lanjutkan jika ada kendala jaringan sesaat
+        }
+      }
+    };
+    checkTodayAttendance();
+  }, [isSiswa, user]);
 
   // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
   useEffect(() => {
@@ -258,14 +288,27 @@ export default function AbsensiHarian() {
     } catch (err) {
       // Abaikan kendala jaringan sesaat selama polling cepat
     }
-  }, [loading, result, isGpsValid, isLiveVerified, getLightweightFrame]);
+  }, [
+    loading,
+    result,
+    isGpsValid,
+    isLiveVerified,
+    attendanceToday,
+    getLightweightFrame,
+  ]);
 
   // Polling deteksi keaktifan cepat (~120ms jeda) agar kedipan 150-250ms pasti tertangkap
   useEffect(() => {
     let isMounted = true;
     let timerId = null;
 
-    if (loading || result || !isGpsValid || isLiveVerified) {
+    if (
+      loading ||
+      result ||
+      !isGpsValid ||
+      isLiveVerified ||
+      attendanceToday?.already_attended
+    ) {
       if (!isLiveVerified) {
         setIsFaceDetected(false);
         setEyeState("UNKNOWN");
@@ -278,10 +321,16 @@ export default function AbsensiHarian() {
 
     const runLivenessLoop = async () => {
       if (!isMounted) return;
-      if (!loading && !result && isGpsValid && !isLiveVerified) {
+      if (
+        !loading &&
+        !result &&
+        isGpsValid &&
+        !isLiveVerified &&
+        !attendanceToday?.already_attended
+      ) {
         await checkLiveness();
       }
-      if (isMounted && !isLiveVerified) {
+      if (isMounted && !isLiveVerified && !attendanceToday?.already_attended) {
         timerId = setTimeout(runLivenessLoop, 120);
       }
     };
@@ -292,10 +341,18 @@ export default function AbsensiHarian() {
       isMounted = false;
       if (timerId) clearTimeout(timerId);
     };
-  }, [loading, result, isGpsValid, isLiveVerified, checkLiveness]);
+  }, [
+    loading,
+    result,
+    isGpsValid,
+    isLiveVerified,
+    attendanceToday,
+    checkLiveness,
+  ]);
 
   const captureAndVerify = useCallback(async () => {
     if (!isGpsValid) return;
+    if (attendanceToday?.already_attended) return;
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) {
@@ -311,7 +368,7 @@ export default function AbsensiHarian() {
     setResult(null);
 
     try {
-      const response = await api.post("/verify_harian", {
+      const payload = {
         image: imageSrc,
         latitude: geoState.latitude,
         longitude: geoState.longitude,
@@ -319,8 +376,28 @@ export default function AbsensiHarian() {
         distance: geoState.distanceMeters,
         simulated: geoState.simulated,
         is_mock: geoState.isMock || false,
-      });
+      };
+
+      // Jika presensi mandiri oleh siswa yang login, kunci pencocokan HANYA ke wajah siswa tersebut
+      if (isSiswa && user?.id) {
+        payload.expected_siswa_id = user.id;
+      }
+
+      const response = await api.post("/verify_harian", payload);
       setResult({ success: true, message: response.data.message });
+
+      // Jika siswa mandiri, langsung tandai sudah absen hari ini
+      if (isSiswa) {
+        setAttendanceToday({
+          already_attended: true,
+          data: {
+            waktu: new Date().toLocaleTimeString("id-ID"),
+            status: "Hadir",
+            nama: user?.nama,
+          },
+        });
+      }
+
       // Setelah berhasil, beri waktu 3 detik agar terbaca, lalu otomatis siap untuk siswa berikutnya
       setTimeout(() => {
         setResult(null);
@@ -333,6 +410,16 @@ export default function AbsensiHarian() {
         openSamplesRef.current = [];
       }, 3000);
     } catch (err) {
+      if (err.response?.data?.already_attended) {
+        setAttendanceToday({
+          already_attended: true,
+          data: {
+            waktu: err.response.data.waktu || "-",
+            status: err.response.data.status || "Hadir",
+            nama: user?.nama,
+          },
+        });
+      }
       setResult({
         success: false,
         message:
@@ -348,15 +435,21 @@ export default function AbsensiHarian() {
         blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
         baselineOpenScoreRef.current = null;
         openSamplesRef.current = [];
-      }, 3000);
+      }, 3500);
     } finally {
       setLoading(false);
     }
-  }, [webcamRef, isGpsValid, geoState]);
+  }, [webcamRef, isGpsValid, geoState, isSiswa, user, attendanceToday]);
 
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
   useEffect(() => {
-    if (loading || result || !isGpsValid || !isLiveVerified) {
+    if (
+      loading ||
+      result ||
+      !isGpsValid ||
+      !isLiveVerified ||
+      attendanceToday?.already_attended
+    ) {
       if (!isLiveVerified) setCountdown(3);
       return;
     }
@@ -377,8 +470,44 @@ export default function AbsensiHarian() {
     loading,
     result,
     isGpsValid,
+    attendanceToday,
     captureAndVerify,
   ]);
+
+  // Siswa Alumni: Blokir akses ke presensi harian mandiri
+  if (isSiswa && user?.status === "Alumni") {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-slate-800/90 backdrop-blur-md border border-slate-700/80 rounded-3xl p-6 sm:p-8 text-center shadow-2xl space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-inner">
+            <GraduationCap className="w-8 h-8" />
+          </div>
+          <div>
+            <span className="inline-block px-3 py-1 bg-amber-500/20 text-amber-300 text-xs font-bold rounded-full uppercase tracking-wider mb-2 border border-amber-500/30">
+              Status: Alumni / Lulus
+            </span>
+            <h2 className="text-xl font-bold text-white">
+              Akses Presensi Tidak Tersedia
+            </h2>
+            <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+              Halo, <strong>{user?.nama}</strong>. Akun Anda telah resmi
+              berstatus sebagai Alumni SMKN 21 Jakarta. Siswa yang telah lulus
+              tidak lagi memiliki kewajiban presensi harian sekolah.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              to={"/portal-alumni"}
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Kembali ke Portal Alumni
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none">
@@ -411,15 +540,16 @@ export default function AbsensiHarian() {
       {/* 4. Top Floating Bar */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
         <Link
-          to="/"
+          to={backTarget}
           title="Kembali ke Beranda"
           aria-label="Kembali ke Beranda"
-          className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
         >
           <ArrowLeft
-            className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
+            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-0.5"
             strokeWidth={2.5}
           />
+          <span className="hidden sm:inline">Kembali</span>
         </Link>
 
         {/* GPS Geofence Pill */}
@@ -496,6 +626,57 @@ export default function AbsensiHarian() {
                 {result.message}
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overlay: Siswa Sudah Melakukan Presensi Hari Ini (1x Per Hari) */}
+      {attendanceToday?.already_attended && (
+        <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+          <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mb-5 shadow-xl shadow-emerald-950/50">
+            <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12" />
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold uppercase tracking-wider mb-2">
+            <span>Sudah Presensi Hari Ini</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-1">
+            Halo, {user?.nama || "Siswa SMKN 21"}!
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
+            Anda sudah tercatat melakukan presensi kehadiran harian untuk hari
+            ini. Presensi mandiri dibatasi 1 kali per hari demi ketertiban
+            absensi sekolah.
+          </p>
+
+          <div className="bg-white/10 border border-white/15 rounded-2xl p-4 w-full max-w-sm mb-6 text-left space-y-2 backdrop-blur-md">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Jam Presensi</span>
+              <span className="font-bold text-white font-mono">
+                {attendanceToday.data?.waktu || "-"} WIB
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Status Kehadiran</span>
+              <span className="font-bold px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 border border-emerald-400/30 text-[11px]">
+                {attendanceToday.data?.status || "Hadir"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Siswa / Kelas</span>
+              <span className="font-bold text-white">
+                {user?.nama || attendanceToday.data?.nama}{" "}
+                {user?.kelas ? `(${user.kelas})` : ""}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full max-w-sm">
+            <Link
+              to={backTarget}
+              className="w-full py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Kembali</span>
+            </Link>
           </div>
         </div>
       )}
@@ -585,7 +766,7 @@ export default function AbsensiHarian() {
             </Link>
 
             <Link
-              to="/"
+              to={backTarget}
               className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs sm:text-sm transition-all border border-white/10"
             >
               Kembali

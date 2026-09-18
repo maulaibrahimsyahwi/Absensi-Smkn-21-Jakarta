@@ -155,7 +155,6 @@ export default function CustomDropdown({
         } ${isOpen ? "ring-2 ring-blue-500/20 border-blue-500 bg-blue-50/20" : ""} ${buttonClassName}`}
       >
         <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
-          {icon && <span className="flex-shrink-0">{icon}</span>}
           <span className="truncate">{displayLabel}</span>
         </div>
         <ChevronDown
@@ -221,9 +220,6 @@ export default function CustomDropdown({
                             </span>
                           )}
                         </div>
-                        {isSelected && (
-                          <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />
-                        )}
                       </button>
                     );
                   })

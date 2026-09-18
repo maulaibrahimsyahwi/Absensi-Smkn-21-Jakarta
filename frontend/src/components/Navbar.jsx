@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   School,
-  Clock,
-  Calendar,
   BarChart3,
   Home,
   UserPlus,
@@ -12,13 +10,27 @@ import {
   Menu,
   X,
   ChevronRight,
+  LogOut,
+  LogIn,
+  GraduationCap,
+  ShieldCheck,
+  ShieldAlert,
+  Camera,
+  User,
+  KeyRound,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import ProfileModal from "./ProfileModal";
 
 export default function Navbar() {
   const location = useLocation();
-  const [timeStr, setTimeStr] = useState("");
-  const [dateStr, setDateStr] = useState("");
+  const navigate = useNavigate();
+  const { user, role, isAuthenticated, isAdmin, isPiket, isSiswa, logout } =
+    useAuth();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileInitialTab, setProfileInitialTab] = useState("profil");
   const mobileMenuRef = useRef(null);
 
   // Close mobile menu on route change
@@ -44,91 +56,206 @@ export default function Navbar() {
     }
   }, [mobileMenuOpen]);
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setTimeStr(
-        now.toLocaleTimeString("id-ID", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }) + " WIB",
-      );
-      setDateStr(
-        now.toLocaleDateString("id-ID", {
-          weekday: "long",
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        }),
-      );
-    };
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   const isHome = location.pathname === "/";
   const isDashboard = location.pathname === "/dashboard";
   const isRegistrasi = location.pathname === "/registrasi";
   const isIzin = location.pathname === "/izin";
-  const isPiket = location.pathname === "/piket";
+  const isPiketPath = location.pathname === "/piket";
+  const isHarian = location.pathname === "/harian";
+  const isPortalSiswa = location.pathname === "/portal-siswa";
+  const isPortalPiket = location.pathname === "/portal-piket";
+  const isPelanggaran = location.pathname === "/pelanggaran";
 
-  const navItems = [
-    {
-      to: "/",
-      label: "Beranda",
-      shortLabel: "Beranda",
-      desc: "Menu utama sistem presensi",
-      icon: <Home className="w-4 h-4" />,
-      active: isHome,
-      color: "blue",
-    },
-    {
-      to: "/piket",
-      label: "Meja Guru Piket",
-      shortLabel: "Meja Piket",
-      desc: "Penerbitan surat izin masuk & keluar",
-      icon: <ClipboardCheck className="w-4 h-4" />,
-      active: isPiket,
-      color: "blue",
-    },
-    {
-      to: "/izin",
-      label: "Surat Izin / Sakit",
-      shortLabel: "Surat Izin",
-      desc: "Portal mandiri pengajuan izin siswa",
-      icon: <FileText className="w-4 h-4" />,
-      active: isIzin,
-      color: "rose",
-    },
-    {
-      to: "/registrasi",
-      label: "Data & Wajah Siswa",
-      shortLabel: "Daftar Wajah",
-      desc: "Registrasi biometrik & manajemen siswa",
-      icon: <UserPlus className="w-4 h-4" />,
-      active: isRegistrasi,
-      color: "indigo",
-    },
-    {
-      to: "/dashboard",
-      label: "Dashboard Rekap",
-      shortLabel: "Dashboard",
-      desc: "Rekapitulasi kehadiran & perpustakaan",
-      icon: <BarChart3 className="w-4 h-4" />,
-      active: isDashboard,
-      color: "blue",
-    },
-  ];
+  // Konfigurasi Nav Items Dinamis Berdasarkan Role
+  let navItems = [];
+
+  if (!isAuthenticated) {
+    // Pengunjung / Tamu yang Belum Login: TIDAK menampilkan modul operasional sekolah
+    navItems = [];
+  } else if (isSiswa) {
+    const isAlumni = user?.status === "Alumni";
+    if (isAlumni) {
+      // Siswa yang sudah berstatus Alumni / Lulus
+      navItems = [
+        {
+          to: "/portal-siswa",
+          label: "Portal Alumni",
+          shortLabel: "Beranda Alumni",
+          desc: "Rekap kelulusan & riwayat pribadi",
+          icon: <GraduationCap className="w-4 h-4" />,
+          active: isPortalSiswa,
+          color: "amber",
+        },
+      ];
+    } else {
+      // Siswa SMKN 21 Aktif (Portal, Absen Mandiri, Izin, dan Catat Pelanggaran)
+      navItems = [
+        {
+          to: "/portal-siswa",
+          label: "Portal Siswa",
+          shortLabel: "Beranda",
+          desc: "Rekap, tanda tangan & riwayat pribadi",
+          icon: <GraduationCap className="w-4 h-4" />,
+          active: isPortalSiswa,
+          color: "blue",
+        },
+        {
+          to: "/harian",
+          label: "Presensi Mandiri",
+          shortLabel: "Absen",
+          desc: "Scan wajah & GPS sekolah",
+          icon: <Camera className="w-4 h-4" />,
+          active: isHarian,
+          color: "emerald",
+        },
+        {
+          to: "/izin",
+          label: "Pengajuan Izin",
+          shortLabel: "Surat Izin",
+          desc: "Kirim surat izin sakit / keperluan",
+          icon: <FileText className="w-4 h-4" />,
+          active: isIzin,
+          color: "rose",
+        },
+        {
+          to: "/pelanggaran",
+          label: "Catat Pelanggaran",
+          shortLabel: "Pelanggaran",
+          desc: "Buku saku catatan pelanggaran",
+          icon: <ShieldAlert className="w-4 h-4" />,
+          active: isPelanggaran,
+          color: "rose",
+        },
+      ];
+    }
+  } else if (isPiket) {
+    // Guru Piket
+    navItems = [
+      {
+        to: "/portal-piket",
+        label: "Beranda Guru Piket",
+        shortLabel: "Beranda",
+        desc: "Ringkasan tugas, profil & status piket",
+        icon: <Home className="w-4 h-4" />,
+        active: isPortalPiket,
+        color: "blue",
+      },
+      {
+        to: "/piket",
+        label: "Meja Guru Piket",
+        shortLabel: "Meja Piket",
+        desc: "Penerbitan surat izin masuk & keluar",
+        icon: <ClipboardCheck className="w-4 h-4" />,
+        active: isPiketPath,
+        color: "blue",
+      },
+      {
+        to: "/pelanggaran",
+        label: "Catat Pelanggaran",
+        shortLabel: "Pelanggaran",
+        desc: "Catat pelanggaran siswa yang ditegur",
+        icon: <ShieldAlert className="w-4 h-4" />,
+        active: isPelanggaran,
+        color: "rose",
+      },
+      {
+        to: "/dashboard",
+        label: "Dashboard Piket",
+        shortLabel: "Dashboard",
+        desc: "Verifikasi izin & rekapitulasi piket",
+        icon: <BarChart3 className="w-4 h-4" />,
+        active: isDashboard,
+        color: "blue",
+      },
+      {
+        to: "/harian",
+        label: "Absensi Backup Kiosk",
+        shortLabel: "Absensi Siswa",
+        desc: "Scan siswa yang lupa bawa HP",
+        icon: <Camera className="w-4 h-4" />,
+        active: isHarian,
+        color: "emerald",
+      },
+    ];
+  } else {
+    // Admin Sekolah (Akses Penuh)
+    navItems = [
+      {
+        to: "/portal-admin",
+        label: "Beranda Admin",
+        shortLabel: "Beranda",
+        desc: "Ringkasan statistik & pusat manajemen",
+        icon: <Home className="w-4 h-4" />,
+        active: location.pathname === "/portal-admin",
+        color: "purple",
+      },
+      {
+        to: "/piket",
+        label: "Meja Guru Piket",
+        shortLabel: "Meja Piket",
+        desc: "Penerbitan surat izin masuk & keluar",
+        icon: <ClipboardCheck className="w-4 h-4" />,
+        active: isPiketPath,
+        color: "blue",
+      },
+      {
+        to: "/pelanggaran",
+        label: "Catat Pelanggaran",
+        shortLabel: "Pelanggaran",
+        desc: "Buku catatan pelanggaran siswa",
+        icon: <ShieldAlert className="w-4 h-4" />,
+        active: isPelanggaran,
+        color: "rose",
+      },
+      {
+        to: "/izin",
+        label: "Surat Izin / Sakit",
+        shortLabel: "Surat Izin",
+        desc: "Portal mandiri pengajuan izin siswa",
+        icon: <FileText className="w-4 h-4" />,
+        active: isIzin,
+        color: "rose",
+      },
+      {
+        to: "/registrasi",
+        label: "Data & Wajah Siswa",
+        shortLabel: "Data Siswa",
+        desc: "Registrasi biometrik & manajemen siswa",
+        icon: <UserPlus className="w-4 h-4" />,
+        active: isRegistrasi,
+        color: "indigo",
+      },
+      {
+        to: "/dashboard",
+        label: "Dashboard Rekap",
+        shortLabel: "Dashboard",
+        desc: "Rekapitulasi kehadiran & perpustakaan",
+        icon: <BarChart3 className="w-4 h-4" />,
+        active: isDashboard,
+        color: "blue",
+      },
+    ];
+  }
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
       <div className="max-w-6xl mx-auto px-3.5 sm:px-6 h-16 flex items-center justify-between gap-2">
         {/* Brand */}
         <Link
-          to="/"
+          to={
+            isSiswa
+              ? "/portal-siswa"
+              : isPiket
+                ? "/portal-piket"
+                : isAdmin
+                  ? "/portal-admin"
+                  : "/"
+          }
           className="flex items-center gap-2 sm:gap-3 group min-w-0 flex-shrink-0"
         >
           <div className="w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
@@ -141,175 +268,174 @@ export default function Navbar() {
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block truncate">
-              Sistem Presensi & Perpustakaan
+              {isAuthenticated
+                ? `${user?.nama || user?.username}${user?.kelas ? ` • ${user.kelas}` : ""}`
+                : "Sistem Presensi SMKN 21 Jakarta"}
             </p>
           </div>
         </Link>
 
-        {/* Live Clock & Status (Desktop >= md) */}
-        <div className="hidden lg:flex items-center gap-4 bg-slate-50 border border-slate-200/70 rounded-full px-4 py-1.5 text-xs text-slate-600">
-          <div className="flex items-center gap-1.5 font-medium">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <span>{dateStr || "Memuat tanggal..."}</span>
-          </div>
-          <span className="text-slate-300">•</span>
-          <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-            <Clock className="w-3.5 h-3.5 text-blue-600" />
-            <span>{timeStr || "00:00:00 WIB"}</span>
-          </div>
-        </div>
+        {/* Right Actions: Role Badge, Logout Button, and Menu Toggle (Ultra-clean across all screen sizes) */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isAuthenticated ? (
+            <>
+              {/* Role Pill Badge */}
 
-        {/* Navigation Actions (Desktop >= md) */}
-        <div className="hidden md:flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-          {!isHome && (
+              {/* Tombol Keluar Cepat */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Keluar dari akun"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">Keluar</span>
+              </button>
+            </>
+          ) : (
             <Link
-              to="/"
-              title="Beranda"
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+              to="/login"
+              title="Masuk ke Akun"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs shadow-blue-500/20"
             >
-              <Home className="w-4 h-4" />
-              <span>Beranda</span>
+              <LogIn className="w-4 h-4" />
+              <span>Login</span>
             </Link>
           )}
-          <Link
-            to="/piket"
-            title="Meja Guru Piket (Surat Masuk/Keluar Kelas)"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors ${
-              isPiket
-                ? "bg-blue-600 text-white shadow-xs shadow-blue-500/30"
-                : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            <span>Meja Piket</span>
-          </Link>
-          <Link
-            to="/izin"
-            title="Pengajuan Surat Izin / Sakit"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors ${
-              isIzin
-                ? "bg-rose-600 text-white shadow-xs shadow-rose-500/30"
-                : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Surat Izin/Sakit</span>
-          </Link>
-          <Link
-            to="/registrasi"
-            title="Daftar & Database Wajah Siswa"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors ${
-              isRegistrasi
-                ? "bg-indigo-600 text-white shadow-xs shadow-indigo-500/30"
-                : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
-            }`}
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Daftar Wajah</span>
-          </Link>
-          <Link
-            to="/dashboard"
-            title="Dashboard Rekapitulasi Presensi"
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl transition-colors ${
-              isDashboard
-                ? "bg-blue-600 text-white shadow-xs shadow-blue-500/30"
-                : "text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200"
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Dashboard Rekap</span>
-          </Link>
-        </div>
-
-        {/* Mobile Actions: Current Active Pill & Hamburger Button (< md) */}
-        <div className="flex md:hidden items-center gap-1.5">
-          <button
-            type="button"
-            data-mobile-menu-toggle="true"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label={
-              mobileMenuOpen ? "Tutup menu navigasi" : "Buka menu navigasi"
-            }
-            aria-expanded={mobileMenuOpen}
-            className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center ${
-              mobileMenuOpen
-                ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
-            }`}
-          >
-            {mobileMenuOpen ? (
-              <X className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
-          </button>
         </div>
       </div>
 
-      {/* Mobile Navigation Dropdown Drawer (< md) */}
+      {/* Navigation Dropdown Menu (Konsisten untuk Mobile, Tablet & Laptop/Desktop) */}
       {mobileMenuOpen && (
         <div
           ref={mobileMenuRef}
-          className="md:hidden border-t border-slate-200/80 bg-white shadow-xl animate-in slide-in-from-top-2 duration-150 px-4 py-3.5 space-y-1.5"
+          className="absolute right-3 sm:right-6 top-16 w-[calc(100vw-1.5rem)] max-w-sm rounded-2xl bg-white border border-slate-200 shadow-2xl p-3 sm:p-4 space-y-2 z-50 animate-in fade-in zoom-in-95 duration-150"
         >
-          {/* Header Mobile Info (Tanggal & Jam) */}
-          <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl mb-2 text-xs text-slate-600">
-            <span className="font-medium text-[11px] text-slate-500 truncate">
-              {dateStr || "SMKN 21 Jakarta"}
-            </span>
-            <span className="font-bold text-blue-600 text-xs whitespace-nowrap">
-              {timeStr || "00:00 WIB"}
+          {/* Header Info Akun */}
+          <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
+            <div className="min-w-0 pr-2">
+              <p className="font-bold text-slate-800 truncate">
+                {isAuthenticated
+                  ? user?.nama || user?.username
+                  : "SMKN 21 Jakarta"}
+              </p>
+              <p className="text-[11px] text-slate-500 truncate">
+                {isAuthenticated
+                  ? user?.kelas
+                    ? `Kelas ${user.kelas}`
+                    : isAdmin
+                      ? "Administrator Sekolah"
+                      : isPiket
+                        ? "Petugas Guru Piket"
+                        : "Pengguna"
+                  : "Sistem Presensi Terpadu"}
+              </p>
+            </div>
+            <span
+              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase flex-shrink-0 ${
+                isAdmin
+                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                  : isPiket
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : user?.status === "Alumni"
+                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+              }`}
+            >
+              {isAdmin
+                ? "Admin"
+                : isPiket
+                  ? "Piket"
+                  : user?.status === "Alumni"
+                    ? "Alumni"
+                    : "Siswa"}
             </span>
           </div>
 
           {/* Menu Items List */}
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileMenuOpen(false)}
-              className={`flex items-center justify-between p-3 rounded-xl transition-all ${
-                item.active
-                  ? item.color === "rose"
-                    ? "bg-rose-50 text-rose-800 border border-rose-200 font-bold"
-                    : item.color === "indigo"
-                      ? "bg-indigo-50 text-indigo-800 border border-indigo-200 font-bold"
-                      : "bg-blue-50 text-blue-800 border border-blue-200 font-bold"
-                  : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-transparent font-medium"
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                    item.active
-                      ? item.color === "rose"
-                        ? "bg-rose-600 text-white"
-                        : item.color === "indigo"
-                          ? "bg-indigo-600 text-white"
-                          : "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {item.icon}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold leading-tight truncate">
-                    {item.label}
-                  </p>
-                  <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                    {item.desc}
-                  </p>
-                </div>
-              </div>
-              <ChevronRight
-                className={`w-4 h-4 flex-shrink-0 ${
-                  item.active ? "text-blue-600" : "text-slate-300"
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100 space-y-1">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`flex items-center justify-between p-2.5 rounded-xl transition-all ${
+                  item.active
+                    ? "bg-blue-50 text-blue-800 border border-blue-200 font-bold"
+                    : "text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-transparent font-medium"
                 }`}
-              />
-            </Link>
-          ))}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      item.active
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {item.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold leading-tight truncate">
+                      {item.label}
+                    </p>
+                    <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                      {item.desc}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight
+                  className={`w-4 h-4 flex-shrink-0 ${item.active ? "text-blue-600" : "text-slate-300"}`}
+                />
+              </Link>
+            ))}
+          </div>
+
+          {/* User Profile & Logout Action Buttons */}
+          {isAuthenticated && (
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setProfileInitialTab("profil");
+                  setShowProfileModal(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-slate-700 bg-slate-100 hover:bg-slate-200 text-xs font-bold transition-all cursor-pointer border border-slate-200"
+              >
+                {user?.foto_profil ? (
+                  <img
+                    src={user.foto_profil}
+                    alt={user?.nama || "Profil"}
+                    className="w-5 h-5 rounded-md object-cover border border-slate-300"
+                  />
+                ) : (
+                  <User className="w-4 h-4 text-blue-600" />
+                )}
+                <span>Profil Pengguna & Pengaturan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleLogout();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Keluar Akun ({user?.nama})</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Profile & Settings Modal */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        initialTab={profileInitialTab}
+      />
     </header>
   );
 }

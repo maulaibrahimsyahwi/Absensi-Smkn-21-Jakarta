@@ -9,4 +9,21 @@ const api = axios.create({
   timeout: 30000,
 });
 
+// Otomatis sertakan header identitas pengguna jika sudah login
+api.interceptors.request.use((config) => {
+  try {
+    const saved = localStorage.getItem("smkn21_auth_user");
+    if (saved) {
+      const user = JSON.parse(saved);
+      if (user) {
+        config.headers["X-User-Role"] = user.role;
+        config.headers["X-User-Id"] = user.id;
+      }
+    }
+  } catch (e) {
+    // Ignore JSON parse error
+  }
+  return config;
+});
+
 export default api;

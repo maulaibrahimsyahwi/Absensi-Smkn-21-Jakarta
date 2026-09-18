@@ -7,6 +7,8 @@ import {
 } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import Navbar from "./components/Navbar";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 // Lazy-loaded page components for route-level code splitting
 const Home = React.lazy(() => import("./pages/Home"));
@@ -16,6 +18,11 @@ const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const RegistrasiSiswa = React.lazy(() => import("./pages/RegistrasiSiswa"));
 const PengajuanIzin = React.lazy(() => import("./pages/PengajuanIzin"));
 const GuruPiket = React.lazy(() => import("./pages/GuruPiket"));
+const Login = React.lazy(() => import("./pages/Login"));
+const PortalSiswa = React.lazy(() => import("./pages/PortalSiswa"));
+const PortalPiket = React.lazy(() => import("./pages/PortalPiket"));
+const PortalAdmin = React.lazy(() => import("./pages/PortalAdmin"));
+const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
 
 // Shared loading fallback shown while lazy chunks are being fetched
 function PageLoader() {
@@ -52,13 +59,101 @@ function AppLayout() {
       >
         <Suspense fallback={<PageLoader />}>
           <Routes>
+            {/* Rute Publik Terbatas */}
             <Route path="/" element={<Home />} />
-            <Route path="/harian" element={<AbsensiHarian />} />
-            <Route path="/perpus" element={<AbsensiPerpus />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/registrasi" element={<RegistrasiSiswa />} />
-            <Route path="/izin" element={<PengajuanIzin />} />
-            <Route path="/piket" element={<GuruPiket />} />
+            <Route path="/login" element={<Login />} />
+
+            {/* Rute Presensi & Perpustakaan (Wajib Login: Siswa, Piket, Admin) */}
+            <Route
+              path="/harian"
+              element={
+                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                  <AbsensiHarian />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perpus"
+              element={
+                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                  <AbsensiPerpus />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Rute Terproteksi Khusus Siswa & Admin */}
+            <Route
+              path="/portal-siswa"
+              element={
+                <ProtectedRoute allowedRoles={["siswa", "admin"]}>
+                  <PortalSiswa />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Rute Terproteksi Pengajuan Izin (Siswa, Piket, Admin) */}
+            <Route
+              path="/izin"
+              element={
+                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                  <PengajuanIzin />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Rute Buku Catatan Pelanggaran Siswa (Siswa, Piket, Admin) */}
+            <Route
+              path="/pelanggaran"
+              element={
+                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                  <CatatPelanggaran />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Rute Terproteksi Guru Piket & Admin */}
+            <Route
+              path="/portal-piket"
+              element={
+                <ProtectedRoute allowedRoles={["piket", "admin"]}>
+                  <PortalPiket />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/piket"
+              element={
+                <ProtectedRoute allowedRoles={["piket", "admin"]}>
+                  <GuruPiket />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["admin", "piket"]}>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Rute Terproteksi KHUSUS ADMIN (Manajemen Data & Biometrik Seluruh Siswa) */}
+            <Route
+              path="/portal-admin"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <PortalAdmin />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/registrasi"
+              element={
+                <ProtectedRoute allowedRoles={["admin"]}>
+                  <RegistrasiSiswa />
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Suspense>
       </main>
@@ -80,7 +175,9 @@ function AppLayout() {
 export default function App() {
   return (
     <Router>
-      <AppLayout />
+      <AuthProvider>
+        <AppLayout />
+      </AuthProvider>
     </Router>
   );
 }

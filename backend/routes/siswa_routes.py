@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify
+from datetime import datetime
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
 from utils.helpers import validate_siswa_input
 
@@ -71,6 +72,10 @@ def update_siswa(id):
         siswa.kelas = kelas
         if status_input and status_input in ["Aktif", "Alumni"]:
             siswa.status = status_input
+            if status_input == "Alumni" and not siswa.tanggal_lulus:
+                siswa.tanggal_lulus = datetime.now()
+            elif status_input == "Aktif":
+                siswa.tanggal_lulus = None
         db.session.commit()
         return jsonify({"success": True, "message": f"Data {siswa.nama} berhasil diperbarui", "siswa": siswa.to_dict()})
     except Exception as e:
@@ -89,6 +94,10 @@ def update_siswa_status(id):
         return jsonify({"success": False, "message": "Status harus 'Aktif' atau 'Alumni'"}), 400
     try:
         siswa.status = new_status
+        if new_status == "Alumni" and not siswa.tanggal_lulus:
+            siswa.tanggal_lulus = datetime.now()
+        elif new_status == "Aktif":
+            siswa.tanggal_lulus = None
         db.session.commit()
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
@@ -113,11 +122,16 @@ def bulk_update_siswa_status():
         return jsonify({"success": False, "message": "Status harus 'Aktif' atau 'Alumni'"}), 400
 
     try:
-        updated_count = Siswa.query.filter(Siswa.id.in_(siswa_ids)).update(
-            {"status": new_status},
-            synchronize_session=False
-        )
+        now = datetime.now()
+        target_records = Siswa.query.filter(Siswa.id.in_(siswa_ids)).all()
+        for s in target_records:
+            s.status = new_status
+            if new_status == "Alumni" and not s.tanggal_lulus:
+                s.tanggal_lulus = now
+            elif new_status == "Aktif":
+                s.tanggal_lulus = None
         db.session.commit()
+        updated_count = len(target_records)
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
             "success": True,
@@ -150,8 +164,11 @@ def luluskan_tingkat():
                 "message": f"Tidak ditemukan siswa aktif di tingkat {tingkat}."
             })
             
+        now = datetime.now()
         for s in target_siswa:
             s.status = "Alumni"
+            if not s.tanggal_lulus:
+                s.tanggal_lulus = now
             
         db.session.commit()
         return jsonify({

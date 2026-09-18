@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family:
     "Plus Jakarta Sans",
@@ -42,4 +46,15 @@ body {
   box-shadow: 0 0 15px #3b82f6;
   animation: scanline 2.5s ease-in-out infinite alternate;
   pointer-events: none;
+}
+
+/* Hilangkan panah spinner naik/turun pada input angka */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }

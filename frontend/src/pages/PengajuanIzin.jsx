@@ -21,16 +21,33 @@ import {
   Info,
   MapPin,
   RefreshCw,
+  PenTool,
+  Lock,
+  GraduationCap,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import { getCurrentLocation } from "../utils/geoUtils";
 import CustomDatePicker, {
   formatTanggalIndo,
 } from "../components/CustomDatePicker";
+import SignaturePadModal from "../components/SignaturePadModal";
 
 export default function PengajuanIzin() {
-  const [nis, setNis] = useState("");
+  const { user, isSiswa, isPiket, isAdmin, saveSignature } = useAuth();
+  const backTarget = isSiswa
+    ? "/portal-siswa"
+    : isPiket
+      ? "/portal-piket"
+      : isAdmin
+        ? "/portal-admin"
+        : "/";
+  const [nis, setNis] = useState(isSiswa && user?.nis ? user.nis : "");
   const [checkingNis, setCheckingNis] = useState(false);
-  const [siswaData, setSiswaData] = useState(null);
+  const [siswaData, setSiswaData] = useState(
+    isSiswa && user?.nis
+      ? { id: user.id, nama: user.nama, nis: user.nis, kelas: user.kelas }
+      : null,
+  );
   const [nisError, setNisError] = useState("");
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -40,6 +57,33 @@ export default function PengajuanIzin() {
   const [alasan, setAlasan] = useState("");
   const [suratBukti, setSuratBukti] = useState(null); // base64 string
   const [suratPreview, setSuratPreview] = useState(null);
+  const [studentSignature, setStudentSignature] = useState(
+    user?.tanda_tangan || null,
+  );
+  const [showSigModal, setShowSigModal] = useState(false);
+
+  // Auto-set siswa jika login sebagai siswa
+  useEffect(() => {
+    if (isSiswa && user?.nis) {
+      setNis(user.nis);
+      setSiswaData({
+        id: user.id,
+        nama: user.nama,
+        nis: user.nis,
+        kelas: user.kelas,
+      });
+      if (user.tanda_tangan) {
+        setStudentSignature(user.tanda_tangan);
+      }
+    }
+  }, [isSiswa, user]);
+
+  const handleSaveSignature = async (dataUrl) => {
+    setStudentSignature(dataUrl);
+    if (user && isSiswa) {
+      await saveSignature(dataUrl);
+    }
+  };
 
   // GPS Location State
   const [geoLoc, setGeoLoc] = useState({
@@ -211,6 +255,11 @@ export default function PengajuanIzin() {
     e.preventDefault();
     setErrorMsg("");
 
+    if (isSiswa && user?.status === "Alumni") {
+      setErrorMsg("Akun berstatus Alumni / Lulus tidak dapat mengajukan izin.");
+      return;
+    }
+
     if (!siswaData) {
       setErrorMsg("Harap masukkan NIS yang valid dan terdaftar.");
       return;
@@ -243,6 +292,14 @@ export default function PengajuanIzin() {
       return;
     }
 
+    if (!studentSignature) {
+      setErrorMsg(
+        "Tanda tangan digital siswa / orang tua wajib dibubuhkan sebelum mengajukan izin.",
+      );
+      setShowSigModal(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await api.post("/pengajuan_izin", {
@@ -252,6 +309,7 @@ export default function PengajuanIzin() {
         tanggal_selesai: tanggalSelesai,
         alasan: alasan.trim(),
         surat_bukti: suratBukti,
+        tanda_tangan_siswa: studentSignature || null,
         latitude: geoLoc.latitude,
         longitude: geoLoc.longitude,
         lokasi_teks: geoLoc.accuracy
@@ -281,8 +339,11 @@ export default function PengajuanIzin() {
 
   const handleReset = () => {
     setSubmittedData(null);
-    setNis("");
-    setSiswaData(null);
+    if (!isSiswa) {
+      setNis("");
+      setSiswaData(null);
+      setStudentSignature(null);
+    }
     setNisError("");
     setJenis("Sakit");
     setTanggalMulai(todayStr);
@@ -294,19 +355,43 @@ export default function PengajuanIzin() {
     ambilLokasiGPS();
   };
 
+  // Siswa Alumni: Blokir akses ke pengajuan surat izin / sakit
+  if (isSiswa && user?.status === "Alumni") {
+    return (
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 text-center shadow-xl space-y-5">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-600 shadow-inner">
+            <GraduationCap className="w-8 h-8" />
+          </div>
+          <div>
+            <span className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider mb-2 border border-amber-200">
+              Status: Alumni / Lulus
+            </span>
+            <h2 className="text-xl font-bold text-slate-900">
+              Akses Pengajuan Izin Tidak Tersedia
+            </h2>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              Halo, <strong>{user?.nama}</strong>. Akun Anda telah resmi
+              berstatus sebagai Alumni SMKN 21 Jakarta. Surat permohonan izin
+              atau sakit hanya diperuntukkan bagi siswa aktif.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              to="/portal-siswa"
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Kembali
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-[calc(100vh-4rem)] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto flex flex-col justify-center">
-      {/* Header Back & Info */}
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200/80 rounded-xl transition-colors shadow-2xs"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Kembali</span>
-        </Link>
-      </div>
-
       {submittedData ? (
         /* SUCCESS RECEIPT CARD */
         <div className="bg-white rounded-2xl border border-emerald-200/80 shadow-lg shadow-emerald-500/5 overflow-hidden p-4 sm:p-8 animate-in fade-in duration-300">
@@ -378,7 +463,7 @@ export default function PengajuanIzin() {
                   className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-700 text-xs bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors"
                 >
                   <MapPin className="w-3.5 h-3.5" />
-                  <span>Buka di Maps</span>
+                  <span>Maps</span>
                 </a>
               </div>
             )}
@@ -402,10 +487,10 @@ export default function PengajuanIzin() {
               Ajukan Surat Lainnya
             </button>
             <Link
-              to="/"
+              to={backTarget}
               className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs sm:text-sm transition-colors border border-slate-200 text-center"
             >
-              Kembali ke Beranda
+              Kembali
             </Link>
           </div>
         </div>
@@ -415,6 +500,12 @@ export default function PengajuanIzin() {
           {/* Form Header */}
           <div className="px-5 py-5 sm:px-7 sm:py-6 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-white">
             <div className="flex items-center gap-3">
+              <Link
+                to="/portal-siswa"
+                className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
               <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
                 <FileText className="w-5 h-5" />
               </div>
@@ -442,56 +533,58 @@ export default function PengajuanIzin() {
               </div>
             )}
 
-            {/* Field 1: NIS Siswa & Real-time Check */}
+            {/* Field 1: NIS Siswa & Real-time Check (Terkunci jika Siswa) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Nomor Induk Siswa (NIS) <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Nomor Induk Siswa (NIS){" "}
+                  <span className="text-rose-500">*</span>
+                </label>
+                {isSiswa && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
+                    <Lock className="w-3 h-3 text-blue-600" />
+                    <span>Terkunci ke Akun Anda</span>
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <input
                   type="text"
-                  value={nis}
-                  onChange={(e) => setNis(e.target.value.replace(/\D/g, ""))}
+                  value={isSiswa ? user?.nis || nis : nis}
+                  readOnly={isSiswa}
+                  onChange={
+                    isSiswa
+                      ? undefined
+                      : (e) => setNis(e.target.value.replace(/\D/g, ""))
+                  }
                   placeholder="Ketik NIS siswa (contoh: 21102)"
                   maxLength={18}
-                  className={`w-full px-3.5 py-2.5 text-sm bg-slate-50 border rounded-xl focus:outline-hidden focus:ring-2 focus:bg-white transition-all ${
-                    siswaData
-                      ? "border-emerald-500 focus:ring-emerald-500/20"
-                      : nisError
-                        ? "border-rose-500 focus:ring-rose-500/20"
-                        : "border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
+                  className={`w-full px-3.5 py-2.5 text-sm rounded-xl focus:outline-hidden transition-all ${
+                    isSiswa
+                      ? "bg-slate-100/90 border border-slate-300 text-slate-700 font-mono font-bold cursor-not-allowed select-none"
+                      : siswaData
+                        ? "bg-slate-50 border border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:bg-white"
+                        : nisError
+                          ? "bg-slate-50 border border-rose-500 focus:ring-2 focus:ring-rose-500/20 focus:bg-white"
+                          : "bg-slate-50 border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:bg-white"
                   }`}
                   required
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400">
-                  {checkingNis && (
-                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                  )}
-                  {siswaData && !checkingNis && (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  {isSiswa ? (
+                    <Lock className="w-4 h-4 text-blue-600" />
+                  ) : (
+                    <>
+                      {checkingNis && (
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                      )}
+                      {siswaData && !checkingNis && (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                      )}
+                    </>
                   )}
                 </div>
               </div>
-
-              {/* Student Identification Card */}
-              {siswaData && (
-                <div className="mt-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200/80 flex items-center justify-between text-xs animate-in fade-in">
-                  <div className="flex items-center gap-2">
-                    <UserCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-                    <div>
-                      <span className="font-bold text-emerald-950 block">
-                        {siswaData.nama}
-                      </span>
-                      <span className="text-emerald-700">
-                        Kelas {siswaData.kelas} • NIS {siswaData.nis}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 bg-emerald-600 text-white font-semibold rounded-full text-[10px]">
-                    Terverifikasi
-                  </span>
-                </div>
-              )}
 
               {nisError && (
                 <p className="mt-1.5 text-xs text-rose-600 flex items-center gap-1 font-medium">
@@ -510,7 +603,7 @@ export default function PengajuanIzin() {
                 <button
                   type="button"
                   onClick={() => setJenis("Sakit")}
-                  className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
                     jenis === "Sakit"
                       ? "border-rose-500 bg-rose-50/70 ring-2 ring-rose-500/20 shadow-2xs"
                       : "border-slate-200 hover:border-slate-300 bg-white"
@@ -538,7 +631,7 @@ export default function PengajuanIzin() {
                 <button
                   type="button"
                   onClick={() => setJenis("Izin")}
-                  className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+                  className={`p-3.5 rounded-xl border text-left flex items-center gap-3 transition-colors duration-150 cursor-pointer ${
                     jenis === "Izin"
                       ? "border-amber-500 bg-amber-50/70 ring-2 ring-amber-500/20 shadow-2xs"
                       : "border-slate-200 hover:border-slate-300 bg-white"
@@ -714,6 +807,67 @@ export default function PengajuanIzin() {
               )}
             </div>
 
+            {/* Field 6: Tanda Tangan Digital Siswa / Orang Tua (Wajib) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Tanda Tangan Digital Siswa / Orang Tua{" "}
+                  <span className="text-rose-500">* </span>
+                </label>
+              </div>
+
+              {studentSignature ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="bg-white border border-slate-200 rounded-lg p-1 w-24 h-12 flex items-center justify-center flex-shrink-0">
+                      <img
+                        src={studentSignature}
+                        alt="TTD Siswa"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        Tanda Tangan Terlampir
+                      </p>
+                      <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Dicantumkan pengajuan resmi
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowSigModal(true)}
+                      className="px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer border border-blue-200"
+                    >
+                      Ubah
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentSignature(null)}
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Tanda Tangan"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSigModal(true)}
+                  className="w-full border-2 border-dashed border-rose-300 hover:border-blue-400 rounded-xl p-3.5 flex items-center justify-center gap-2 text-xs font-bold text-rose-700 hover:text-blue-600 bg-rose-50/50 hover:bg-blue-50/30 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <PenTool className="w-4 h-4 text-rose-500" />
+                  <span>
+                    Bubuhkan Tanda Tangan Digital Siswa / Orang Tua (Wajib)
+                  </span>
+                </button>
+              )}
+            </div>
+
             {/* GPS Location Status Indicator (Wajib) */}
             <div
               className={`p-3.5 rounded-xl border transition-all ${
@@ -816,12 +970,20 @@ export default function PengajuanIzin() {
             <button
               type="submit"
               disabled={
-                loading || !siswaData || !geoLoc.latitude || !geoLoc.longitude
+                loading ||
+                !siswaData ||
+                !geoLoc.latitude ||
+                !geoLoc.longitude ||
+                !studentSignature
               }
               className={`w-full py-3 px-4 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 transition-all shadow-md ${
-                loading || !siswaData || !geoLoc.latitude || !geoLoc.longitude
+                loading ||
+                !siswaData ||
+                !geoLoc.latitude ||
+                !geoLoc.longitude ||
+                !studentSignature
                   ? "bg-slate-300 cursor-not-allowed shadow-none text-slate-500"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/20 cursor-pointer"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/20 cursor-pointer active:scale-[0.99]"
               }`}
             >
               {loading ? (
@@ -830,18 +992,26 @@ export default function PengajuanIzin() {
                   <span>Mengirim Pengajuan...</span>
                 </>
               ) : !geoLoc.latitude || !geoLoc.longitude ? (
-                <>
-                  <span>Aktifkan GPS untuk Dapat Mengirim</span>
-                </>
+                <span>Aktifkan GPS untuk Dapat Mengirim</span>
+              ) : !studentSignature ? (
+                <span>Bubuhkan Tanda Tangan Digital untuk Mengirim</span>
               ) : (
-                <>
-                  <span>Kirim Surat Pengajuan {jenis}</span>
-                </>
+                <span>Kirim Surat Pengajuan {jenis}</span>
               )}
             </button>
           </form>
         </div>
       )}
+
+      {/* Signature Pad Modal Siswa */}
+      <SignaturePadModal
+        isOpen={showSigModal}
+        onClose={() => setShowSigModal(false)}
+        onSave={handleSaveSignature}
+        initialSignature={studentSignature}
+        title="Tanda Tangan Digital Siswa"
+        signerName={siswaData?.nama || user?.nama || "Siswa"}
+      />
     </div>
   );
 }

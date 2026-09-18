@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import api from "../services/api";
 import {
   Users,
@@ -12,10 +13,17 @@ import {
   Info,
   AlertCircle,
   X,
+  PenTool,
+  ShieldCheck,
+  ShieldAlert,
+  ArrowLeft,
+  BarChart3,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
 import { exportSpreadsheet, exportPdf } from "../utils/exportUtils";
+import SignaturePadModal from "../components/SignaturePadModal";
 
 // Modular Subcomponents
 import DashboardPeriodFilter from "../components/dashboard/DashboardPeriodFilter";
@@ -26,6 +34,8 @@ import PresensiHarianTab from "../components/dashboard/tabs/PresensiHarianTab";
 import PerpustakaanTab from "../components/dashboard/tabs/PerpustakaanTab";
 import VerifikasiIzinTab from "../components/dashboard/tabs/VerifikasiIzinTab";
 import IzinPiketTab from "../components/dashboard/tabs/IzinPiketTab";
+import ManajemenPiketTab from "../components/dashboard/tabs/ManajemenPiketTab";
+import BukuPelanggaranTab from "../components/dashboard/tabs/BukuPelanggaranTab";
 import SuratLightboxModal from "../components/dashboard/modals/SuratLightboxModal";
 import RejectIzinModal from "../components/dashboard/modals/RejectIzinModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
@@ -54,6 +64,12 @@ const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i);
 
 export default function Dashboard() {
+  const { user, isPiket, isAdmin, saveSignature } = useAuth();
+  const backTarget = isPiket
+    ? "/portal-piket"
+    : isAdmin
+      ? "/portal-admin"
+      : "/";
   const currentNow = new Date();
   const [periodeMode, setPeriodeMode] = useState("bulan"); // "bulan" atau "tahun"
   const [selectedBulan, setSelectedBulan] = useState(currentNow.getMonth() + 1);
@@ -81,7 +97,65 @@ export default function Dashboard() {
     }));
   }, [availableYears]);
 
-  const [activeTab, setActiveTab] = useState("rekap_siswa"); // "rekap_siswa", "riwayat_harian", "riwayat_perpus", "verifikasi_izin"
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem("smkn21_auth_user");
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed?.role === "piket" ? "verifikasi_izin" : "rekap_siswa";
+    } catch {
+      return "rekap_siswa";
+    }
+  });
+  const [showSigModal, setShowSigModal] = useState(false);
+
+  useEffect(() => {
+    if (
+      isPiket &&
+      (activeTab === "rekap_siswa" ||
+        activeTab === "riwayat_perpus" ||
+        activeTab === "manajemen_piket")
+    ) {
+      setActiveTab("verifikasi_izin");
+    }
+  }, [isPiket, activeTab]);
+
+  // Helper Kategori Tab Dashboard: "kehadiran" | "perizinan" | "manajemen"
+  const activeCategory = useMemo(() => {
+    if (
+      ["rekap_siswa", "riwayat_harian", "riwayat_perpus"].includes(activeTab)
+    ) {
+      return "kehadiran";
+    }
+    if (["verifikasi_izin", "izin_piket"].includes(activeTab)) {
+      return "perizinan";
+    }
+    if (["pelanggaran_siswa", "manajemen_piket"].includes(activeTab)) {
+      return "manajemen";
+    }
+    return "kehadiran";
+  }, [activeTab]);
+
+  const handleSelectCategory = (cat) => {
+    setSearchTerm("");
+    if (cat === "kehadiran") {
+      setActiveTab(isPiket ? "riwayat_harian" : "rekap_siswa");
+    } else if (cat === "perizinan") {
+      setActiveTab("verifikasi_izin");
+    } else if (cat === "manajemen") {
+      setActiveTab("pelanggaran_siswa");
+    }
+  };
+
+  const handleSaveSignature = async (dataUrl) => {
+    if (user) {
+      await saveSignature(dataUrl);
+      setNotification({
+        type: "success",
+        message: "Tanda tangan Guru Piket berhasil diperbarui!",
+      });
+    }
+  };
+
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [kelasFilter, setKelasFilter] = useState("ALL");
@@ -212,6 +286,30 @@ export default function Dashboard() {
         await fetchData();
         setRejectModalItem(null);
         setRejectNote("");
+
+        // Broadcast real-time event ke tab portal siswa
+        try {
+          if (typeof BroadcastChannel !== "undefined") {
+            const bc = new BroadcastChannel("smkn21_absensi_channel");
+            bc.postMessage({
+              type: "IZIN_VERIFIED",
+              id,
+              aksi,
+              timestamp: Date.now(),
+            });
+            bc.close();
+          }
+        } catch {
+          // ignore
+        }
+        try {
+          localStorage.setItem(
+            "smkn21_last_izin_update",
+            Date.now().toString(),
+          );
+        } catch {
+          // ignore
+        }
       }
     } catch (err) {
       alert(
@@ -417,7 +515,7 @@ export default function Dashboard() {
   const stats = siswaPeriode.statistik || {};
 
   return (
-    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-4">
       {/* 1. Header & Period Filter */}
       <DashboardPeriodFilter
         periodeMode={periodeMode}
@@ -437,318 +535,442 @@ export default function Dashboard() {
       {/* 2. KPI Metric Summary Cards */}
       <DashboardKpiCards stats={stats} />
 
+      {/* 3 Kategori Utama Pengelompokan Dashboard (Solusi Opsi 1) */}
+      <div className="bg-slate-100/90 p-1.5 rounded-2xl flex flex-col sm:flex-row gap-1.5 border border-slate-200 shadow-2xs">
+        {/* Kategori 1: Presensi & Kehadiran */}
+        <button
+          type="button"
+          onClick={() => handleSelectCategory("kehadiran")}
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+            activeCategory === "kehadiran"
+              ? "bg-white text-blue-700 shadow-xs border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
+          }`}
+        >
+          <BarChart3 className="w-4 h-4 text-blue-600" />
+          <span>Presensi & Kehadiran</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-100 hidden md:inline">
+            {!isPiket ? "3 Modul" : "1 Modul"}
+          </span>
+        </button>
+
+        {/* Kategori 2: Perizinan Siswa */}
+        <button
+          type="button"
+          onClick={() => handleSelectCategory("perizinan")}
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+            activeCategory === "perizinan"
+              ? "bg-white text-indigo-700 shadow-xs border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
+          }`}
+        >
+          <FileText className="w-4 h-4 text-indigo-600" />
+          <span>Perizinan Siswa</span>
+          {pendingCount > 0 ? (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse shadow-xs">
+              {pendingCount} Baru
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-100 hidden md:inline">
+              2 Modul
+            </span>
+          )}
+        </button>
+
+        {/* Kategori 3: Tata Tertib & Staf */}
+        <button
+          type="button"
+          onClick={() => handleSelectCategory("manajemen")}
+          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+            activeCategory === "manajemen"
+              ? "bg-white text-purple-700 shadow-xs border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-rose-600" />
+          <span>Tata Tertib & Staf</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-bold border border-purple-100 hidden md:inline">
+            {isAdmin ? "2 Modul" : "1 Modul"}
+          </span>
+        </button>
+      </div>
+
       {/* 3. Main Content Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
-        {/* Tab Switchers */}
-        <div className="border-b border-slate-200 px-3 sm:px-6 pt-2 sm:pt-4 flex items-center gap-2 sm:gap-6 bg-slate-50/60 overflow-x-auto rounded-t-2xl whitespace-nowrap no-scrollbar">
-          {/* Tab 1: Rekap Akumulasi Siswa */}
-          <button
-            onClick={() => {
-              setActiveTab("rekap_siswa");
-              setSearchTerm("");
-            }}
-            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === "rekap_siswa"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Users className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <span className="sm:hidden">Rekap Siswa</span>
-              <span className="hidden sm:inline">Rekap Kehadiran Siswa</span>
-            </span>
-            <span
-              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "rekap_siswa"
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-slate-200/70 text-slate-600"
-              }`}
-            >
-              {filteredSiswa.length}
-            </span>
-          </button>
-
-          {/* Tab 2: Log Presensi Harian */}
-          <button
-            onClick={() => {
-              setActiveTab("riwayat_harian");
-              setSearchTerm("");
-            }}
-            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === "riwayat_harian"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <Clock className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <span className="sm:hidden">Log Harian</span>
-              <span className="hidden sm:inline">Log Presensi Harian</span>
-            </span>
-            <span
-              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "riwayat_harian"
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-slate-200/70 text-slate-600"
-              }`}
-            >
-              {riwayatHarian.length}
-            </span>
-          </button>
-
-          {/* Tab 3: Log Kunjungan Perpustakaan */}
-          <button
-            onClick={() => {
-              setActiveTab("riwayat_perpus");
-              setSearchTerm("");
-            }}
-            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === "riwayat_perpus"
-                ? "border-emerald-600 text-emerald-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <BookOpen className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <span className="sm:hidden">Perpustakaan</span>
-              <span className="hidden sm:inline">
-                Log Kunjungan Perpustakaan
-              </span>
-            </span>
-            <span
-              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "riwayat_perpus"
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-slate-200/70 text-slate-600"
-              }`}
-            >
-              {riwayatPerpus.length}
-            </span>
-          </button>
-
-          {/* Tab 4: Verifikasi Izin & Sakit */}
-          <button
-            onClick={() => {
-              setActiveTab("verifikasi_izin");
-              setSearchTerm("");
-            }}
-            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === "verifikasi_izin"
-                ? "border-rose-600 text-rose-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <FileText className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <span className="sm:hidden">Izin & Sakit</span>
-              <span className="hidden sm:inline">Verifikasi Izin & Sakit</span>
-            </span>
-            {pendingCount > 0 ? (
-              <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
-                {pendingCount} Baru
-              </span>
-            ) : (
-              <span
-                className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  activeTab === "verifikasi_izin"
-                    ? "bg-rose-100 text-rose-700"
-                    : "bg-slate-200/70 text-slate-600"
-                }`}
-              >
-                {pengajuanList.length}
-              </span>
-            )}
-          </button>
-
-          {/* Tab 5: Izin Meja Piket */}
-          <button
-            onClick={() => {
-              setActiveTab("izin_piket");
-              setSearchTerm("");
-            }}
-            className={`pb-3 sm:pb-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 border-b-2 whitespace-nowrap transition-all cursor-pointer ${
-              activeTab === "izin_piket"
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
-            <span>
-              <span className="sm:hidden">Meja Piket</span>
-              <span className="hidden sm:inline">Izin Meja Piket</span>
-            </span>
-            <span
-              className={`px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === "izin_piket"
-                  ? "bg-indigo-100 text-indigo-700"
-                  : "bg-slate-200/70 text-slate-600"
-              }`}
-            >
-              {filteredIzinPiket.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Filter & Search Bar */}
-        <div className="p-3.5 sm:p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="relative flex-1 w-full">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Cari berdasarkan nama, NIS, alasan, atau kelas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-            {activeTab === "verifikasi_izin" && (
-              <CustomDropdown
-                value={statusIzinFilter}
-                onChange={setStatusIzinFilter}
-                options={[
-                  { value: "ALL", label: "Semua Status" },
-                  { value: "Menunggu", label: "Menunggu Konfirmasi" },
-                  { value: "Disetujui", label: "Disetujui" },
-                  { value: "Ditolak", label: "Ditolak" },
-                ]}
-                icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-                className="w-full sm:w-auto min-w-[150px]"
-                align="right"
-              />
-            )}
-
-            <CustomDropdown
-              value={kelasFilter}
-              onChange={setKelasFilter}
-              options={[
-                { value: "ALL", label: "Semua Kelas" },
-                ...uniqueKelas.map((k) => ({ value: k, label: k })),
-              ]}
-              icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-              className="w-full sm:w-auto"
-              align="right"
-            />
-          </div>
-        </div>
-
-        {/* Slider Batas Data & Navigasi Halaman Atas */}
-        <DashboardPagination
-          displayLimit={displayLimit}
-          setDisplayLimit={setDisplayLimit}
-          currentPage={currentPage}
-          setCurrentPage={setCurrentPage}
-          totalItems={totalItems}
-          totalPages={totalPages}
-          safeCurrentPage={safeCurrentPage}
-          startIndex={startIndex}
-          endIndex={endIndex}
-        />
-
-        {/* Tab 1: Rekap Akumulasi Siswa */}
-        {activeTab === "rekap_siswa" && (
-          <RekapSiswaTab
-            filteredSiswa={filteredSiswa}
-            paginatedSiswa={paginatedSiswa}
-          />
-        )}
-
-        {/* Tab 2: Log Detail Presensi Harian */}
-        {activeTab === "riwayat_harian" && (
-          <PresensiHarianTab
-            filteredHarian={filteredHarian}
-            paginatedHarian={paginatedHarian}
-            periodeMode={periodeMode}
-            namaBulanTerpilih={namaBulanTerpilih}
-            selectedTahun={selectedTahun}
-          />
-        )}
-
-        {/* Tab 3: Log Detail Perpustakaan */}
-        {activeTab === "riwayat_perpus" && (
-          <PerpustakaanTab
-            filteredPerpus={filteredPerpus}
-            paginatedPerpus={paginatedPerpus}
-            periodeMode={periodeMode}
-            namaBulanTerpilih={namaBulanTerpilih}
-            selectedTahun={selectedTahun}
-          />
-        )}
-
-        {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
-        {activeTab === "verifikasi_izin" && (
-          <VerifikasiIzinTab
-            filteredPengajuan={filteredPengajuan}
-            paginatedPengajuan={paginatedPengajuan}
-            statusIzinFilter={statusIzinFilter}
-            verifyingId={verifyingId}
-            onVerifikasi={handleVerifikasi}
-            onOpenRejectModal={(item) => setRejectModalItem(item)}
-            onOpenSuratModal={(item) => setSelectedSuratModal(item)}
-          />
-        )}
-
-        {/* Tab 5: Izin Meja Piket */}
-        {activeTab === "izin_piket" && (
-          <IzinPiketTab
-            filteredIzinPiket={filteredIzinPiket}
-            paginatedIzinPiket={paginatedIzinPiket}
-            onOpenSlipModal={(item) => setSelectedSlipModal(item)}
-            onDeleteIzin={handleDeleteIzinPiket}
-          />
-        )}
-
-        {/* Footer Navigasi Halaman Bawah */}
-        <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
-          <p className="text-xs text-slate-500 text-center sm:text-left">
-            {totalItems === 0 ? (
-              "Tidak ada baris data untuk ditampilkan."
-            ) : (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Sub-Tab Navigation Bar (Pill Buttons yang responsif tanpa scroll horizontal) */}
+        <div className="border-b border-slate-200 px-4 sm:px-6 py-3 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* --- SUB-TAB UNTUK KATEGORI: PRESENSI & KEHADIRAN --- */}
+            {activeCategory === "kehadiran" && (
               <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800">
-                  {startIndex + 1}–{endIndex}
-                </span>{" "}
-                dari{" "}
-                <span className="font-bold text-slate-800">{totalItems}</span>{" "}
-                total entri data
+                {!isPiket && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("rekap_siswa");
+                      setSearchTerm("");
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                      activeTab === "rekap_siswa"
+                        ? "bg-blue-600 text-white shadow-xs border-blue-600"
+                        : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Rekap Kehadiran Siswa</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                        activeTab === "rekap_siswa"
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {filteredSiswa.length}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setActiveTab("riwayat_harian");
+                    setSearchTerm("");
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                    activeTab === "riwayat_harian"
+                      ? "bg-blue-600 text-white shadow-xs border-blue-600"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                  <span>Log Presensi Harian</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                      activeTab === "riwayat_harian"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {riwayatHarian.length}
+                  </span>
+                </button>
+
+                {!isPiket && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("riwayat_perpus");
+                      setSearchTerm("");
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                      activeTab === "riwayat_perpus"
+                        ? "bg-emerald-600 text-white shadow-xs border-emerald-600"
+                        : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    <span>Log Kunjungan Perpustakaan</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                        activeTab === "riwayat_perpus"
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {riwayatPerpus.length}
+                    </span>
+                  </button>
+                )}
               </>
             )}
-          </p>
 
-          {totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400">
-                Halaman {safeCurrentPage} dari {totalPages}
-              </span>
-              <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
+            {/* --- SUB-TAB UNTUK KATEGORI: PERIZINAN SISWA --- */}
+            {activeCategory === "perizinan" && (
+              <>
                 <button
-                  type="button"
-                  disabled={safeCurrentPage <= 1}
                   onClick={() => {
-                    setCurrentPage((p) => Math.max(1, p - 1));
-                    window.scrollTo({ top: 350, behavior: "smooth" });
+                    setActiveTab("verifikasi_izin");
+                    setSearchTerm("");
                   }}
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                    activeTab === "verifikasi_izin"
+                      ? "bg-rose-600 text-white shadow-xs border-rose-600"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                  }`}
                 >
-                  Sebelumnya
+                  <FileText className="w-4 h-4" />
+                  <span>Verifikasi Izin & Sakit</span>
+                  {pendingCount > 0 ? (
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-white text-rose-600 shadow-2xs animate-pulse">
+                      {pendingCount} Baru
+                    </span>
+                  ) : (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                        activeTab === "verifikasi_izin"
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {pengajuanList.length}
+                    </span>
+                  )}
                 </button>
+
                 <button
-                  type="button"
-                  disabled={safeCurrentPage >= totalPages}
                   onClick={() => {
-                    setCurrentPage((p) => Math.min(totalPages, p + 1));
-                    window.scrollTo({ top: 350, behavior: "smooth" });
+                    setActiveTab("izin_piket");
+                    setSearchTerm("");
                   }}
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                    activeTab === "izin_piket"
+                      ? "bg-indigo-600 text-white shadow-xs border-indigo-600"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                  }`}
                 >
-                  Selanjutnya
+                  <ClipboardCheck className="w-4 h-4" />
+                  <span>Izin Meja Piket</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-md text-[10px] font-extrabold ${
+                      activeTab === "izin_piket"
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {filteredIzinPiket.length}
+                  </span>
                 </button>
-              </div>
+              </>
+            )}
+
+            {/* --- SUB-TAB UNTUK KATEGORI: TATA TERTIB & STAF --- */}
+            {activeCategory === "manajemen" && (
+              <>
+                <button
+                  onClick={() => {
+                    setActiveTab("pelanggaran_siswa");
+                    setSearchTerm("");
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                    activeTab === "pelanggaran_siswa"
+                      ? "bg-rose-600 text-white shadow-xs border-rose-600"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                  }`}
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Buku Catatan Pelanggaran</span>
+                </button>
+
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setActiveTab("manajemen_piket");
+                      setSearchTerm("");
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-colors duration-150 cursor-pointer border ${
+                      activeTab === "manajemen_piket"
+                        ? "bg-purple-600 text-white shadow-xs border-purple-600"
+                        : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Kelola Guru Piket</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Tab 6: Buku Catatan Pelanggaran */}
+        <div
+          className={
+            activeTab === "pelanggaran_siswa"
+              ? "p-4 sm:p-6 min-h-[500px]"
+              : "hidden"
+          }
+        >
+          <BukuPelanggaranTab />
+        </div>
+
+        {/* Tab 7: Manajemen Guru Piket (Khusus Admin) */}
+        {isAdmin && (
+          <div
+            className={
+              activeTab === "manajemen_piket"
+                ? "p-4 sm:p-6 min-h-[500px]"
+                : "hidden"
+            }
+          >
+            <ManajemenPiketTab />
+          </div>
+        )}
+
+        {/* Tab 1 - 5: Presensi & Perizinan (Fallback) */}
+        <div
+          className={
+            !["pelanggaran_siswa", "manajemen_piket"].includes(activeTab)
+              ? "min-h-[500px] flex flex-col justify-between"
+              : "hidden"
+          }
+        >
+          {/* Filter & Search Bar */}
+          <div className="p-3.5 sm:p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="relative flex-1 w-full">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Cari berdasarkan nama, NIS, alasan, atau kelas..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
             </div>
+
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {activeTab === "verifikasi_izin" && (
+                <CustomDropdown
+                  value={statusIzinFilter}
+                  onChange={setStatusIzinFilter}
+                  options={[
+                    { value: "ALL", label: "Semua Status" },
+                    { value: "Menunggu", label: "Menunggu Konfirmasi" },
+                    { value: "Disetujui", label: "Disetujui" },
+                    { value: "Ditolak", label: "Ditolak" },
+                  ]}
+                  icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
+                  className="w-full sm:w-auto min-w-[150px]"
+                  align="right"
+                />
+              )}
+
+              <CustomDropdown
+                value={kelasFilter}
+                onChange={setKelasFilter}
+                options={[
+                  { value: "ALL", label: "Semua Kelas" },
+                  ...uniqueKelas.map((k) => ({ value: k, label: k })),
+                ]}
+                icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
+                className="w-full sm:w-auto"
+                align="right"
+              />
+            </div>
+          </div>
+
+          {/* Slider Batas Data & Navigasi Halaman Atas */}
+          <DashboardPagination
+            displayLimit={displayLimit}
+            setDisplayLimit={setDisplayLimit}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            totalItems={totalItems}
+            totalPages={totalPages}
+            safeCurrentPage={safeCurrentPage}
+            startIndex={startIndex}
+            endIndex={endIndex}
+          />
+
+          {/* Tab 1: Rekap Akumulasi Siswa */}
+          {activeTab === "rekap_siswa" && (
+            <RekapSiswaTab
+              filteredSiswa={filteredSiswa}
+              paginatedSiswa={paginatedSiswa}
+            />
           )}
+
+          {/* Tab 2: Log Detail Presensi Harian */}
+          {activeTab === "riwayat_harian" && (
+            <PresensiHarianTab
+              filteredHarian={filteredHarian}
+              paginatedHarian={paginatedHarian}
+              periodeMode={periodeMode}
+              namaBulanTerpilih={namaBulanTerpilih}
+              selectedTahun={selectedTahun}
+            />
+          )}
+
+          {/* Tab 3: Log Detail Perpustakaan */}
+          {activeTab === "riwayat_perpus" && (
+            <PerpustakaanTab
+              filteredPerpus={filteredPerpus}
+              paginatedPerpus={paginatedPerpus}
+              periodeMode={periodeMode}
+              namaBulanTerpilih={namaBulanTerpilih}
+              selectedTahun={selectedTahun}
+            />
+          )}
+
+          {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
+          {activeTab === "verifikasi_izin" && (
+            <VerifikasiIzinTab
+              filteredPengajuan={filteredPengajuan}
+              paginatedPengajuan={paginatedPengajuan}
+              statusIzinFilter={statusIzinFilter}
+              verifyingId={verifyingId}
+              onVerifikasi={handleVerifikasi}
+              onOpenRejectModal={(item) => setRejectModalItem(item)}
+              onOpenSuratModal={(item) => setSelectedSuratModal(item)}
+            />
+          )}
+
+          {/* Tab 5: Izin Meja Piket */}
+          {activeTab === "izin_piket" && (
+            <IzinPiketTab
+              filteredIzinPiket={filteredIzinPiket}
+              paginatedIzinPiket={paginatedIzinPiket}
+              onOpenSlipModal={(item) => setSelectedSlipModal(item)}
+              onDeleteIzin={handleDeleteIzinPiket}
+            />
+          )}
+
+          {/* Footer Navigasi Halaman Bawah */}
+          <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
+            <p className="text-xs text-slate-500 text-center sm:text-left">
+              {totalItems === 0 ? (
+                "Tidak ada baris data untuk ditampilkan."
+              ) : (
+                <>
+                  Menampilkan{" "}
+                  <span className="font-bold text-slate-800">
+                    {startIndex + 1}–{endIndex}
+                  </span>{" "}
+                  dari{" "}
+                  <span className="font-bold text-slate-800">{totalItems}</span>{" "}
+                  total entri data
+                </>
+              )}
+            </p>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">
+                  Halaman {safeCurrentPage} dari {totalPages}
+                </span>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage <= 1}
+                    onClick={() => {
+                      setCurrentPage((p) => Math.max(1, p - 1));
+                      window.scrollTo({ top: 350, behavior: "smooth" });
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
+                  >
+                    Sebelumnya
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safeCurrentPage >= totalPages}
+                    onClick={() => {
+                      setCurrentPage((p) => Math.min(totalPages, p + 1));
+                      window.scrollTo({ top: 350, behavior: "smooth" });
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    Selanjutnya
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -776,6 +998,16 @@ export default function Dashboard() {
         isOpen={Boolean(selectedSlipModal)}
         slipData={selectedSlipModal}
         onClose={() => setSelectedSlipModal(null)}
+      />
+
+      {/* Modal Tanda Tangan Guru Piket */}
+      <SignaturePadModal
+        isOpen={showSigModal}
+        onClose={() => setShowSigModal(false)}
+        onSave={handleSaveSignature}
+        initialSignature={user?.tanda_tangan}
+        title="Tanda Tangan Digital Guru Piket"
+        signerName={user?.nama || "Guru Piket"}
       />
 
       {/* Floating Bottom-Right Toast Notification */}

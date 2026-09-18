@@ -24,6 +24,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
+import { useAuth } from "../context/AuthContext";
 import {
   SMKN21_COORDINATES,
   calculateDistanceMeters,
@@ -65,6 +66,14 @@ const KEPERLUAN_OPTIONS = [
 ];
 
 export default function AbsensiPerpus() {
+  const { user, isSiswa, isPiket, isAdmin } = useAuth();
+  const backTarget = isPiket
+    ? "/portal-piket"
+    : isAdmin
+      ? "/portal-admin"
+      : isSiswa
+        ? "/portal-siswa"
+        : "/";
   const webcamRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -478,15 +487,16 @@ export default function AbsensiPerpus() {
       {/* 4. Top Floating Bar */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
         <Link
-          to="/"
+          to={backTarget}
           title="Kembali ke Beranda"
           aria-label="Kembali ke Beranda"
-          className="inline-flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
         >
           <ArrowLeft
-            className="w-5 h-5 sm:w-6 sm:h-6 transition-transform group-hover:-translate-x-0.5"
+            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-0.5"
             strokeWidth={2.5}
           />
+          <span className="hidden sm:inline">Kembali</span>
         </Link>
 
         {/* GPS Geofence Pill */}
@@ -647,10 +657,10 @@ export default function AbsensiPerpus() {
             </button>
 
             <Link
-              to="/"
+              to={backTarget}
               className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs sm:text-sm transition-all border border-white/10"
             >
-              Kembali ke Beranda
+              Kembali
             </Link>
           </div>
 

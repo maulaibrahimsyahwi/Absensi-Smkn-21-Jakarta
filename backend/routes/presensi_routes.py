@@ -4,13 +4,56 @@ from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKO
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
 from face_utils import verify_face
 from utils.helpers import calculate_distance_meters, check_status_kehadiran, get_flattened_known_faces
+from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 
 presensi_bp = Blueprint('presensi', __name__)
 
 # ================= VERIFIKASI PRESENSI & LOKASI SEKOLAH =================
 
+@presensi_bp.route('/api/presensi/status_today', methods=['GET'])
+def get_status_today():
+    """
+    Memeriksa apakah siswa sudah melakukan presensi harian pada hari ini.
+    """
+    siswa_id = request.args.get('siswa_id')
+    if not siswa_id:
+        return jsonify({"success": False, "message": "ID siswa diperlukan."}), 400
+    
+    siswa = Siswa.query.get(siswa_id)
+    if not siswa:
+        return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+
+    today_start = datetime.combine(date.today(), time.min)
+    today_end = datetime.combine(date.today(), time.max)
+    absen_today = AbsensiHarian.query.filter(
+        AbsensiHarian.siswa_id == siswa_id,
+        AbsensiHarian.waktu >= today_start,
+        AbsensiHarian.waktu <= today_end
+    ).first()
+
+    if absen_today:
+        return jsonify({
+            "success": True,
+            "already_attended": True,
+            "data": {
+                "id": absen_today.id,
+                "nama": siswa.nama,
+                "kelas": siswa.kelas,
+                "waktu": absen_today.waktu.strftime('%H:%M:%S'),
+                "status": absen_today.status
+            }
+        })
+    else:
+        return jsonify({
+            "success": True,
+            "already_attended": False,
+            "data": None
+        })
+
+
 @presensi_bp.route('/api/verify_harian', methods=['POST'])
 def verify_harian():
+    import json
     data = request.json or {}
     image_data = data.get('image')
     latitude = data.get('latitude')
@@ -18,6 +61,13 @@ def verify_harian():
     accuracy = data.get('accuracy')
     is_mock = data.get('is_mock', False)
     simulated = data.get('simulated', False)
+    expected_siswa_id = data.get('expected_siswa_id')
+
+    if expected_siswa_id:
+        try:
+            expected_siswa_id = int(expected_siswa_id)
+        except (ValueError, TypeError):
+            expected_siswa_id = None
 
     # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
     if not simulated:
@@ -40,21 +90,75 @@ def verify_harian():
                 "success": False,
                 "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
             }), 403
-    
-    encodings, siswa_ids = get_flattened_known_faces()
-    if not encodings:
-        return jsonify({"success": False, "message": "Belum ada data wajah siswa yang terdaftar di sistem."}), 400
-        
+
+    today_start = datetime.combine(date.today(), time.min)
+    today_end = datetime.combine(date.today(), time.max)
+
+    # 1. Jika Presensi Mandiri Siswa (expected_siswa_id ditentukan)
+    if expected_siswa_id:
+        target_siswa = Siswa.query.get(expected_siswa_id)
+        if not target_siswa:
+            return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
+
+        if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
+            return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
+
+        # Cek apakah siswa sudah presensi hari ini
+        sudah_absen = AbsensiHarian.query.filter(
+            AbsensiHarian.siswa_id == expected_siswa_id,
+            AbsensiHarian.waktu >= today_start,
+            AbsensiHarian.waktu <= today_end
+        ).first()
+
+        if sudah_absen:
+            return jsonify({
+                "success": False,
+                "already_attended": True,
+                "waktu": sudah_absen.waktu.strftime('%H:%M:%S'),
+                "status": sudah_absen.status,
+                "message": f"Presensi ditolak! Anda ({target_siswa.nama}) sudah melakukan presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
+            }), 400
+
+        # Ambil sampel biometrik wajah khusus siswa ini
+        if not target_siswa.face_encoding:
+            return jsonify({
+                "success": False,
+                "message": f"Data biometrik wajah Anda ({target_siswa.nama}) belum terdaftar. Silakan daftarkan sampel wajah Anda terlebih dahulu di Portal Siswa."
+            }), 400
+
+        try:
+            stored_encodings = json.loads(target_siswa.face_encoding)
+            if not isinstance(stored_encodings, list) or len(stored_encodings) == 0:
+                raise ValueError("Encoding kosong")
+            encodings = stored_encodings
+            siswa_ids = [target_siswa.id] * len(stored_encodings)
+        except Exception:
+            return jsonify({
+                "success": False,
+                "message": "Data biometrik wajah Anda tidak valid. Silakan hubungi Admin Sekolah untuk melakukan reset wajah."
+            }), 400
+    else:
+        # 2. Mode Kiosk / Guru Piket (Pemindaian seluruh siswa aktif)
+        encodings, siswa_ids = get_flattened_known_faces()
+        if not encodings:
+            return jsonify({"success": False, "message": "Belum ada data wajah siswa yang terdaftar di sistem."}), 400
+
     try:
         result = verify_face(image_data, encodings, siswa_ids)
         if result['success']:
             siswa_id = result['siswa_id']
             siswa = Siswa.query.get(siswa_id)
-            status = check_status_kehadiran()
-            
+            if not siswa:
+                return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+
+            # Jika presensi mandiri, pastikan ID hasil deteksi sama dengan akun siswa yang login
+            if expected_siswa_id and siswa_id != expected_siswa_id:
+                return jsonify({
+                    "success": False,
+                    "message": f"Wajah yang terdeteksi tidak cocok dengan akun Anda ({target_siswa.nama})! Presensi harian wajib dilakukan oleh pemilik akun sendiri."
+                }), 401
+
             # Cek apakah siswa sudah presensi hari ini
-            today_start = datetime.combine(date.today(), time.min)
-            today_end = datetime.combine(date.today(), time.max)
             sudah_absen = AbsensiHarian.query.filter(
                 AbsensiHarian.siswa_id == siswa_id,
                 AbsensiHarian.waktu >= today_start,
@@ -63,20 +167,41 @@ def verify_harian():
 
             if sudah_absen:
                 return jsonify({
-                    "success": True,
-                    "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi hari ini pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB."
-                })
+                    "success": False,
+                    "already_attended": True,
+                    "waktu": sudah_absen.waktu.strftime('%H:%M:%S'),
+                    "status": sudah_absen.status,
+                    "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
+                }), 400
 
-            absen = AbsensiHarian(siswa_id=siswa_id, status=status)
+            status = check_status_kehadiran()
+            now_dt = datetime.now()
+            absen = AbsensiHarian(siswa_id=siswa_id, status=status, waktu=now_dt)
             db.session.add(absen)
+
+            # Jika siswa terlambat, otomatis catat ke Buku Saku Pelanggaran Siswa (+5 poin)
+            if status == "Terlambat":
+                catat_pelanggaran_terlambat(
+                    siswa=siswa,
+                    waktu=now_dt,
+                    sumber="Presensi Harian (Wajah & GPS)",
+                    petugas="Sistem Presensi SMKN 21",
+                    alasan=f"Presensi mandiri tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: 06:30 WIB)"
+                )
+
             db.session.commit()
-            
+
             confidence_text = f" kecocokan {result.get('confidence', 95)}%" if 'confidence' in result else ""
             return jsonify({
                 "success": True,
                 "message": f"Berhasil Absen {siswa.nama} - {siswa.kelas} ({status}){confidence_text}"
             })
         else:
+            if expected_siswa_id:
+                return jsonify({
+                    "success": False,
+                    "message": f"Wajah tidak cocok dengan akun Anda ({target_siswa.nama}). Pastikan wajah menghadap lurus ke kamera dengan pencahayaan yang cukup."
+                }), 401
             return jsonify(result), 401
     except Exception as e:
         db.session.rollback()
