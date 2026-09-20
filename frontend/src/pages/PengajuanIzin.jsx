@@ -513,9 +513,7 @@ export default function PengajuanIzin() {
               >
                 <ArrowLeft className="w-5 h-5" />
               </Link>
-              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                <FileText className="w-5 h-5" />
-              </div>
+
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-slate-900">
                   Pengajuan Surat Izin / Sakit
@@ -913,11 +911,11 @@ export default function PengajuanIzin() {
                       {geoLoc.loading
                         ? "Sedang membaca koordinat GPS perangkat Anda..."
                         : geoLoc.latitude
-                          ? `${geoLoc.latitude.toFixed(5)}, ${geoLoc.longitude.toFixed(5)} (${
+                          ? `${geoLoc.latitude.toFixed(5)}, ${geoLoc.longitude.toFixed(5)} ${
                               geoLoc.accuracy
-                                ? `Akurasi ±${Math.round(geoLoc.accuracy)}m`
+                                ? `±${Math.round(geoLoc.accuracy)}m`
                                 : "Lokasi Valid"
-                            })`
+                            }`
                           : geoLoc.error ||
                             "Sensor GPS tidak aktif atau izin ditolak oleh browser."}
                     </p>

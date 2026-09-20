@@ -490,13 +490,13 @@ def change_password():
     new_password = str(data.get('new_password', '')).strip()
 
     if not user_id or not role:
-        return jsonify({"success": False, "message": "Identitas pengguna tidak valid."}), 400
+        return jsonify({"success": False, "message": "Identitas pengguna tidak valid"}), 400
     if not old_password:
-        return jsonify({"success": False, "message": "Kata sandi saat ini wajib diisi."}), 400
+        return jsonify({"success": False, "message": "Kata sandi saat ini wajib diisi"}), 400
     if not new_password:
-        return jsonify({"success": False, "message": "Kata sandi baru wajib diisi."}), 400
+        return jsonify({"success": False, "message": "Kata sandi baru wajib diisi"}), 400
     if len(new_password) < 4:
-        return jsonify({"success": False, "message": "Kata sandi baru minimal 4 karakter."}), 400
+        return jsonify({"success": False, "message": "Kata sandi baru minimal 4 karakter"}), 400
 
     try:
         if role == 'siswa':

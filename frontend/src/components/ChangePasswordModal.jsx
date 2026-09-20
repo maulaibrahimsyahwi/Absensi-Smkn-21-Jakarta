@@ -51,7 +51,7 @@ export default function ChangePasswordModal({
     setErrorMessage("");
 
     if (!oldPassword.trim()) {
-      setErrorMessage("Kata sandi saat ini wajib diisi.");
+      setErrorMessage("Kata sandi saat ini wajib diisi");
       return;
     }
 
@@ -121,7 +121,7 @@ export default function ChangePasswordModal({
                 Ubah Kata Sandi Akun
               </h2>
               <p className="text-[11px] text-slate-500">
-                {user?.nama} • {isSiswa ? `NIS: ${user?.nis}` : user?.username}
+                {user?.nama} • {isSiswa ? `NIS ${user?.nis}` : user?.username}
               </p>
             </div>
           </div>

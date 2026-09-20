@@ -351,7 +351,7 @@ export default function PortalPiket() {
             <RefreshCw
               className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`}
             />
-            <span className="hidden sm:inline">Segarkan</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
 
@@ -518,7 +518,7 @@ export default function PortalPiket() {
                     <td className="py-3 px-3 font-bold text-slate-800">
                       {item.nama}
                       <span className="block text-[10px] text-slate-400 font-normal">
-                        NIS: {item.nis}
+                        NIS {item.nis}
                       </span>
                     </td>
                     <td className="py-3 px-3 font-semibold text-slate-700">

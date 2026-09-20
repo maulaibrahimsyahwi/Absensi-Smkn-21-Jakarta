@@ -377,7 +377,6 @@ export default function PortalSiswa() {
             <div className="mb-1">
               {isAlumni ? (
                 <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/30 border border-amber-400/40 text-[11px] font-extrabold tracking-wide uppercase text-amber-200 shadow-2xs">
-                  <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
                   <span>Alumni / Telah Lulus</span>
                 </span>
               ) : (
@@ -411,7 +410,7 @@ export default function PortalSiswa() {
 
                 {alumniExpInfo && (
                   <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                    Masa Akses: {alumniExpInfo.sisaHari} Hari Tersisa (s/d{" "}
+                    {alumniExpInfo.sisaHari} Hari Tersisa (s/d{" "}
                     {alumniExpInfo.tanggalKadaluarsa})
                   </span>
                 )}
@@ -532,7 +531,7 @@ export default function PortalSiswa() {
             <RefreshCw
               className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
             />
-            <span className="hidden sm:inline">Segarkan</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
 

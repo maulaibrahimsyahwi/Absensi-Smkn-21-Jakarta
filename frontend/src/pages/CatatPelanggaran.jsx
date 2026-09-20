@@ -436,7 +436,7 @@ export default function CatatPelanggaran() {
           </div>
           <div>
             <span className="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full uppercase tracking-wider mb-2 border border-amber-200">
-              Status: Alumni / Lulus
+              Alumni / Lulus
             </span>
             <h2 className="text-xl font-bold text-slate-900">
               Akses Pelanggaran Tidak Tersedia
@@ -452,7 +452,6 @@ export default function CatatPelanggaran() {
               to="/portal-siswa"
               className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
             >
-              <ArrowLeft className="w-4 h-4" />
               Kembali ke Portal Alumni
             </Link>
           </div>
@@ -671,7 +670,7 @@ export default function CatatPelanggaran() {
                         {selectedStudent.nama}
                       </p>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        NIS: {selectedStudent.nis || "-"} • Kelas:{" "}
+                        NIS {selectedStudent.nis || "-"} • Kelas:{" "}
                         <span className="font-bold text-blue-700">
                           {selectedStudent.kelas}
                         </span>
@@ -1020,7 +1019,7 @@ export default function CatatPelanggaran() {
                       onClick={handleUseSavedSignature}
                       className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
                     >
-                      <span>Gunakan TTD Tersimpan</span>
+                      <span>TTD Saya</span>
                     </button>
                   )}
                   <button

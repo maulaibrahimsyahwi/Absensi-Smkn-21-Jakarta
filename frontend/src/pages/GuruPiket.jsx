@@ -572,7 +572,7 @@ export default function GuruPiket() {
                           {selectedSiswa.nama}
                         </p>
                         <p className="text-[11px] text-slate-500 font-medium">
-                          NIS: {selectedSiswa.nis} • Kelas:{" "}
+                          NIS {selectedSiswa.nis} • Kelas:{" "}
                           <span className="font-bold text-blue-700">
                             {selectedSiswa.kelas}
                           </span>

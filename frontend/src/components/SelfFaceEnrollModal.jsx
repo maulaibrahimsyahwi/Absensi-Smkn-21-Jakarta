@@ -126,7 +126,7 @@ export default function SelfFaceEnrollModal({
                 Perekaman Biometrik Wajah Mandiri
               </h2>
               <p className="text-[11px] text-slate-500">
-                {user?.nama || "Siswa"} • NIS: {user?.nis || "-"} • Kelas:{" "}
+                {user?.nama || "Siswa"} • NIS {user?.nis || "-"} • Kelas:{" "}
                 {user?.kelas || "-"}
               </p>
             </div>

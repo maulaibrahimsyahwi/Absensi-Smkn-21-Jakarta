@@ -324,16 +324,13 @@ export default function Login() {
                     <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
                       <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
                       <span>
-                        Untuk pertama kali, password siswa sama dengan NIS Anda.
+                        Untuk pertama kali, password siswa sama dengan NIS
                       </span>
                     </p>
                   ) : (
                     <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1">
                       <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                      <span>
-                        Guru Piket masuk menggunakan akun resmi yang didaftarkan
-                        oleh Admin.
-                      </span>
+                      <span>Guru Piket masuk menggunakan akun resmi</span>
                     </p>
                   )}
                 </div>

@@ -270,7 +270,7 @@ export default function PortalAdmin() {
             <RefreshCw
               className={`w-3.5 h-3.5 ${loading ? "animate-spin text-purple-600" : ""}`}
             />
-            <span className="hidden sm:inline">Segarkan</span>
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
 

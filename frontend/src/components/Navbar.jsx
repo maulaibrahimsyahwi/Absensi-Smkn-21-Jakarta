@@ -275,26 +275,6 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Desktop Navigation Links (Hanya tampil di Laptop & Layar Besar >= 1024px) */}
-        {isAuthenticated && navItems.length > 0 && (
-          <nav className="hidden lg:flex items-center gap-1.5 flex-1 justify-center px-2 overflow-x-auto no-scrollbar">
-            {navItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                  item.active
-                    ? "bg-blue-600 text-white shadow-xs shadow-blue-500/20"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                }`}
-              >
-                {item.icon}
-                <span>{item.shortLabel || item.label}</span>
-              </Link>
-            ))}
-          </nav>
-        )}
-
         {/* Right Actions: Profile Button, Logout Button, and Menu Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (
@@ -359,17 +339,6 @@ export default function Navbar() {
                   ? user?.nama || user?.username
                   : "SMKN 21 Jakarta"}
               </p>
-              <p className="text-[11px] text-slate-500 truncate">
-                {isAuthenticated
-                  ? user?.kelas
-                    ? `Kelas ${user.kelas}`
-                    : isAdmin
-                      ? "Administrator Sekolah"
-                      : isPiket
-                        ? "Petugas Guru Piket"
-                        : "Pengguna"
-                  : "Sistem Presensi Terpadu"}
-              </p>
             </div>
             <span
               className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase flex-shrink-0 ${
@@ -385,7 +354,7 @@ export default function Navbar() {
               {isAdmin
                 ? "Admin"
                 : isPiket
-                  ? "Piket"
+                  ? "Guru Piket"
                   : user?.status === "Alumni"
                     ? "Alumni"
                     : "Siswa"}
@@ -452,7 +421,7 @@ export default function Navbar() {
                 ) : (
                   <User className="w-4 h-4 text-blue-600" />
                 )}
-                <span>Profil Pengguna & Pengaturan</span>
+                <span>Profil</span>
               </button>
               <button
                 type="button"
@@ -462,8 +431,7 @@ export default function Navbar() {
                 }}
                 className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl text-rose-600 bg-rose-50 hover:bg-rose-100 text-xs font-bold transition-all cursor-pointer"
               >
-                <LogOut className="w-4 h-4" />
-                <span>Keluar Akun ({user?.nama})</span>
+                <span>Keluar</span>
               </button>
             </div>
           )}

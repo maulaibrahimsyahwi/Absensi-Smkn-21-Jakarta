@@ -231,7 +231,7 @@ export default function TabelDaftarSiswa({
 
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-slate-400 font-mono">
-                        NIS: {s.nis}
+                        NIS {s.nis}
                       </span>
                       <span className="text-slate-300">•</span>
                       <span className="text-[11px] font-bold text-slate-700">
@@ -396,7 +396,7 @@ export default function TabelDaftarSiswa({
                     <td className="p-3">
                       <p className="font-bold text-slate-900">{s.nama}</p>
                       <p className="text-[11px] text-slate-400 font-mono">
-                        NIS: {s.nis}
+                        NIS {s.nis}
                       </p>
                     </td>
                     <td className="p-3">
@@ -463,7 +463,7 @@ export default function TabelDaftarSiswa({
                         </button>
 
                         <button
-                          title={`Reset Kata Sandi ${s.nama} ke Default (NIS: ${s.nis})`}
+                          title={`Reset Kata Sandi ${s.nama} ke Default (NIS ${s.nis})`}
                           onClick={() => onResetPassword(s)}
                           className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors border border-amber-200 cursor-pointer"
                         >

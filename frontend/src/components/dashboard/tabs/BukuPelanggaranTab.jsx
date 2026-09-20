@@ -419,7 +419,7 @@ export default function BukuPelanggaranTab() {
                     <td className="px-4 py-3">
                       <p className="font-bold text-slate-900">{r.nama_siswa}</p>
                       <p className="text-[10px] text-slate-400 font-mono">
-                        NIS: {r.nis}
+                        NIS {r.nis}
                       </p>
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">

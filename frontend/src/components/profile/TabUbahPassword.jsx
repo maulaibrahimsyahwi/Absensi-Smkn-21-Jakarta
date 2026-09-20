@@ -26,15 +26,15 @@ export default function TabUbahPassword({ user }) {
     setPassSuccess("");
 
     if (!oldPassword.trim()) {
-      setPassError("Kata sandi saat ini wajib diisi.");
+      setPassError("Kata sandi saat ini wajib diisi");
       return;
     }
     if (!newPassword.trim()) {
-      setPassError("Kata sandi baru wajib diisi.");
+      setPassError("Kata sandi baru wajib diisi");
       return;
     }
     if (newPassword.length < 6) {
-      setPassError("Kata sandi baru minimal 6 karakter.");
+      setPassError("Kata sandi baru minimal 6 karakter");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -174,9 +174,8 @@ export default function TabUbahPassword({ user }) {
         {passLoading ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
-          <Lock className="w-4 h-4" />
+          `Simpan Kata Sandi Baru`
         )}
-        Simpan Kata Sandi Baru
       </button>
     </form>
   );

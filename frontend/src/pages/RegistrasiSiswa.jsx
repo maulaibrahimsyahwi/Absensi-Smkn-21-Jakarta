@@ -446,7 +446,7 @@ export default function RegistrasiSiswa() {
         type: "success",
         message:
           res.data?.message ||
-          `Kata sandi ${resettingPasswordSiswa.nama} berhasil direset ke default (NIS: ${resettingPasswordSiswa.nis})`,
+          `Kata sandi ${resettingPasswordSiswa.nama} berhasil direset ke default (NIS ${resettingPasswordSiswa.nis})`,
       });
       setResettingPasswordSiswa(null);
     } catch (err) {

@@ -33,7 +33,7 @@ export default function ResetSiswaModals({
               </p>
               <div className="mt-3 py-2 px-3 bg-amber-50 border border-amber-200 rounded-xl inline-block">
                 <span className="text-xs font-mono font-bold text-amber-800">
-                  Password Default: {resettingPasswordSiswa.nis}
+                  Password Default {resettingPasswordSiswa.nis}
                 </span>
               </div>
             </div>

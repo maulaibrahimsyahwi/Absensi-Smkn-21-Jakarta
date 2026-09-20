@@ -41,7 +41,7 @@ export default function RekapSiswaTab({
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-slate-400 font-mono">
-                        NIS: {item.nis}
+                        NIS {item.nis}
                       </span>
                       <span className="text-slate-300">•</span>
                       <span className="text-[11px] font-bold text-slate-700">
@@ -167,7 +167,7 @@ export default function RekapSiswaTab({
                       <div>
                         <p className="font-bold text-slate-900">{item.nama}</p>
                         <p className="text-[11px] text-slate-400 font-mono">
-                          NIS: {item.nis}
+                          NIS {item.nis}
                         </p>
                       </div>
                     </td>
