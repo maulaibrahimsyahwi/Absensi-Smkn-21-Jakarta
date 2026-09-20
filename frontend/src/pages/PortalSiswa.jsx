@@ -331,69 +331,67 @@ export default function PortalSiswa() {
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20" />
         </div>
 
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Foto Profil Siswa"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <GraduationCap className="w-9 h-9 sm:w-11 sm:h-11 text-blue-200" />
-              )}
-            </div>
-            <div>
-              <div className="mb-1">
-                {isAlumni ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/30 border border-amber-400/40 text-[11px] font-extrabold tracking-wide uppercase text-amber-200 shadow-2xs">
-                    <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Alumni / Telah Lulus</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-[11px] font-bold tracking-wide uppercase text-blue-200">
-                    <span>Siswa Aktif SMKN 21</span>
-                  </span>
-                )}
-              </div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                {user?.nama || "Nama Siswa"}
-              </h1>
-              <p className="text-xs sm:text-sm text-blue-200 font-medium">
-                NIS {user?.nis} &bull; Kelas {user?.kelas}
-              </p>
-            </div>
+        {/* Pojok Kanan Atas: Tombol Profil Pengguna & Dropdown Notifikasi */}
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-2 z-20">
+          <button
+            type="button"
+            onClick={() => openProfile("profil")}
+            title="Profil Pengguna & Pengaturan Akun"
+            className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+          >
+            {user?.foto_profil ? (
+              <img
+                src={user.foto_profil}
+                alt={user?.nama || "Profil"}
+                className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
+              />
+            ) : (
+              <User className="w-4 h-4 text-blue-200" />
+            )}
+            <span>Profil</span>
+          </button>
+
+          <NotificationDropdown
+            notifications={personalData?.riwayat_pengajuan || []}
+            variant="header"
+            align="right"
+            role="siswa"
+            userId={user?.id}
+          />
+        </div>
+
+        {/* Bagian Kiri: Diturunkan & Disejajarkan ke Tengah Vertikal */}
+        <div className="relative z-10 pt-10 sm:pt-4 sm:pb-2 flex items-center gap-4 sm:gap-5">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
+            {user?.foto_profil ? (
+              <img
+                src={user.foto_profil}
+                alt={user?.nama || "Foto Profil Siswa"}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <GraduationCap className="w-9 h-9 sm:w-11 sm:h-11 text-blue-200" />
+            )}
           </div>
-
-          {/* Pojok Kanan Atas: Tombol Profil Pengguna & Dropdown Notifikasi */}
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            <button
-              type="button"
-              onClick={() => openProfile("profil")}
-              title="Profil Pengguna & Pengaturan Akun"
-              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-            >
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Profil"}
-                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-                />
+          <div>
+            <div className="mb-1">
+              {isAlumni ? (
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/30 border border-amber-400/40 text-[11px] font-extrabold tracking-wide uppercase text-amber-200 shadow-2xs">
+                  <GraduationCap className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Alumni / Telah Lulus</span>
+                </span>
               ) : (
-                <User className="w-4 h-4 text-blue-200" />
+                <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-[11px] font-bold tracking-wide uppercase text-blue-200">
+                  <span>Siswa Aktif SMKN 21</span>
+                </span>
               )}
-              <span>Profil</span>
-            </button>
-
-            <NotificationDropdown
-              notifications={personalData?.riwayat_pengajuan || []}
-              dismissedIds={dismissedNotifIds}
-              onDismiss={handleDismissNotif}
-              onDismissAll={handleDismissAllNotif}
-              variant="header"
-              align="right"
-            />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+              {user?.nama || "Nama Siswa"}
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-200 font-medium">
+              NIS {user?.nis} &bull; Kelas {user?.kelas}
+            </p>
           </div>
         </div>
       </div>
@@ -698,7 +696,7 @@ export default function PortalSiswa() {
                       <span
                         className={`px-2 py-0.5 rounded-md text-[10px] font-black border ${kat.badge}`}
                       >
-                        +{item.poin} Poin
+                        {item.poin} Poin
                       </span>
                       <span className="text-xs font-semibold text-slate-500 font-mono">
                         {item.tanggal_waktu_formatted}
@@ -718,7 +716,7 @@ export default function PortalSiswa() {
                   {item.tanda_tangan_siswa && (
                     <div className="flex-shrink-0 text-right">
                       <span className="text-[10px] text-slate-400 block mb-0.5">
-                        TTD Pengakuan Siswa:
+                        TTD Pengakuan Siswa
                       </span>
                       <div className="h-10 w-20 border border-slate-200 bg-white rounded-lg p-0.5 flex items-center justify-center shadow-2xs">
                         <img

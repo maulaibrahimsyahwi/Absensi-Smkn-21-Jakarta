@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import {
   Users,
@@ -97,8 +97,11 @@ export default function Dashboard() {
     }));
   }, [availableYears]);
 
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(() => {
     try {
+      const urlTab = new URLSearchParams(window.location.search).get("tab");
+      if (urlTab) return urlTab;
       const saved = localStorage.getItem("smkn21_auth_user");
       const parsed = saved ? JSON.parse(saved) : null;
       return parsed?.role === "piket" ? "verifikasi_izin" : "rekap_siswa";
@@ -109,15 +112,23 @@ export default function Dashboard() {
   const [showSigModal, setShowSigModal] = useState(false);
 
   useEffect(() => {
+    const urlTab = searchParams.get("tab");
+    if (urlTab && urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+  }, [searchParams, activeTab]);
+
+  useEffect(() => {
     if (
       isPiket &&
+      !searchParams.get("tab") &&
       (activeTab === "rekap_siswa" ||
         activeTab === "riwayat_perpus" ||
         activeTab === "manajemen_piket")
     ) {
       setActiveTab("verifikasi_izin");
     }
-  }, [isPiket, activeTab]);
+  }, [isPiket, activeTab, searchParams]);
 
   // Helper Kategori Tab Dashboard: "kehadiran" | "perizinan" | "manajemen"
   const activeCategory = useMemo(() => {
@@ -525,7 +536,7 @@ export default function Dashboard() {
   const stats = siswaPeriode.statistik || {};
 
   return (
-    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-4">
+    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-3">
       {/* 1. Header & Period Filter */}
       <DashboardPeriodFilter
         periodeMode={periodeMode}

@@ -240,60 +240,59 @@ export default function PortalPiket() {
           <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl -ml-20 -mb-20" />
         </div>
 
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Guru Piket"}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User className="w-9 h-9 sm:w-11 sm:h-11 text-blue-300" />
-              )}
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-[11px] font-bold tracking-wide uppercase text-emerald-200">
-                  <span>Petugas Guru Piket</span>
-                </span>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-                {user?.nama || "Bapak / Ibu Guru Piket"}
-              </h1>
-            </div>
+        {/* Pojok Kanan Atas: Tombol Profil & Notifikasi Guru Piket */}
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-2 z-20">
+          <button
+            type="button"
+            onClick={() => openProfile("profil")}
+            title="Profil Pengguna & Pengaturan Akun"
+            className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+          >
+            {user?.foto_profil ? (
+              <img
+                src={user.foto_profil}
+                alt={user?.nama || "Profil"}
+                className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
+              />
+            ) : (
+              <User className="w-4 h-4 text-blue-200" />
+            )}
+            <span>Profil</span>
+          </button>
+
+          <NotificationDropdown
+            notifications={pengajuanList}
+            dismissedIds={dismissedNotifIds}
+            onDismiss={handleDismissNotif}
+            variant="header"
+            align="right"
+            role="piket"
+            userId={user?.id}
+            onNavigate={() => navigate("/dashboard?tab=verifikasi_izin")}
+          />
+        </div>
+
+        {/* Bagian Kiri: Diturunkan & Disejajarkan ke Tengah Vertikal */}
+        <div className="relative z-10 pt-10 sm:pt-4 sm:pb-2 flex items-center gap-4 sm:gap-5">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
+            {user?.foto_profil ? (
+              <img
+                src={user.foto_profil}
+                alt={user?.nama || "Guru Piket"}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <User className="w-9 h-9 sm:w-11 sm:h-11 text-blue-300" />
+            )}
           </div>
-
-          {/* Pojok Kanan Atas: Tombol Profil & Notifikasi Guru Piket */}
-          <div className="flex items-center gap-2 self-end sm:self-center">
-            <button
-              type="button"
-              onClick={() => openProfile("profil")}
-              title="Profil Pengguna & Pengaturan Akun"
-              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-            >
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Profil"}
-                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-                />
-              ) : (
-                <User className="w-4 h-4 text-blue-200" />
-              )}
-              <span>Profil</span>
-            </button>
-
-            <NotificationDropdown
-              notifications={pengajuanList}
-              dismissedIds={dismissedNotifIds}
-              onDismiss={handleDismissNotif}
-              variant="header"
-              align="right"
-              role="piket"
-              onNavigate={() => navigate("/piket")}
-            />
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-1"></div>
+            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+              {user?.nama || "Bapak / Ibu Guru Piket"}
+            </h1>
+            <p className="text-xs sm:text-sm text-blue-200 font-medium mt-0.5">
+              NIP {user?.username} &bull; Petugas Piket SMKN 21
+            </p>
           </div>
         </div>
       </div>
@@ -327,7 +326,7 @@ export default function PortalPiket() {
             className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
           >
             <PenLine className="w-3.5 h-3.5" />
-            <span>Bubuhkan TTD Sekarang</span>
+            <span> TTD Sekarang</span>
           </button>
         </div>
       )}

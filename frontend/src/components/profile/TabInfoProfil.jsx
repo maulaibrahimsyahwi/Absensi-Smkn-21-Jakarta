@@ -9,8 +9,12 @@ import {
   CheckCircle2,
   Loader2,
   Sparkles,
+  Edit3,
+  Check,
+  X,
 } from "lucide-react";
 import { validateAndCompressImage } from "../../utils/imageUtils";
+import { useAuth } from "../../context/AuthContext";
 
 export default function TabInfoProfil({
   user,
@@ -19,11 +23,17 @@ export default function TabInfoProfil({
   deleteFotoProfil,
   onOpenFaceEnroll,
 }) {
+  const { updateName } = useAuth();
   const fileInputRef = useRef(null);
   const [photoLoading, setPhotoLoading] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [photoSuccess, setPhotoSuccess] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // State Ubah Nama Lengkap
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(user?.nama || "");
+  const [nameLoading, setNameLoading] = useState(false);
 
   const handlePhotoSelect = async (e) => {
     const file = e.target.files?.[0];
@@ -85,6 +95,30 @@ export default function TabInfoProfil({
     }
   };
 
+  const handleSaveName = async (e) => {
+    e?.preventDefault();
+    if (!nameValue.trim() || nameValue.trim().length < 3) {
+      setPhotoError("Nama lengkap minimal 3 karakter.");
+      return;
+    }
+    setNameLoading(true);
+    setPhotoError("");
+    setPhotoSuccess("");
+    try {
+      const res = await updateName(nameValue.trim());
+      if (res.success) {
+        setPhotoSuccess(res.message || "Nama lengkap berhasil disimpan!");
+        setEditingName(false);
+      } else {
+        setPhotoError(res.message || "Gagal menyimpan nama.");
+      }
+    } catch {
+      setPhotoError("Terjadi kendala saat menyimpan nama.");
+    } finally {
+      setNameLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Alert Status */}
@@ -130,7 +164,7 @@ export default function TabInfoProfil({
             <p className="text-xs text-slate-500">
               {isSiswa
                 ? `NIS: ${user?.nis} • Kelas ${user?.kelas}`
-                : `Peran: ${user?.role?.toUpperCase()}`}
+                : `NIP / Akun: ${user?.username} • ${user?.role === "piket" ? "Petugas Guru Piket" : "Administrator"}`}
             </p>
           </div>
 
@@ -162,6 +196,74 @@ export default function TabInfoProfil({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Form Ubah Nama Lengkap Pengguna */}
+      <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h5 className="text-xs sm:text-sm font-bold text-slate-800">
+              Nama Lengkap & Gelar
+            </h5>
+            <p className="text-[11px] text-slate-500">
+              Nama resmi yang ditampilkan di portal dan dokumen sekolah
+            </p>
+          </div>
+          {!editingName && (
+            <button
+              type="button"
+              onClick={() => {
+                setNameValue(user?.nama || "");
+                setEditingName(true);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Ubah Nama</span>
+            </button>
+          )}
+        </div>
+
+        {editingName ? (
+          <form onSubmit={handleSaveName} className="space-y-3 pt-1">
+            <input
+              type="text"
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd"
+              className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+              required
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="submit"
+                disabled={nameLoading}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer disabled:opacity-50"
+              >
+                {nameLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <span>Simpan</span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditingName(false)}
+                disabled={nameLoading}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition cursor-pointer"
+              >
+                Batal
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+            <p className="text-xs sm:text-sm font-semibold text-slate-800">
+              {user?.nama || "Belum diatur"}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Konfirmasi Hapus Foto */}

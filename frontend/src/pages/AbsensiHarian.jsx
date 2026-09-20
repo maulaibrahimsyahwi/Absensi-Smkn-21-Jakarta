@@ -107,17 +107,25 @@ export default function AbsensiHarian() {
     return () => clearInterval(timer);
   }, []);
 
+  // Pengecekan Akhir Pekan (Sabtu = 6, Minggu = 0)
+  const isWeekend = [0, 6].includes(new Date().getDay());
+
   // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
   const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
     useLivenessDetector({
       webcamRef,
       isActive:
-        !loading && !result && isGpsValid && !attendanceToday?.already_attended,
+        !isWeekend &&
+        !loading &&
+        !result &&
+        isGpsValid &&
+        !attendanceToday?.already_attended,
       onLiveVerified: () => setCountdown(3),
       pollIntervalMs: 600,
     });
 
   const captureAndVerify = useCallback(async () => {
+    if (isWeekend) return;
     if (!isGpsValid) return;
     if (attendanceToday?.already_attended) return;
     if (!webcamRef.current) return;
@@ -202,6 +210,7 @@ export default function AbsensiHarian() {
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
   useEffect(() => {
     if (
+      isWeekend ||
       loading ||
       result ||
       !isGpsValid ||
@@ -223,6 +232,7 @@ export default function AbsensiHarian() {
 
     return () => clearInterval(timer);
   }, [
+    isWeekend,
     countdown,
     isLiveVerified,
     loading,
@@ -231,6 +241,43 @@ export default function AbsensiHarian() {
     attendanceToday,
     captureAndVerify,
   ]);
+
+  // Akhir Pekan (Sabtu & Minggu): Presensi Ditutup
+  if (isWeekend) {
+    const namaHariIni = new Date().toLocaleDateString("id-ID", {
+      weekday: "long",
+    });
+    return (
+      <div className="fixed inset-0 w-screen h-screen bg-slate-950 flex items-center justify-center p-4 select-none z-50">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+            <Clock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Hari Libur Sekolah ({namaHariIni})
+            </h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Sistem presensi harian SMKN 21 Jakarta hanya digunakan pada hari
+              sekolah aktif (<strong>Senin s/d Jumat</strong>).
+            </p>
+            <p className="text-xs text-slate-400">
+              Presensi kehadiran akan dibuka kembali pada hari{" "}
+              <strong>Senin</strong> pukul <strong>05:00 WIB</strong>.
+            </p>
+          </div>
+          <div className="pt-3">
+            <Link
+              to={backTarget}
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
+            >
+              <span>Kembali</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Siswa Alumni: Blokir akses ke presensi harian mandiri
   if (isSiswa && user?.status === "Alumni") {

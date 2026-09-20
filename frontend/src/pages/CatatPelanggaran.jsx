@@ -602,9 +602,8 @@ export default function CatatPelanggaran() {
             {/* Badges Info Identitas Pembuat */}
             {isSiswa ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-xl border border-blue-200 self-start sm:self-auto">
-                <Lock className="w-3.5 h-3.5 text-blue-600" />
                 <span>
-                  {user?.nama} ({user?.kelas || "Siswa"})
+                  {user?.nama} {user?.kelas || "Siswa"}
                 </span>
               </span>
             ) : (
@@ -652,7 +651,7 @@ export default function CatatPelanggaran() {
                         {user?.nama}
                       </p>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        NIS: {user?.nis || "-"} • Kelas:{" "}
+                        NIS {user?.nis || "-"} • Kelas{" "}
                         <span className="font-bold text-blue-700">
                           {user?.kelas || "-"}
                         </span>
@@ -878,7 +877,7 @@ export default function CatatPelanggaran() {
                     })}
                     {filteredViolations.length === 0 && (
                       <p className="text-xs text-slate-400 text-center py-4">
-                        Tidak ada butir pelanggaran yang cocok.
+                        Tidak pelanggaran yang cocok
                       </p>
                     )}
                   </div>

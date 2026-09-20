@@ -244,7 +244,7 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-6xl mx-auto px-3.5 sm:px-6 h-16 flex items-center justify-between gap-2">
+      <div className="max-w-7xl mx-auto px-3.5 sm:px-6 h-16 flex items-center justify-between gap-3">
         {/* Brand */}
         <Link
           to={
@@ -275,26 +275,30 @@ export default function Navbar() {
           </div>
         </Link>
 
-        {/* Right Actions: Role Badge, Profile Button, Logout Button, and Menu Toggle */}
+        {/* Desktop Navigation Links (Hanya tampil di Laptop & Layar Besar >= 1024px) */}
+        {isAuthenticated && navItems.length > 0 && (
+          <nav className="hidden lg:flex items-center gap-1.5 flex-1 justify-center px-2 overflow-x-auto no-scrollbar">
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                  item.active
+                    ? "bg-blue-600 text-white shadow-xs shadow-blue-500/20"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+              >
+                {item.icon}
+                <span>{item.shortLabel || item.label}</span>
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {/* Right Actions: Profile Button, Logout Button, and Menu Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (
             <>
-              {/* Tombol Profil Singkat */}
-              <button
-                type="button"
-                onClick={() => {
-                  setProfileInitialTab("profil");
-                  setShowProfileModal(true);
-                }}
-                title="Buka Profil & Pengaturan"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 hover:text-slate-900 bg-slate-100/80 hover:bg-slate-200/80 border border-slate-200 rounded-xl transition-all cursor-pointer"
-              >
-                <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
-                <span className="hidden sm:inline font-medium">
-                  {user?.nama?.split(" ")[0] || "Profil"}
-                </span>
-              </button>
-
               {/* Tombol Keluar Cepat */}
               <button
                 type="button"
@@ -306,13 +310,13 @@ export default function Navbar() {
                 <span className="hidden sm:inline">Keluar</span>
               </button>
 
-              {/* Tombol Hamburger Toggle Menu */}
+              {/* Tombol Hamburger Toggle Menu (HANYA tampil di Mobile & Tablet < 1024px) */}
               <button
                 type="button"
                 data-mobile-menu-toggle="true"
                 onClick={() => setMobileMenuOpen((prev) => !prev)}
                 title="Menu Navigasi"
-                className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                className={`lg:hidden p-2 rounded-xl border transition-all cursor-pointer ${
                   mobileMenuOpen
                     ? "bg-blue-50 border-blue-200 text-blue-600"
                     : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700 hover:text-slate-900"
@@ -341,11 +345,11 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Navigation Dropdown Menu (Konsisten untuk Mobile, Tablet & Laptop/Desktop) */}
+      {/* Navigation Dropdown Menu (Hanya untuk Mobile & Tablet < 1024px) */}
       {mobileMenuOpen && (
         <div
           ref={mobileMenuRef}
-          className="absolute right-3 sm:right-6 top-16 w-[calc(100vw-1.5rem)] max-w-sm rounded-2xl bg-white border border-slate-200 shadow-2xl p-3 sm:p-4 space-y-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+          className="lg:hidden absolute right-3 sm:right-6 top-16 w-[calc(100vw-1.5rem)] max-w-sm rounded-2xl bg-white border border-slate-200 shadow-2xl p-3 sm:p-4 space-y-2 z-50 animate-in fade-in zoom-in-95 duration-150"
         >
           {/* Header Info Akun */}
           <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">

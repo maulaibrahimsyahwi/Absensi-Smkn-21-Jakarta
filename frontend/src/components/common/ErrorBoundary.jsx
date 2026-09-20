@@ -39,9 +39,9 @@ export class ErrorBoundary extends React.Component {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold transition shadow-sm cursor-pointer"
               >
-                <RefreshCw className="w-4 h-4" /> Segarkan Halaman
+                <RefreshCw className="w-4 h-4" /> Refresh
               </button>
               <a
                 href="/"

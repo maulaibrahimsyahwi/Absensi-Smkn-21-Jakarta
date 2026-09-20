@@ -128,16 +128,20 @@ export default function AbsensiPerpus() {
     return () => clearInterval(timer);
   }, []);
 
+  // Pengecekan Hari Libur Akhir Pekan (Sabtu = 6, Minggu = 0)
+  const isWeekend = [0, 6].includes(new Date().getDay());
+
   // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
   const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
     useLivenessDetector({
       webcamRef,
-      isActive: !loading && !showPopup && !result && isGpsValid,
+      isActive: !isWeekend && !loading && !showPopup && !result && isGpsValid,
       onLiveVerified: () => setCountdown(3),
       pollIntervalMs: 600,
     });
 
   const captureFace = useCallback(() => {
+    if (isWeekend) return;
     if (!isGpsValid) return;
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
@@ -152,11 +156,18 @@ export default function AbsensiPerpus() {
       });
       setCountdown(3);
     }
-  }, [webcamRef, isGpsValid]);
+  }, [webcamRef, isGpsValid, isWeekend]);
 
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI & GPS VALID (3 Detik)
   useEffect(() => {
-    if (loading || showPopup || result || !isGpsValid || !isLiveVerified) {
+    if (
+      isWeekend ||
+      loading ||
+      showPopup ||
+      result ||
+      !isGpsValid ||
+      !isLiveVerified
+    ) {
       if (!isLiveVerified) setCountdown(3);
       return;
     }
@@ -172,6 +183,7 @@ export default function AbsensiPerpus() {
 
     return () => clearInterval(timer);
   }, [
+    isWeekend,
     countdown,
     isLiveVerified,
     loading,
@@ -231,6 +243,43 @@ export default function AbsensiPerpus() {
       setCapturedImage(null);
     }
   };
+
+  // Akhir Pekan (Sabtu & Minggu): Perpustakaan Tutup
+  if (isWeekend) {
+    const namaHariIni = new Date().toLocaleDateString("id-ID", {
+      weekday: "long",
+    });
+    return (
+      <div className="fixed inset-0 w-screen h-screen bg-slate-950 flex items-center justify-center p-4 select-none z-50">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl sm:text-2xl font-black text-white">
+              Hari Libur Sekolah ({namaHariIni})
+            </h2>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Layanan absensi kunjungan perpustakaan SMKN 21 Jakarta hanya
+              dibuka pada hari sekolah aktif (<strong>Senin s/d Jumat</strong>).
+            </p>
+            <p className="text-xs text-slate-400">
+              Layanan perpustakaan akan dibuka kembali pada hari{" "}
+              <strong>Senin</strong>.
+            </p>
+          </div>
+          <div className="pt-3">
+            <Link
+              to={backTarget}
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all text-sm"
+            >
+              <span>Kembali</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none">

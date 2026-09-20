@@ -15,6 +15,7 @@ from routes.izin_routes import izin_bp
 from routes.piket_routes import piket_bp
 from routes.rekap_routes import rekap_bp
 from routes.pelanggaran_routes import pelanggaran_bp
+from routes.pjj_routes import pjj_bp
 
 # Inisialisasi Aplikasi Flask
 app = Flask(__name__)
@@ -37,6 +38,7 @@ app.register_blueprint(izin_bp)
 app.register_blueprint(piket_bp)
 app.register_blueprint(rekap_bp)
 app.register_blueprint(pelanggaran_bp)
+app.register_blueprint(pjj_bp)
 
 
 def check_and_migrate_db():

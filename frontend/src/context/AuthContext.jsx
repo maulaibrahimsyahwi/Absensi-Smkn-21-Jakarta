@@ -177,6 +177,28 @@ export function AuthProvider({ children }) {
   };
 
   /**
+   * Perbarui nama lengkap pengguna aktif di server dan local state
+   */
+  const updateName = async (nama) => {
+    if (!user) return { success: false, message: "Pengguna belum login." };
+    try {
+      const res = await api.put("/auth/profile", { nama });
+      if (res.data && res.data.success) {
+        setUser((prev) => (prev ? { ...prev, nama } : null));
+        return { success: true, message: res.data.message };
+      }
+      return {
+        success: false,
+        message: res.data?.message || "Gagal memperbarui nama lengkap.",
+      };
+    } catch (err) {
+      const msg =
+        err.response?.data?.message || "Gagal memperbarui nama lengkap.";
+      return { success: false, message: msg };
+    }
+  };
+
+  /**
    * Refresh profil pengguna (misal status wajah terdaftar)
    */
   const updateUserProfile = (patchData) => {
@@ -198,6 +220,7 @@ export function AuthProvider({ children }) {
         updateFotoProfil,
         deleteFotoProfil,
         updateUserProfile,
+        updateName,
         loadingAuth,
       }}
     >

@@ -333,6 +333,6 @@ export const getStatusPembinaan = (totalPoin) => {
     status: "Baik",
     color: "emerald",
     badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
-    desc: "Tingkat kedisiplinan dalam batas wajar.",
+    desc: "Tingkat kedisiplinan baik.",
   };
 };

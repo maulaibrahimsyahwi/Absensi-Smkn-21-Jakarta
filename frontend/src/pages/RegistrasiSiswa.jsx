@@ -563,7 +563,7 @@ export default function RegistrasiSiswa() {
   };
 
   return (
-    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto">
+    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       {/* Toast Notification Floating */}
       {notification && (
         <div
@@ -625,7 +625,7 @@ export default function RegistrasiSiswa() {
       </div>
 
       {/* Main Grid: Form Left, Student Table Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-3">
         {/* Kolom Kiri: Form & Kamera Perekam */}
         <div className="lg:col-span-5">
           <FormTambahSiswa
