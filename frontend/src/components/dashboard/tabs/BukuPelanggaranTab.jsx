@@ -221,7 +221,6 @@ export default function BukuPelanggaranTab() {
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-0.5">
               {stat.pelanggaran_hari_ini}{" "}
-              <span className="text-xs font-normal text-slate-400">kasus</span>
             </h3>
           </div>
         </div>
@@ -236,7 +235,6 @@ export default function BukuPelanggaranTab() {
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-0.5">
               {stat.total_catatan}{" "}
-              <span className="text-xs font-normal text-slate-400">entri</span>
             </h3>
           </div>
         </div>
@@ -251,7 +249,6 @@ export default function BukuPelanggaranTab() {
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-0.5">
               {stat.siswa_tercatat}{" "}
-              <span className="text-xs font-normal text-slate-400">siswa</span>
             </h3>
           </div>
         </div>
@@ -461,7 +458,12 @@ export default function BukuPelanggaranTab() {
                           />
                         </button>
                       ) : (
-                        <span className="text-slate-400">-</span>
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] bg-slate-100 text-slate-500 font-medium border border-slate-200/80"
+                          title="Siswa belum membuat tanda tangan digital di profilnya"
+                        >
+                          Belum Buat TTD
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center whitespace-nowrap">
@@ -797,7 +799,7 @@ export default function BukuPelanggaranTab() {
             {/* Tanda Tangan */}
             <div>
               <span className="text-xs font-bold text-slate-700 block mb-1">
-                Tanda Tangan Digital Pengakuan Siswa:
+                Tanda Tangan Digital Pengakuan Siswa
               </span>
               <div className="w-full h-28 border border-slate-200 bg-white rounded-2xl flex items-center justify-center p-2 shadow-inner">
                 {selectedDetail.tanda_tangan_siswa ? (
@@ -807,9 +809,14 @@ export default function BukuPelanggaranTab() {
                     className="max-h-full object-contain"
                   />
                 ) : (
-                  <span className="text-xs text-slate-400">
-                    Tidak ada tanda tangan
-                  </span>
+                  <div className="text-center p-2">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Siswa belum membuat tanda tangan digital
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      (Tercatat otomatis via Verifikasi Biometrik Wajah)
+                    </p>
+                  </div>
                 )}
               </div>
             </div>

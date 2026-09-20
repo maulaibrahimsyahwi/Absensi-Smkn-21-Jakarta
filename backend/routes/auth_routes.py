@@ -49,73 +49,68 @@ def login():
     if not password:
         return jsonify({"success": False, "message": "Password wajib diisi."}), 400
 
-    # 1. Cek Login Siswa (jika role eksplisit 'siswa' atau username cocok dengan NIS siswa)
-    if role_requested == 'siswa' or (username.isdigit() and len(username) >= 4):
-        siswa = Siswa.query.filter_by(nis=username).first()
-        if siswa:
-            if getattr(siswa, 'status', 'Aktif') == 'Alumni':
-                # Cek apakah masa tenggang akun alumni telah lewat 1 tahun (365 hari)
-                if siswa.is_alumni_expired():
-                    return jsonify({
-                        "success": False, 
-                        "message": f"Masa aktif akun alumni Anda ({siswa.nama}) telah berakhir (> 1 tahun sejak kelulusan). Akun telah diarsipkan oleh SMKN 21 Jakarta."
-                    }), 403
-
-            # Validasi password siswa dengan auto-migrasi hash
-            if not verify_and_upgrade_password(siswa, password, is_siswa=True):
+    def handle_siswa_login(siswa):
+        if getattr(siswa, 'status', 'Aktif') == 'Alumni':
+            # Cek apakah masa tenggang akun alumni telah lewat 1 tahun (365 hari)
+            if siswa.is_alumni_expired():
                 return jsonify({
                     "success": False, 
-                    "message": "Password siswa salah." if siswa.password else "Password siswa salah. (Default password: NIS Anda)"
+                    "message": f"Masa aktif akun alumni Anda ({siswa.nama}) telah berakhir (> 1 tahun sejak kelulusan). Akun telah diarsipkan oleh SMKN 21 Jakarta."
+                }), 403
+
+        # Validasi password siswa dengan auto-migrasi hash
+        if not verify_and_upgrade_password(siswa, password, is_siswa=True):
+            return jsonify({
+                "success": False, 
+                "message": "Password siswa salah." if siswa.password else "Password siswa salah. (Default password: NIS Anda)"
+            }), 401
+
+        # Cek jika 2FA aktif pada akun siswa
+        if siswa.two_factor_enabled:
+            if not totp_code:
+                return jsonify({
+                    "success": False,
+                    "requires_2fa": True,
+                    "role": "siswa",
+                    "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
+                }), 200
+            if not verify_totp(siswa.two_factor_secret, totp_code):
+                return jsonify({
+                    "success": False,
+                    "requires_2fa": True,
+                    "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
 
-            # Cek jika 2FA aktif pada akun siswa
-            if siswa.two_factor_enabled:
-                if not totp_code:
-                    return jsonify({
-                        "success": False,
-                        "requires_2fa": True,
-                        "role": "siswa",
-                        "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
-                    }), 200
-                if not verify_totp(siswa.two_factor_secret, totp_code):
-                    return jsonify({
-                        "success": False,
-                        "requires_2fa": True,
-                        "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
-                    }), 401
+        is_alumni_user = getattr(siswa, 'status', 'Aktif') == 'Alumni'
+        welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
 
-            is_alumni_user = getattr(siswa, 'status', 'Aktif') == 'Alumni'
-            welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
+        token = generate_token(user_id=siswa.id, role="siswa", identifier=siswa.nis)
 
-            token = generate_token(user_id=siswa.id, role="siswa", identifier=siswa.nis)
+        return jsonify({
+            "success": True,
+            "message": f"{welcome_prefix}, {siswa.nama}!",
+            "token": token,
+            "user": {
+                "id": siswa.id,
+                "role": "siswa",
+                "username": siswa.nis,
+                "nama": siswa.nama,
+                "nis": siswa.nis,
+                "kelas": siswa.kelas,
+                "status": siswa.status or "Aktif",
+                "tanggal_lulus": siswa.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if siswa.tanggal_lulus else None,
+                "tanda_tangan": siswa.tanda_tangan,
+                "foto_profil": siswa.foto_profil,
+                "two_factor_enabled": bool(siswa.two_factor_enabled),
+                "terdaftar": bool(siswa.face_encoding)
+            }
+        })
 
-            return jsonify({
-                "success": True,
-                "message": f"{welcome_prefix}, {siswa.nama}!",
-                "token": token,
-                "user": {
-                    "id": siswa.id,
-                    "role": "siswa",
-                    "username": siswa.nis,
-                    "nama": siswa.nama,
-                    "nis": siswa.nis,
-                    "kelas": siswa.kelas,
-                    "status": siswa.status or "Aktif",
-                    "tanggal_lulus": siswa.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if siswa.tanggal_lulus else None,
-                    "tanda_tangan": siswa.tanda_tangan,
-                    "foto_profil": siswa.foto_profil,
-                    "two_factor_enabled": bool(siswa.two_factor_enabled),
-                    "terdaftar": bool(siswa.face_encoding)
-                }
-            })
-
-    # 2. Cek Login Staf (Admin & Guru Piket)
-    user = User.query.filter_by(username=username).first()
-    if user:
+    def handle_user_login(user):
         if not verify_and_upgrade_password(user, password, is_siswa=False):
             return jsonify({"success": False, "message": "Password yang dimasukkan salah."}), 401
         
-        if role_requested and role_requested != user.role:
+        if role_requested in ['admin', 'piket'] and role_requested != user.role:
             return jsonify({
                 "success": False, 
                 "message": f"Akun ini terdaftar sebagai {user.role.upper()}, bukan {role_requested.upper()}."
@@ -154,6 +149,40 @@ def login():
                 "two_factor_enabled": bool(user.two_factor_enabled)
             }
         })
+
+    # 1. Jika request dari tab Siswa
+    if role_requested == 'siswa':
+        siswa = Siswa.query.filter_by(nis=username).first()
+        if not siswa:
+            return jsonify({
+                "success": False, 
+                "message": "Akun siswa dengan NIS tersebut tidak ditemukan. Bapak/Ibu Guru Piket & Admin silakan masuk melalui tab 'Guru Piket & Admin'."
+            }), 404
+        return handle_siswa_login(siswa)
+
+    # 2. Jika request dari tab Staf (Guru Piket & Admin)
+    elif role_requested in ['staf', 'piket', 'admin']:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            return jsonify({
+                "success": False, 
+                "message": "Akun staf (Guru Piket / Admin) dengan username tersebut tidak ditemukan. Siswa SMKN 21 silakan masuk melalui tab 'Siswa SMKN 21'."
+            }), 404
+        return handle_user_login(user)
+
+    # 3. Fallback tanpa role_requested eksplisit (kompatibilitas API / skrip pengujian)
+    if username.isdigit() and len(username) >= 4:
+        siswa = Siswa.query.filter_by(nis=username).first()
+        if siswa:
+            return handle_siswa_login(siswa)
+
+    user = User.query.filter_by(username=username).first()
+    if user:
+        return handle_user_login(user)
+
+    siswa = Siswa.query.filter_by(nis=username).first()
+    if siswa:
+        return handle_siswa_login(siswa)
 
     return jsonify({"success": False, "message": "Akun tidak ditemukan. Periksa kembali Username atau NIS Anda."}), 404
 
@@ -224,6 +253,53 @@ def save_signature():
                 "success": True,
                 "message": f"Tanda tangan digital untuk {user.nama} berhasil disimpan.",
                 "tanda_tangan": signature
+            })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ================= PERBARUI NAMA LENGKAP PROFIL =================
+
+@auth_bp.route('/api/auth/profile', methods=['PUT'])
+@token_required
+def update_profile():
+    """
+    Memperbarui nama lengkap pengguna (Siswa, Guru Piket, atau Admin).
+    """
+    data = request.json or {}
+    nama = str(data.get('nama', '')).strip()
+    if not nama:
+        return jsonify({"success": False, "message": "Nama lengkap tidak boleh kosong."}), 400
+    if len(nama) < 3:
+        return jsonify({"success": False, "message": "Nama lengkap minimal 3 karakter."}), 400
+
+    current_user = getattr(request, 'current_user', {}) or {}
+    current_role = current_user.get('role')
+    current_user_id = current_user.get('user_id')
+
+    try:
+        if current_role == 'siswa':
+            siswa = Siswa.query.get(current_user_id)
+            if not siswa:
+                return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
+            siswa.nama = nama
+            db.session.commit()
+            return jsonify({
+                "success": True,
+                "message": f"Nama lengkap berhasil diperbarui menjadi {nama}.",
+                "nama": siswa.nama
+            })
+        else:
+            user = User.query.get(current_user_id)
+            if not user:
+                return jsonify({"success": False, "message": "Akun staf tidak ditemukan."}), 404
+            user.nama = nama
+            db.session.commit()
+            return jsonify({
+                "success": True,
+                "message": f"Nama lengkap berhasil diperbarui menjadi {nama}.",
+                "nama": user.nama
             })
     except Exception as e:
         db.session.rollback()
@@ -797,7 +873,7 @@ def verify_enable_2fa():
         return jsonify({"success": False, "message": "Pengaturan 2FA belum diinisiasi. Silakan mulai ulang."}), 400
 
     if not verify_totp(account.two_factor_secret, totp_code):
-        return jsonify({"success": False, "message": "Kode verifikasi 6 digit tidak cocok atau telah kedaluwarsa. Pastikan jam perangkat Anda akurat."}), 400
+        return jsonify({"success": False, "message": "Kode verifikasi 6 digit tidak cocok atau telah kedaluwarsa. "}), 400
 
     account.two_factor_enabled = True
     db.session.commit()

@@ -24,7 +24,7 @@ const PortalAdmin = React.lazy(() => import("./pages/PortalAdmin"));
 const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
-import PageSkeleton from "./components/common/Skeleton";
+import RouteAwareSkeleton from "./components/common/Skeleton";
 
 function AppLayout() {
   const location = useLocation();
@@ -49,7 +49,7 @@ function AppLayout() {
             : "flex-1 flex flex-col"
         }
       >
-        <Suspense fallback={<PageSkeleton />}>
+        <Suspense fallback={<RouteAwareSkeleton />}>
           <Routes>
             {/* Rute Publik Terbatas */}
             <Route path="/" element={<Home />} />

@@ -490,14 +490,6 @@ export default function GuruPiket() {
             </p>
           </div>
         </div>
-
-        <Link
-          to={backTarget}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold border border-slate-200/80 transition-all shadow-2xs self-start md:self-center"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Kembali ke Beranda</span>
-        </Link>
       </div>
 
       {/* ================= MAIN 2-COLUMN LAYOUT ================= */}
@@ -544,7 +536,7 @@ export default function GuruPiket() {
                   onClick={() => setShowSignatureModal(true)}
                   className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer shadow-xs transition-all"
                 >
-                  + Buat TTD
+                  Buat TTD
                 </button>
               </div>
             )}
@@ -864,7 +856,7 @@ export default function GuruPiket() {
                   <p className="text-[11px] text-amber-600 font-medium text-center mt-1.5 flex items-center justify-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                     <span>
-                      Wajib bubuhkan tanda tangan digital sebelum menerbitkan
+                      Wajib memiliki tanda tangan digital sebelum menerbitkan
                       surat
                     </span>
                   </p>

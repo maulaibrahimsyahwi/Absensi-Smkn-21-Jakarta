@@ -244,13 +244,20 @@ class PelanggaranSiswa(db.Model):
     jenis_pelanggaran = db.Column(db.String(255), nullable=False, index=True)
     poin = db.Column(db.Integer, nullable=False, default=5)
     nama_penanggung_jawab = db.Column(db.String(150), nullable=False)
-    tanda_tangan_siswa = db.Column(db.Text, nullable=False)  # Base64 digital signature kanvas
+    tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature kanvas
     keterangan = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('catatan_pelanggaran', lazy=True))
 
     def to_dict(self):
+        ttd = self.tanda_tangan_siswa
+        # Jika ttd kosong atau berisi cap teks SVG lama, gunakan tanda tangan profil siswa jika tersedia
+        if (not ttd or 'TERCATAT TERLAMBAT' in str(ttd)) and self.siswa and self.siswa.tanda_tangan:
+            ttd = self.siswa.tanda_tangan
+        elif not ttd or 'TERCATAT TERLAMBAT' in str(ttd):
+            ttd = None
+
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
@@ -262,8 +269,50 @@ class PelanggaranSiswa(db.Model):
             "jenis_pelanggaran": self.jenis_pelanggaran,
             "poin": self.poin,
             "nama_penanggung_jawab": self.nama_penanggung_jawab,
-            "tanda_tangan_siswa": self.tanda_tangan_siswa,
+            "tanda_tangan_siswa": ttd,
             "keterangan": self.keterangan,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
+
+
+class PengaturanPJJ(db.Model):
+    """
+    Konfigurasi Mode PJJ (Pembelajaran Jarak Jauh / Belajar Dari Rumah / PKL).
+    Menentukan tingkatan/kelas mana yang diizinkan presensi dari rumah (bypass geofence radius 100m).
+    """
+    __tablename__ = 'pengaturan_pjj'
+    id = db.Column(db.Integer, primary_key=True)
+    is_active = db.Column(db.Boolean, default=False, nullable=False)  # Master toggle PJJ
+    tipe_lingkup = db.Column(db.String(20), default="tingkat", nullable=False)  # "semua", "tingkat", "kelas"
+    tingkat_aktif = db.Column(db.Text, default="[]", nullable=False)  # JSON array string misal '["X", "XI"]'
+    kelas_aktif = db.Column(db.Text, default="[]", nullable=False)  # JSON array string misal '["XII PPLG 1"]'
+    tanggal_mulai = db.Column(db.Date, nullable=True)  # None = hanya berlaku hari ini / manual
+    tanggal_selesai = db.Column(db.Date, nullable=True)
+    keterangan = db.Column(db.String(255), nullable=True)  # misal "Asesmen Nasional", "PKL / Magang"
+    updated_by = db.Column(db.String(100), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        try:
+            tingkat_list = json.loads(self.tingkat_aktif or "[]")
+        except Exception:
+            tingkat_list = []
+        try:
+            kelas_list = json.loads(self.kelas_aktif or "[]")
+        except Exception:
+            kelas_list = []
+
+        return {
+            "id": self.id,
+            "is_active": bool(self.is_active),
+            "tipe_lingkup": self.tipe_lingkup,
+            "tingkat_aktif": tingkat_list,
+            "kelas_aktif": kelas_list,
+            "tanggal_mulai": self.tanggal_mulai.strftime("%Y-%m-%d") if self.tanggal_mulai else None,
+            "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d") if self.tanggal_selesai else None,
+            "keterangan": self.keterangan or "",
+            "updated_by": self.updated_by or "-",
+            "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None
+        }
+
 

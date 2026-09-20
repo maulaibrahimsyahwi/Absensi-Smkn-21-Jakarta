@@ -212,7 +212,7 @@ export default function VerifikasiIzinTab({
               <th className="py-3.5 px-5 min-w-[200px] max-w-[300px]">
                 Alasan
               </th>
-              <th className="py-3.5 px-4 text-center">Surat Bukti</th>
+              <th className="py-3.5 px-4 text-center">Bukti</th>
               <th className="py-3.5 px-4 text-center">Lokasi GPS</th>
               <th className="py-3.5 px-4 text-center">Status</th>
               <th className="py-3.5 px-5 text-right">Verifikasi</th>
@@ -278,9 +278,7 @@ export default function VerifikasiIzinTab({
                       </div>
                     </td>
                     <td className="py-4 px-5 text-xs text-slate-700 min-w-[200px] max-w-[300px]">
-                      <div className="whitespace-normal break-words leading-relaxed bg-slate-50/80 p-2.5 rounded-xl border border-slate-200/70 font-medium text-slate-800 shadow-2xs">
-                        "{item.alasan}"
-                      </div>
+                      <div>"{item.alasan}"</div>
                       {item.catatan_guru && (
                         <div className="text-[11px] text-slate-600 mt-1.5 flex items-start gap-1 bg-amber-50/70 border border-amber-200/60 p-1.5 rounded-lg">
                           <span className="font-bold text-amber-900 flex-shrink-0">
@@ -354,9 +352,8 @@ export default function VerifikasiIzinTab({
                             {verifyingId === item.id ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <Check className="w-3.5 h-3.5" />
+                              <span>Setujui</span>
                             )}
-                            <span>Setujui</span>
                           </button>
                           <button
                             type="button"
@@ -364,7 +361,6 @@ export default function VerifikasiIzinTab({
                             onClick={() => onOpenRejectModal(item)}
                             className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                           >
-                            <X className="w-3.5 h-3.5" />
                             <span>Tolak</span>
                           </button>
                         </div>

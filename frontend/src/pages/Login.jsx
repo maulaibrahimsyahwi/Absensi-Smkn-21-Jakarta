@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ShieldCheck,
@@ -19,7 +19,7 @@ import { useAuth } from "../context/AuthContext";
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, loadingAuth } = useAuth();
+  const { user, login, loadingAuth } = useAuth();
 
   const [activeTab, setActiveTab] = useState("siswa"); // "siswa" atau "staf"
   const [username, setUsername] = useState("");
@@ -29,6 +29,19 @@ export default function Login() {
   const [hpField, setHpField] = useState(""); // Anti-bot honeypot field
   const [errorMessage, setErrorMessage] = useState("");
   const [showForgotModal, setShowForgotModal] = useState(false);
+
+  // Jika sudah pernah login (sesi aktif), langsung arahkan ke portal masing-masing
+  useEffect(() => {
+    if (!loadingAuth && user) {
+      const targetPortal =
+        user.role === "siswa"
+          ? "/portal-siswa"
+          : user.role === "piket"
+            ? "/portal-piket"
+            : "/portal-admin";
+      navigate(targetPortal, { replace: true });
+    }
+  }, [user, loadingAuth, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,11 +53,7 @@ export default function Login() {
         return;
       }
 
-      const isKnownStaffUsername = ["admin", "piket"].includes(
-        username.toLowerCase().trim(),
-      );
-      const roleRequested =
-        activeTab === "siswa" && !isKnownStaffUsername ? "siswa" : "";
+      const roleRequested = activeTab === "siswa" ? "siswa" : "staf";
       const result = await login(
         username.trim(),
         password.trim(),
@@ -70,11 +79,7 @@ export default function Login() {
         return;
       }
 
-      const isKnownStaffUsername = ["admin", "piket"].includes(
-        username.toLowerCase().trim(),
-      );
-      const roleRequested =
-        activeTab === "siswa" && !isKnownStaffUsername ? "siswa" : "";
+      const roleRequested = activeTab === "siswa" ? "siswa" : "staf";
       const result = await login(
         username.trim(),
         password.trim(),
@@ -92,26 +97,12 @@ export default function Login() {
   };
 
   const handleRedirect = (user) => {
-    const origin = location.state?.from?.pathname;
-
     const defaultPortal =
       user.role === "siswa"
         ? "/portal-siswa"
         : user.role === "piket"
           ? "/portal-piket"
           : "/portal-admin";
-
-    // Jangan pernah mengarahkan admin/piket ke portal-siswa meskipun origin menyimpannya
-    const isPortalOrAuthRoute =
-      !origin ||
-      origin === "/" ||
-      origin === "/login" ||
-      origin.startsWith("/portal-");
-
-    if (!isPortalOrAuthRoute) {
-      navigate(origin, { replace: true });
-      return;
-    }
 
     navigate(defaultPortal, { replace: true });
   };

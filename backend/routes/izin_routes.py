@@ -84,6 +84,14 @@ def submit_pengajuan_izin():
             "message": f"Alasan ketidakhadiran terlalu panjang (maksimal {MAX_ALASAN_LENGTH} karakter, terisi {len(alasan)} karakter)."
         }), 400
 
+    # Validasi Wajib Foto Surat Keterangan / Bukti
+    if not surat_bukti:
+        bukti_label = "Surat Keterangan Dokter / Resep Obat" if jenis == "Sakit" else "Surat Permohonan Izin dari Orang Tua"
+        return jsonify({
+            "success": False,
+            "message": f"Foto Surat Keterangan / Bukti wajib dilampirkan ({bukti_label}). Harap unggah foto bukti dokumen Anda."
+        }), 400
+
     # Validasi Wajib GPS
     if latitude is None or longitude is None:
         return jsonify({

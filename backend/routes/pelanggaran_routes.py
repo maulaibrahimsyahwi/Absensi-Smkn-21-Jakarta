@@ -76,10 +76,8 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
     if existing:
         return existing
 
-    # Siapkan tanda tangan siswa
-    ttd = tanda_tangan_siswa or getattr(siswa, 'tanda_tangan', None)
-    if not ttd:
-        ttd = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='60'><text x='10' y='35' font-family='sans-serif' font-size='12' fill='%23e11d48' font-weight='bold'>TERCATAT TERLAMBAT</text><text x='10' y='50' font-family='sans-serif' font-size='9' fill='%2364748b'>Verifikasi Presensi</text></svg>"
+    # Siapkan tanda tangan siswa (gunakan tanda tangan digital profil siswa jika ada, atau string kosong jika belum membuat)
+    ttd = tanda_tangan_siswa or getattr(siswa, 'tanda_tangan', None) or ""
 
     waktu_dt = waktu if isinstance(waktu, datetime) else datetime.combine(waktu, datetime.now().time())
     ket = f"Otomatis tercatat ({sumber})"

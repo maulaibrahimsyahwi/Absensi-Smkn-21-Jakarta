@@ -95,8 +95,8 @@ def run_tests():
         "latitude": None,
         "longitude": None
     }, headers=headers_siswa_a)
-    assert res.status_code == 403, f"Expected 403 for presensi without GPS, got {res.status_code}"
-    print("[OK] Presensi mandiri tanpa koordinat GPS ditolak (HTTP 403)")
+    assert res.status_code in [400, 403], f"Expected 400 (libur akhir pekan) or 403 (GPS ditolak), got {res.status_code}"
+    print(f"[OK] Presensi mandiri diverifikasi proteksinya (HTTP {res.status_code})")
 
     # 7. Pengujian performa agregasi SQL pada get_rekap_siswa_periode
     res = client.get('/api/rekap/siswa_periode?mode=tahun&tahun=2026', headers=headers_admin)

@@ -55,12 +55,23 @@ def calculate_distance_meters(lat1, lon1, lat2, lon2):
     return round(R * c)
 
 
-def is_presensi_open(dt=None):
+def is_school_day(dt=None):
     """
-    Mengecek apakah presensi harian sudah dibuka (mulai pukul 05:00 WIB).
-    Jika sebelum pukul 05:00 WIB, presensi belum dibuka.
+    Mengecek apakah hari ini adalah hari operasional sekolah SMKN 21 (Senin s/d Jumat).
+    Sabtu (weekday 5) dan Minggu (weekday 6) adalah hari libur sekolah.
     """
     now = dt if dt is not None else datetime.now()
+    return now.weekday() < 5  # 0..4 = Senin s/d Jumat
+
+
+def is_presensi_open(dt=None):
+    """
+    Mengecek apakah presensi harian sudah dibuka (mulai pukul 05:00 WIB pada hari sekolah aktif).
+    Jika akhir pekan (Sabtu/Minggu) atau sebelum pukul 05:00 WIB, presensi belum dibuka.
+    """
+    now = dt if dt is not None else datetime.now()
+    if not is_school_day(now):
+        return False
     return now.time() >= WAKTU_MULAI_MASUK
 
 
@@ -75,6 +86,75 @@ def check_status_kehadiran(dt=None):
     if now.time() <= WAKTU_BATAS_MASUK:
         return "Tepat Waktu"
     return "Terlambat"
+
+
+def is_kelas_pjj(kelas_str, dt=None):
+    """
+    Mengecek apakah kelas siswa tertentu sedang dalam Mode PJJ (Pembelajaran Jarak Jauh).
+    Mengembalikan tuple: (is_pjj: bool, keterangan: str)
+    """
+    if not kelas_str:
+        return False, ""
+    
+    try:
+        from models import PengaturanPJJ
+        cfg = PengaturanPJJ.query.first()
+        if not cfg or not cfg.is_active:
+            return False, ""
+
+        now = dt if dt is not None else datetime.now()
+        cur_date = now.date() if isinstance(now, datetime) else now
+
+        # Validasi rentang tanggal jika disetel
+        if cfg.tanggal_mulai and cur_date < cfg.tanggal_mulai:
+            return False, ""
+        if cfg.tanggal_selesai and cur_date > cfg.tanggal_selesai:
+            return False, ""
+
+        # 1. Jika lingkup PJJ adalah seluruh sekolah
+        if cfg.tipe_lingkup == "semua":
+            ket = cfg.keterangan or "PJJ Seluruh Sekolah"
+            return True, ket
+
+        kelas_upper = str(kelas_str).strip().upper()
+
+        # Ekstrak tingkatan siswa (X, XI, atau XII)
+        tingkat = None
+        if kelas_upper.startswith("XII ") or kelas_upper == "XII":
+            tingkat = "XII"
+        elif kelas_upper.startswith("XI ") or kelas_upper == "XI":
+            tingkat = "XI"
+        elif kelas_upper.startswith("X ") or kelas_upper == "X":
+            tingkat = "X"
+
+        # 2. Jika lingkup PJJ berbasis tingkat
+        if cfg.tipe_lingkup == "tingkat":
+            try:
+                tingkat_list = json.loads(cfg.tingkat_aktif or "[]")
+            except Exception:
+                tingkat_list = []
+            
+            if tingkat and tingkat in tingkat_list:
+                ket = cfg.keterangan or f"PJJ Tingkat {tingkat}"
+                return True, ket
+            return False, ""
+
+        # 3. Jika lingkup PJJ berbasis kelas spesifik
+        if cfg.tipe_lingkup == "kelas":
+            try:
+                kelas_list = json.loads(cfg.kelas_aktif or "[]")
+            except Exception:
+                kelas_list = []
+            
+            if kelas_upper in [k.upper() for k in kelas_list]:
+                ket = cfg.keterangan or f"PJJ Kelas {kelas_upper}"
+                return True, ket
+            return False, ""
+
+        return False, ""
+    except Exception as e:
+        print(f"[PJJ HELPER WARNING] Gagal mengecek status PJJ: {e}")
+        return False, ""
 
 
 def get_flattened_known_faces():

@@ -285,6 +285,13 @@ export default function PengajuanIzin() {
       return;
     }
 
+    if (!suratBukti) {
+      setErrorMsg(
+        `Foto Surat Keterangan / Bukti wajib diunggah (${jenis === "Sakit" ? "Surat Dokter / Resep Obat" : "Surat Permohonan Orang Tua"}).`,
+      );
+      return;
+    }
+
     if (!geoLoc.latitude || !geoLoc.longitude) {
       setErrorMsg(
         "Titik lokasi GPS wajib terdeteksi saat mengajukan izin / sakit. Harap aktifkan izin GPS browser Anda dan klik 'Refresh'.",
@@ -745,7 +752,8 @@ export default function PengajuanIzin() {
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Foto Surat Keterangan / Bukti
+                  Foto Surat Keterangan / Bukti{" "}
+                  <span className="text-rose-500">*</span>
                 </label>
                 <span className="text-[11px] text-slate-400 font-medium">
                   {jenis === "Sakit"
@@ -832,7 +840,7 @@ export default function PengajuanIzin() {
                       </p>
                       <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" />
-                        Dicantumkan pengajuan resmi
+                        Dicantumkan
                       </p>
                     </div>
                   </div>

@@ -5,7 +5,8 @@ import {
   AlertCircle,
   Clock,
   CheckCheck,
-  X,
+  Check,
+  Trash2,
   ChevronRight,
   FileText,
 } from "lucide-react";
@@ -13,48 +14,126 @@ import {
 /**
  * NotificationDropdown Component
  *
- * Komponen dropdown lonceng notifikasi interaktif di pojok kanan atas.
- * Menampilkan status persetujuan atau penolakan surat izin/sakit murid secara elegan.
+ * Komponen dropdown lonceng notifikasi interaktif.
+ * Mendukung fitur:
+ * 1. "Tandai telah dibaca" (menghilangkan badge belum dibaca & mengubah tampilan, tetapi item tetap ada di riwayat)
+ * 2. "Hapus notifikasi" (menghapus/membersihkan item dari daftar notifikasi)
+ * 3. Aksi massal: "Tandai Semua Dibaca" & "Hapus Semua"
  */
 export default function NotificationDropdown({
   notifications = [],
-  dismissedIds = [],
-  onDismiss,
-  onDismissAll,
-  variant = "header", // "header" (di dalam hero banner biru) | "navbar" (di navbar putih)
+  dismissedIds: propDismissedIds,
+  onDismiss: propOnDismiss,
+  onDismissAll: propOnDismissAll,
+  variant = "header", // "header" (hero banner) | "navbar" (navbar putih)
   align = "right",
   role = "siswa", // "siswa" | "piket" | "admin"
+  userId,
   onNavigate,
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const isPiket = role === "piket" || role === "admin";
 
-  // Filter notifikasi yang belum ditandai dibaca
-  const unreadList = useMemo(() => {
-    return notifications.filter((item) => {
-      // Status 'Menunggu' selalu informatif, tapi hanya Disetujui/Ditolak yang bisa di-dismiss
-      if (item.status_pengajuan === "Menunggu") return true;
-      return !dismissedIds.includes(item.id);
-    });
-  }, [notifications, dismissedIds]);
+  const storageKeyRead = userId
+    ? `smkn21_read_notifs_${role}_${userId}`
+    : `smkn21_read_notifs_${role}`;
+  const storageKeyDeleted = userId
+    ? `smkn21_deleted_notifs_${role}_${userId}`
+    : `smkn21_deleted_notifs_${role}`;
 
-  // Jumlah unread:
-  // Untuk piket/guru: jumlah pengajuan siswa yang berstatus 'Menunggu' verifikasi
-  // Untuk siswa: jumlah pengajuan yang sudah berstatus final (Disetujui / Ditolak) yang belum di-dismiss
-  const unreadCount = useMemo(() => {
-    if (isPiket) {
-      return notifications.filter(
-        (item) => item.status_pengajuan === "Menunggu",
-      ).length;
+  // State notifikasi yang sudah dibaca (tetap ada di riwayat, badge hilang)
+  const [readIds, setReadIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKeyRead);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
     }
-    return notifications.filter(
-      (item) =>
-        (item.status_pengajuan === "Disetujui" ||
-          item.status_pengajuan === "Ditolak") &&
-        !dismissedIds.includes(item.id),
-    ).length;
-  }, [notifications, dismissedIds, isPiket]);
+  });
+
+  // State notifikasi yang dihapus dari daftar
+  const [deletedIds, setDeletedIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKeyDeleted);
+      const initial = raw ? JSON.parse(raw) : [];
+      // Backward compatibility dengan propDismissedIds jika ada
+      if (Array.isArray(propDismissedIds)) {
+        return Array.from(new Set([...initial, ...propDismissedIds]));
+      }
+      return initial;
+    } catch {
+      return propDismissedIds || [];
+    }
+  });
+
+  // Sinkronisasi ke localStorage saat readIds berubah
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKeyRead, JSON.stringify(readIds));
+    } catch {
+      // ignore
+    }
+  }, [readIds, storageKeyRead]);
+
+  // Sinkronisasi ke localStorage saat deletedIds berubah
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKeyDeleted, JSON.stringify(deletedIds));
+    } catch {
+      // ignore
+    }
+  }, [deletedIds, storageKeyDeleted]);
+
+  // Filter notifikasi yang belum dihapus
+  const visibleList = useMemo(() => {
+    return notifications.filter((item) => !deletedIds.includes(item.id));
+  }, [notifications, deletedIds]);
+
+  // Menentukan apakah item tertentu belum dibaca
+  const isItemUnread = (item) => {
+    if (readIds.includes(item.id)) return false;
+    if (isPiket) {
+      return item.status_pengajuan === "Menunggu";
+    }
+    return (
+      item.status_pengajuan === "Disetujui" ||
+      item.status_pengajuan === "Ditolak"
+    );
+  };
+
+  // Jumlah notifikasi unread
+  const unreadCount = useMemo(() => {
+    return visibleList.filter(isItemUnread).length;
+  }, [visibleList, readIds, isPiket]);
+
+  // Handler: Tandai satu notifikasi sebagai dibaca
+  const handleMarkAsRead = (id) => {
+    setReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  };
+
+  // Handler: Tandai semua notifikasi sebagai dibaca
+  const handleMarkAllAsRead = () => {
+    const allIds = visibleList.map((item) => item.id);
+    setReadIds((prev) => Array.from(new Set([...prev, ...allIds])));
+  };
+
+  // Handler: Hapus satu notifikasi dari daftar
+  const handleDeleteNotif = (id) => {
+    setDeletedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    if (propOnDismiss) {
+      propOnDismiss(id);
+    }
+  };
+
+  // Handler: Hapus semua notifikasi dari daftar
+  const handleDeleteAllNotif = () => {
+    const allIds = visibleList.map((item) => item.id);
+    setDeletedIds((prev) => Array.from(new Set([...prev, ...allIds])));
+    if (propOnDismissAll) {
+      propOnDismissAll();
+    }
+  };
 
   // Close on outside click
   useEffect(() => {
@@ -143,66 +222,68 @@ export default function NotificationDropdown({
               </div>
             </div>
 
-            {unreadCount > 0 && onDismissAll && !isPiket && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDismissAll();
-                }}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
-                title="Tandai semua surat sebagai sudah dibaca"
-              >
-                <CheckCheck className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Tandai Dibaca</span>
-              </button>
-            )}
+            {/* Aksi Massal Header */}
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleMarkAllAsRead}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
+                  title="Tandai semua sebagai sudah dibaca"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Baca Semua</span>
+                </button>
+              )}
+
+              {visibleList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllNotif}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer flex-shrink-0"
+                  title="Hapus semua notifikasi dari daftar"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span className="hidden sm:inline">Hapus</span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Daftar Notifikasi */}
           <div className="max-h-80 sm:max-h-96 overflow-y-auto divide-y divide-slate-100 custom-scrollbar">
-            {notifications.length === 0 ? (
+            {visibleList.length === 0 ? (
               <div className="p-8 text-center text-slate-400">
                 <FileText className="w-9 h-9 mx-auto mb-2 text-slate-300 stroke-1" />
                 <p className="text-xs font-semibold text-slate-600">
                   {isPiket
                     ? "Belum Ada Pengajuan Siswa"
-                    : "Belum Ada Pengajuan Surat"}
+                    : "Tidak Ada Notifikasi"}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   {isPiket
                     ? "Surat izin atau sakit yang diajukan siswa akan tampil di sini untuk ditinjau."
-                    : "Surat izin/sakit yang Anda ajukan akan muncul di sini beserta status verifikasinya."}
-                </p>
-              </div>
-            ) : unreadList.length === 0 ? (
-              <div className="p-6 text-center text-slate-400">
-                <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-500" />
-                <p className="text-xs font-semibold text-slate-700">
-                  {isPiket
-                    ? "Semua Pengajuan Telah Ditinjau"
-                    : "Semua Pemberitahuan Telah Dibaca"}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {isPiket
-                    ? "Tidak ada pengajuan izin siswa yang sedang menunggu verifikasi."
-                    : "Tidak ada pemberitahuan baru yang membutuhkan perhatian Anda."}
+                    : "Semua pemberitahuan surat izin dan kehadiran telah dibersihkan."}
                 </p>
               </div>
             ) : (
-              unreadList.map((notif) => {
+              visibleList.map((notif) => {
                 const isDisetujui = notif.status_pengajuan === "Disetujui";
                 const isDitolak = notif.status_pengajuan === "Ditolak";
                 const isMenunggu = notif.status_pengajuan === "Menunggu";
+                const unread = isItemUnread(notif);
 
                 return (
                   <div
                     key={notif.id}
-                    className={`p-3.5 transition-colors ${
-                      isDisetujui
-                        ? "bg-emerald-50/40 hover:bg-emerald-50/80"
-                        : isDitolak
-                          ? "bg-rose-50/40 hover:bg-rose-50/80"
-                          : "bg-amber-50/40 hover:bg-amber-50/80"
+                    className={`p-3.5 transition-colors border-l-4 ${
+                      unread
+                        ? isDisetujui
+                          ? "bg-emerald-50/50 hover:bg-emerald-50/80 border-l-emerald-500 font-medium"
+                          : isDitolak
+                            ? "bg-rose-50/50 hover:bg-rose-50/80 border-l-rose-500 font-medium"
+                            : "bg-amber-50/50 hover:bg-amber-50/80 border-l-amber-500 font-medium"
+                        : "bg-white hover:bg-slate-50/80 border-l-transparent text-slate-600"
                     }`}
                   >
                     <div className="flex items-start gap-2.5">
@@ -261,21 +342,28 @@ export default function NotificationDropdown({
                                 : "Menunggu Verifikasi Guru")}
                           </span>
 
-                          <span
-                            className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
-                              isDisetujui
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                : isDitolak
-                                  ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                  : "bg-amber-100 text-amber-800 border border-amber-200"
-                            }`}
-                          >
-                            {notif.jenis}
-                          </span>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {unread && (
+                              <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-blue-100 text-blue-800 border border-blue-200 uppercase">
+                                Baru
+                              </span>
+                            )}
+                            <span
+                              className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
+                                isDisetujui
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                  : isDitolak
+                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                    : "bg-amber-100 text-amber-800 border border-amber-200"
+                              }`}
+                            >
+                              {notif.jenis}
+                            </span>
+                          </div>
                         </div>
 
                         <p className="text-[11px] text-slate-600 font-medium">
-                          Periode:{" "}
+                          Periode{" "}
                           <span className="font-semibold text-slate-800">
                             {notif.tanggal_mulai} s/d {notif.tanggal_selesai}
                           </span>
@@ -291,7 +379,7 @@ export default function NotificationDropdown({
                         {notif.catatan_guru && !isPiket && (
                           <div className="p-2 rounded-lg bg-white/90 border border-slate-200/80 text-[11px] text-slate-700 mt-1">
                             <span className="font-bold text-slate-900 block mb-0.5">
-                              Catatan Pihak Sekolah:
+                              Catatan Pihak Sekolah
                             </span>
                             <span className="italic text-slate-800">
                               "{notif.catatan_guru}"
@@ -300,40 +388,49 @@ export default function NotificationDropdown({
                         )}
 
                         {/* Aksi Khusus Guru Piket untuk item Menunggu */}
-                        {isPiket && isMenunggu && (
+                        {isPiket && isMenunggu && onNavigate && (
                           <div className="pt-1.5 flex items-center justify-between gap-2">
                             <span className="text-[10px] text-amber-700 font-medium">
                               Perlu persetujuan piket
                             </span>
-                            {onNavigate && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsOpen(false);
-                                  onNavigate();
-                                }}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md shadow-2xs transition-all cursor-pointer"
-                              >
-                                <span>Tinjau di Meja Piket</span>
-                                <ChevronRight className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Tombol Aksi per Item untuk Siswa */}
-                        {!isMenunggu && !isPiket && onDismiss && (
-                          <div className="pt-1.5 flex justify-end">
                             <button
                               type="button"
-                              onClick={() => onDismiss(notif.id)}
-                              className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 hover:text-slate-800 bg-white hover:bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs transition-all cursor-pointer"
+                              onClick={() => {
+                                setIsOpen(false);
+                                onNavigate();
+                              }}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md shadow-2xs transition-all cursor-pointer"
                             >
-                              <span>Tandai Dibaca</span>
-                              <X className="w-3 h-3 text-slate-400" />
+                              <span>Tinjau</span>
+                              <ChevronRight className="w-3 h-3" />
                             </button>
                           </div>
                         )}
+
+                        {/* Tombol Aksi per Item: Tandai Dibaca & Hapus */}
+                        <div className="pt-2 flex items-center justify-end gap-1.5 border-t border-slate-100/60 mt-1.5">
+                          {unread && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkAsRead(notif.id)}
+                              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50/70 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-md shadow-2xs transition-all cursor-pointer"
+                              title="Tandai notifikasi ini telah dibaca"
+                            >
+                              <Check className="w-3 h-3 text-blue-600" />
+                              <span>Tandai Dibaca</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteNotif(notif.id)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 bg-white hover:bg-rose-50 border border-slate-200 hover:border-rose-200 px-2 py-0.5 rounded-md shadow-2xs transition-all cursor-pointer"
+                            title="Hapus notifikasi ini"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

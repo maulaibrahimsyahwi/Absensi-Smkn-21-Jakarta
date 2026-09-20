@@ -28,7 +28,8 @@ export default function IzinPiketTab({
               Tidak Ada Data Izin Meja Piket
             </p>
             <p className="text-xs text-slate-400 mt-0.5">
-              Belum ada surat izin masuk atau keluar yang diterbitkan dari meja piket pada periode ini.
+              Belum ada surat izin masuk atau keluar yang diterbitkan dari meja
+              piket pada periode ini.
             </p>
           </div>
         ) : (
@@ -86,24 +87,34 @@ export default function IzinPiketTab({
                 {/* Details Box */}
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Jam Pelajaran:</span>
-                    <span className="font-bold text-slate-800">{item.jam_ke}</span>
+                    <span className="text-slate-500 font-medium">
+                      Jam Pelajaran:
+                    </span>
+                    <span className="font-bold text-slate-800">
+                      {item.jam_ke}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Hari / Tanggal:</span>
+                    <span className="text-slate-500 font-medium">
+                      Hari / Tanggal:
+                    </span>
                     <span className="font-semibold text-slate-700">
                       {item.hari}, {item.tanggal_formatted || item.tanggal}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Petugas Piket:</span>
+                    <span className="text-slate-500 font-medium">
+                      Petugas Piket:
+                    </span>
                     <span className="font-semibold text-slate-800 flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3 text-indigo-600" />
                       {item.petugas_piket}
                     </span>
                   </div>
                   <div className="pt-1 border-t border-slate-200/60">
-                    <span className="text-slate-500 font-medium block mb-0.5">Alasan:</span>
+                    <span className="text-slate-500 font-medium block mb-0.5">
+                      Alasan:
+                    </span>
                     <p className="italic text-slate-700 bg-white p-2 rounded-lg border border-slate-200/50">
                       "{item.alasan}"
                     </p>
@@ -196,11 +207,6 @@ export default function IzinPiketTab({
                           <span className="text-[10px] font-bold text-slate-700">
                             {item.kelas}
                           </span>
-                          <span
-                            className={`text-[8px] font-bold px-1 py-0.2 rounded border ${jurInfo.badge}`}
-                          >
-                            {jurInfo.kode}
-                          </span>
                         </div>
                       </div>
                     </td>
@@ -217,9 +223,8 @@ export default function IzinPiketTab({
                         {isMasuk ? (
                           <LogIn className="w-3 h-3 text-emerald-600" />
                         ) : (
-                          <LogOut className="w-3 h-3 text-amber-600" />
+                          <span>{item.tipe}</span>
                         )}
-                        <span>{item.tipe}</span>
                       </span>
                     </td>
 
@@ -238,7 +243,10 @@ export default function IzinPiketTab({
 
                     {/* Alasan */}
                     <td className="py-3.5 px-4 max-w-xs">
-                      <p className="text-slate-700 italic truncate" title={item.alasan}>
+                      <p
+                        className="text-slate-700 italic truncate"
+                        title={item.alasan}
+                      >
                         "{item.alasan}"
                       </p>
                     </td>
@@ -246,8 +254,10 @@ export default function IzinPiketTab({
                     {/* Petugas Piket */}
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-1 text-slate-800 font-medium">
-                        <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                        <span className="truncate max-w-[120px]" title={item.petugas_piket}>
+                        <span
+                          className="truncate max-w-[120px]"
+                          title={item.petugas_piket}
+                        >
                           {item.petugas_piket}
                         </span>
                       </div>
@@ -258,12 +268,13 @@ export default function IzinPiketTab({
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
-                          onClick={() => onOpenSlipModal && onOpenSlipModal(item)}
+                          onClick={() =>
+                            onOpenSlipModal && onOpenSlipModal(item)
+                          }
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-colors cursor-pointer"
                           title="Cetak E-Slip Resmi"
                         >
                           <Printer className="w-3.5 h-3.5" />
-                          <span>E-Slip</span>
                         </button>
                         {onDeleteIzin && (
                           <button

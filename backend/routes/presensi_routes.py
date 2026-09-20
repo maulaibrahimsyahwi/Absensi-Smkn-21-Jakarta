@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
 from face_utils import verify_face
-from utils.helpers import calculate_distance_meters, check_status_kehadiran, is_presensi_open, get_flattened_known_faces
+from utils.helpers import calculate_distance_meters, check_status_kehadiran, is_presensi_open, is_school_day, is_kelas_pjj, get_flattened_known_faces
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from utils.auth_middleware import token_required
 
@@ -25,6 +25,26 @@ def get_status_today():
     if not siswa:
         return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
 
+    now_dt = datetime.now()
+    nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
+    is_weekend = not is_school_day(now_dt)
+    pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, now_dt)
+
+    if is_weekend:
+        return jsonify({
+            "success": True,
+            "already_attended": False,
+            "is_weekend": True,
+            "is_pjj": False,
+            "pjj_info": "",
+            "is_presensi_open": False,
+            "hari": nama_hari,
+            "jam_buka": "05:00 WIB",
+            "jam_batas": "06:30 WIB",
+            "message": f"Hari ini adalah hari {nama_hari} (Libur Akhir Pekan). Presensi kehadiran dibuka kembali hari Senin pukul 05:00 WIB.",
+            "data": None
+        })
+
     today_start = datetime.combine(date.today(), time.min)
     today_end = datetime.combine(date.today(), time.max)
     absen_today = AbsensiHarian.query.filter(
@@ -33,11 +53,13 @@ def get_status_today():
         AbsensiHarian.waktu <= today_end
     ).first()
 
-    now_dt = datetime.now()
     if absen_today:
         return jsonify({
             "success": True,
             "already_attended": True,
+            "is_weekend": False,
+            "is_pjj": pjj_active,
+            "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
             "jam_buka": "05:00 WIB",
             "jam_batas": "06:30 WIB",
@@ -53,6 +75,9 @@ def get_status_today():
         return jsonify({
             "success": True,
             "already_attended": False,
+            "is_weekend": False,
+            "is_pjj": pjj_active,
+            "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
             "jam_buka": "05:00 WIB",
             "jam_batas": "06:30 WIB",
@@ -73,8 +98,17 @@ def verify_harian():
     simulated = data.get('simulated', False)
     expected_siswa_id = data.get('expected_siswa_id')
 
-    # Validasi Jam Operasional: Presensi baru dibuka mulai pukul 05:00 WIB
+    # Validasi Hari Operasional: Presensi hanya aktif pada hari sekolah (Senin s/d Jumat)
     now_dt = datetime.now()
+    if not is_school_day(now_dt):
+        nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
+        return jsonify({
+            "success": False,
+            "is_weekend": True,
+            "message": f"Presensi harian ditolak! Sistem presensi SMKN 21 hanya beroperasi pada hari Senin s/d Jumat. Hari ini adalah hari {nama_hari} (Libur Akhir Pekan)."
+        }), 400
+
+    # Validasi Jam Operasional: Presensi baru dibuka mulai pukul 05:00 WIB
     if not is_presensi_open(now_dt):
         return jsonify({
             "success": False,
@@ -106,6 +140,18 @@ def verify_harian():
             "message": f"Presensi ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
         }), 403
 
+    # Periksa target siswa dan status PJJ jika presensi mandiri
+    target_siswa = None
+    is_pjj_user = False
+    pjj_label_user = ""
+    if expected_siswa_id:
+        target_siswa = Siswa.query.get(expected_siswa_id)
+        if not target_siswa:
+            return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
+        if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
+            return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
+        is_pjj_user, pjj_label_user = is_kelas_pjj(target_siswa.kelas, now_dt)
+
     # Validasi Geofence:
     # Untuk presensi mandiri siswa atau perangkat non-admin/piket, koordinat GPS WAJIB disertakan
     is_admin_or_piket = user_role in ['admin', 'piket']
@@ -113,29 +159,24 @@ def verify_harian():
         if latitude is None or longitude is None:
             return jsonify({
                 "success": False,
-                "message": "Presensi ditolak! Akses lokasi (GPS) wajib diaktifkan untuk memastikan Anda berada di lingkungan sekolah SMKN 21."
+                "message": "Presensi ditolak! Akses lokasi (GPS) wajib diaktifkan untuk mencatat titik lokasi presensi Anda."
             }), 403
 
-    if latitude is not None and longitude is not None:
-        dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
-        if dist is not None and dist > MAX_RADIUS_SEKOLAH:
-            return jsonify({
-                "success": False,
-                "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
-            }), 403
+    # Bypass batasan radius sekolah 100m jika siswa berstatus PJJ (Belajar dari Rumah / PKL)
+    if not is_pjj_user:
+        if latitude is not None and longitude is not None:
+            dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+            if dist is not None and dist > MAX_RADIUS_SEKOLAH:
+                return jsonify({
+                    "success": False,
+                    "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
+                }), 403
 
     today_start = datetime.combine(date.today(), time.min)
     today_end = datetime.combine(date.today(), time.max)
 
     # 1. Jika Presensi Mandiri Siswa (expected_siswa_id ditentukan)
     if expected_siswa_id:
-        target_siswa = Siswa.query.get(expected_siswa_id)
-        if not target_siswa:
-            return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
-
-        if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
-            return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
-
         # Cek apakah siswa sudah presensi hari ini
         sudah_absen = AbsensiHarian.query.filter(
             AbsensiHarian.siswa_id == expected_siswa_id,
@@ -208,18 +249,21 @@ def verify_harian():
                 }), 400
 
             now_dt = datetime.now()
-            status = check_status_kehadiran(now_dt)
+            pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, now_dt)
+            base_status = check_status_kehadiran(now_dt)
+            status = f"{base_status} (PJJ)" if pjj_active else base_status
+
             absen = AbsensiHarian(siswa_id=siswa_id, status=status, waktu=now_dt)
             db.session.add(absen)
 
             # Jika siswa terlambat, otomatis catat ke Buku Saku Pelanggaran Siswa (+5 poin)
-            if status == "Terlambat":
+            if "Terlambat" in status:
                 catat_pelanggaran_terlambat(
                     siswa=siswa,
                     waktu=now_dt,
-                    sumber="Presensi Harian (Wajah & GPS)",
+                    sumber=f"Presensi Harian {'(PJJ)' if pjj_active else '(Wajah & GPS)'}",
                     petugas="Sistem Presensi SMKN 21",
-                    alasan=f"Presensi mandiri tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: 06:30 WIB)"
+                    alasan=f"Presensi mandiri {'PJJ ' if pjj_active else ''}tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: 06:30 WIB)"
                 )
 
             db.session.commit()
@@ -227,6 +271,8 @@ def verify_harian():
             confidence_text = f" kecocokan {result.get('confidence', 95)}%" if 'confidence' in result else ""
             return jsonify({
                 "success": True,
+                "is_pjj": pjj_active,
+                "pjj_info": pjj_info,
                 "message": f"Berhasil Absen {siswa.nama} - {siswa.kelas} ({status}){confidence_text}"
             })
         else:
@@ -253,6 +299,16 @@ def verify_perpus():
     is_mock = data.get('is_mock', False)
     simulated = data.get('simulated', False)
     
+    # Validasi Hari Operasional: Perpustakaan hanya melayani presensi pada hari sekolah (Senin s/d Jumat)
+    now_dt = datetime.now()
+    if not is_school_day(now_dt):
+        nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
+        return jsonify({
+            "success": False,
+            "is_weekend": True,
+            "message": f"Presensi perpustakaan ditolak! Layanan perpustakaan SMKN 21 hanya beroperasi pada hari Senin s/d Jumat. Hari ini adalah hari {nama_hari} (Libur Akhir Pekan)."
+        }), 400
+
     if not keperluan:
         return jsonify({"success": False, "message": "Keperluan kunjungan belum diisi."}), 400
 

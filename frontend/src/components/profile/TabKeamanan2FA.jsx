@@ -278,9 +278,8 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
                 {twoFactorLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Check className="w-4 h-4" />
+                  "Verifikasi & Aktifkan"
                 )}
-                Verifikasi & Aktifkan
               </button>
             </div>
           </form>

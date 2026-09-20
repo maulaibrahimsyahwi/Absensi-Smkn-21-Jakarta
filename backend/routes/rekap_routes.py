@@ -122,6 +122,7 @@ def get_rekap_siswa_periode():
             "status": s_status or "Aktif",
             "tepat_waktu": 0,
             "terlambat": 0,
+            "pjj": 0,
             "sakit": 0,
             "izin": 0,
             "alpa": 0,
@@ -141,6 +142,7 @@ def get_rekap_siswa_periode():
 
     total_tepat_waktu = 0
     total_terlambat = 0
+    total_pjj = 0
     total_sakit = 0
     total_izin = 0
     total_alpa = 0
@@ -148,22 +150,27 @@ def get_rekap_siswa_periode():
 
     for sid, status_str, count_val in harian_agg_results:
         total_presensi_harian += count_val
+        status_clean = status_str or ""
         if sid in siswa_map:
-            if status_str == "Tepat Waktu":
+            if "(PJJ)" in status_clean:
+                siswa_map[sid]["pjj"] += count_val
+                total_pjj += count_val
+
+            if "Tepat Waktu" in status_clean:
                 siswa_map[sid]["tepat_waktu"] += count_val
                 siswa_map[sid]["total_hadir"] += count_val
                 total_tepat_waktu += count_val
-            elif status_str == "Terlambat":
+            elif "Terlambat" in status_clean:
                 siswa_map[sid]["terlambat"] += count_val
                 siswa_map[sid]["total_hadir"] += count_val
                 total_terlambat += count_val
-            elif status_str == "Sakit":
+            elif "Sakit" in status_clean:
                 siswa_map[sid]["sakit"] += count_val
                 total_sakit += count_val
-            elif status_str == "Izin":
+            elif "Izin" in status_clean:
                 siswa_map[sid]["izin"] += count_val
                 total_izin += count_val
-            elif status_str == "Alpa":
+            elif "Alpa" in status_clean:
                 siswa_map[sid]["alpa"] += count_val
                 total_alpa += count_val
 
@@ -193,6 +200,7 @@ def get_rekap_siswa_periode():
             "total_presensi_harian": total_presensi_harian,
             "total_tepat_waktu": total_tepat_waktu,
             "total_terlambat": total_terlambat,
+            "total_pjj": total_pjj,
             "total_sakit": total_sakit,
             "total_izin": total_izin,
             "total_alpa": total_alpa,
@@ -249,8 +257,9 @@ def get_admin_summary():
 
         # 2. Kehadiran Hari Ini
         presensi_today = AbsensiHarian.query.filter(db.func.date(AbsensiHarian.waktu) == today).all()
-        tepat_waktu = sum(1 for p in presensi_today if p.status == 'Tepat Waktu')
-        terlambat = sum(1 for p in presensi_today if p.status == 'Terlambat')
+        tepat_waktu = sum(1 for p in presensi_today if 'Tepat Waktu' in (p.status or ''))
+        terlambat = sum(1 for p in presensi_today if 'Terlambat' in (p.status or ''))
+        pjj_count = sum(1 for p in presensi_today if '(PJJ)' in (p.status or ''))
         sakit = sum(1 for p in presensi_today if p.status == 'Sakit')
         izin = sum(1 for p in presensi_today if p.status == 'Izin')
         alpa = sum(1 for p in presensi_today if p.status == 'Alpa')
@@ -284,6 +293,7 @@ def get_admin_summary():
                 "total_hadir_today": total_hadir_today,
                 "tepat_waktu": tepat_waktu,
                 "terlambat": terlambat,
+                "pjj": pjj_count,
                 "sakit": sakit,
                 "izin": izin,
                 "alpa": alpa,
