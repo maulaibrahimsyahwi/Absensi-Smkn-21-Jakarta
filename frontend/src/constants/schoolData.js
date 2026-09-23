@@ -74,10 +74,18 @@ export const KELAS_FILTER_DROPDOWN = [
  */
 export function getJurusanInfo(kelasStr) {
   if (!kelasStr) return null;
+  const upper = kelasStr.toUpperCase();
   for (const jur of JURUSAN_SMKN21) {
-    if (kelasStr.toUpperCase().includes(jur.kode)) {
+    if (upper.includes(jur.kode)) {
       return jur;
     }
   }
-  return null;
+  // Fallback untuk kelas / jurusan kustom
+  const parts = upper.split(/\s+/);
+  const kode = parts.length > 1 ? parts[1] : upper;
+  return {
+    kode: kode,
+    nama: upper,
+    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  };
 }

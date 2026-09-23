@@ -79,18 +79,16 @@ export default function FaceSilhouetteGuide({
           </div>
         )}
 
-        {/* 3. Floating Prompt Below Chin */}
-        <div className="absolute -bottom-8 sm:-bottom-9 inset-x-0 text-center pointer-events-none px-4">
+        {/* 3. Floating Prompt Above Face Silhouette */}
+        <div className="absolute -top-8 sm:-top-10 inset-x-0 text-center pointer-events-none px-4 z-20">
           {isDetected ? (
             isLiveVerified ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/85 border-emerald-400 text-emerald-200">
-                <span className="truncate">Tahan posisi...</span>
+                <span className="truncate">Tahan posisi</span>
               </span>
             ) : eyeState === "CLOSED" ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-cyan-950/85 border-cyan-400 text-cyan-200">
-                <span className="truncate">
-                  Kelopak mata terpejam! Buka kembali mata Anda...
-                </span>
+                <span className="truncate">Kedipkan mata Anda</span>
               </span>
             ) : (
               <span className=""></span>

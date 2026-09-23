@@ -17,7 +17,6 @@ export default function DashboardPagination({
       {/* Kontrol Slider & Preset */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-blue-600 flex-shrink-0" />
           <span className="font-semibold text-slate-700">Batas Tampilan</span>
         </div>
 
@@ -54,9 +53,6 @@ export default function DashboardPagination({
               <strong className="text-slate-800 font-bold">
                 {startIndex + 1}–{endIndex}
               </strong>{" "}
-              dari{" "}
-              <strong className="text-slate-800 font-bold">{totalItems}</strong>{" "}
-              data
             </>
           )}
         </span>

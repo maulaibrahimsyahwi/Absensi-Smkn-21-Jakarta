@@ -28,22 +28,34 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       const msg = error.response.data?.message || "";
-      const isLoginRequest = error.config?.url?.includes("/auth/login");
-      const isPasswordCheckFailure =
-        error.config?.url?.includes("/change_password") ||
-        error.config?.url?.includes("/auth/signature") ||
-        error.config?.url?.includes("/2fa/disable");
+      const url = error.config?.url || "";
 
-      // Hanya logout jika error berasal dari masalah token/sesi, bukan kegagalan verifikasi password lokal
+      // Abaikan request login, ubah password, dan verifikasi biometrik/presensi dari trigger auto-logout
+      const isLoginRequest = url.includes("/auth/login");
+      const isPasswordCheckFailure =
+        url.includes("/change_password") ||
+        url.includes("/auth/signature") ||
+        url.includes("/2fa/disable");
+      const isVerificationEndpoint =
+        url.includes("/verify_harian") ||
+        url.includes("/verify_perpus") ||
+        url.includes("/detect_liveness") ||
+        url.includes("/detect_face");
+
+      // Hanya logout jika error BENAR-BENAR berasal dari masalah token/sesi kedaluwarsa
       const isTokenExpired =
         msg.includes("Sesi login") ||
         msg.includes("Token autentikasi") ||
-        msg.includes("Gagal memverifikasi token");
+        msg.includes("Gagal memverifikasi token") ||
+        msg.includes("Token tidak valid") ||
+        msg.includes("Token kedaluwarsa") ||
+        msg.includes("Token expired");
 
       if (
-        (isTokenExpired || (!isPasswordCheckFailure && !isLoginRequest)) &&
+        isTokenExpired &&
         !isLoginRequest &&
         !isPasswordCheckFailure &&
+        !isVerificationEndpoint &&
         !window.location.pathname.includes("/login")
       ) {
         localStorage.removeItem("smkn21_auth_token");

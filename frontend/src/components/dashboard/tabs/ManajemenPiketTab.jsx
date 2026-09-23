@@ -18,6 +18,9 @@ import {
   RefreshCw,
   Lock,
   Calendar,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 export default function ManajemenPiketTab() {
@@ -26,11 +29,15 @@ export default function ManajemenPiketTab() {
   const [searchTerm, setSearchTerm] = useState("");
   const [notification, setNotification] = useState(null);
 
+  // Sorting State
+  const [sortKey, setSortKey] = useState("nama");
+  const [sortDirection, setSortDirection] = useState("asc");
+
   // Modal State: Tambah Guru Piket
   const [showAddModal, setShowAddModal] = useState(false);
   const [addNama, setAddNama] = useState("");
   const [addUsername, setAddUsername] = useState("");
-  const [addPassword, setAddPassword] = useState("piket123");
+  const [addPassword, setAddPassword] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
 
@@ -46,6 +53,10 @@ export default function ManajemenPiketTab() {
   const [resetStaf, setResetStaf] = useState(null);
   const [resetNewPass, setResetNewPass] = useState("piket123");
   const [resetLoading, setResetLoading] = useState(false);
+
+  // Modal State: Reset Tanda Tangan
+  const [resetSignatureStaf, setResetSignatureStaf] = useState(null);
+  const [resetSigLoading, setResetSigLoading] = useState(false);
 
   // Modal State: Konfirmasi Hapus
   const [deletingStaf, setDeletingStaf] = useState(null);
@@ -77,7 +88,16 @@ export default function ManajemenPiketTab() {
     }, 4000);
   };
 
-  // Filter staf pencarian (hanya menampilkan role piket untuk operasional guru piket, admin tetap ditampilkan sebagai referensi)
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  // Filter & Sort staf pencarian
   const filteredStaf = stafList.filter((s) => {
     const term = searchTerm.toLowerCase();
     return (
@@ -86,26 +106,48 @@ export default function ManajemenPiketTab() {
     );
   });
 
+  const sortedStaf = [...filteredStaf].sort((a, b) => {
+    let aVal = a[sortKey] ?? "";
+    let bVal = b[sortKey] ?? "";
+
+    if (sortKey === "has_signature") {
+      aVal = a.has_signature ? 1 : 0;
+      bVal = b.has_signature ? 1 : 0;
+    } else if (typeof aVal === "string") {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+    }
+
+    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
   const totalGuruPiket = stafList.filter((s) => s.role === "piket").length;
   const guruDenganTtd = stafList.filter(
     (s) => s.role === "piket" && s.has_signature,
   ).length;
 
-  // Handle Tambah Guru Piket
+  // Handle Tambah Guru Piket (Password otomatis sama dengan NIP jika kosong)
   const handleCreateStaf = async (e) => {
     e.preventDefault();
     setAddError("");
+
+    const nipValue = addUsername.trim();
+    const finalPassword = addPassword.trim() || nipValue;
 
     if (!addNama.trim()) {
       setAddError("Nama lengkap guru beserta gelar wajib diisi.");
       return;
     }
-    if (!addUsername.trim()) {
-      setAddError("Username / NIP akun wajib diisi.");
+    if (!nipValue) {
+      setAddError("NIP akun wajib diisi.");
       return;
     }
-    if (!addPassword.trim() || addPassword.length < 4) {
-      setAddError("Kata sandi awal minimal 4 karakter.");
+    if (finalPassword.length < 4) {
+      setAddError(
+        "Kata sandi awal minimal 4 karakter (NIP minimal 4 karakter).",
+      );
       return;
     }
 
@@ -113,8 +155,8 @@ export default function ManajemenPiketTab() {
     try {
       const res = await api.post("/staf", {
         nama: addNama.trim(),
-        username: addUsername.trim(),
-        password: addPassword.trim(),
+        username: nipValue,
+        password: finalPassword,
         role: "piket",
       });
       if (res.data && res.data.success) {
@@ -125,7 +167,7 @@ export default function ManajemenPiketTab() {
         setShowAddModal(false);
         setAddNama("");
         setAddUsername("");
-        setAddPassword("piket123");
+        setAddPassword("");
         fetchStafList();
       }
     } catch (err) {
@@ -185,12 +227,12 @@ export default function ManajemenPiketTab() {
     setResetLoading(true);
     try {
       const res = await api.post(`/staf/${resetStaf.id}/reset_password`, {
-        new_password: resetNewPass.trim() || "piket123",
+        new_password: resetNewPass.trim() || resetStaf.username,
       });
       if (res.data && res.data.success) {
         showNotification(
           "success",
-          `Kata sandi ${resetStaf.nama} berhasil direset ke: ${resetNewPass}`,
+          `Kata sandi ${resetStaf.nama} berhasil direset ke: ${resetNewPass.trim() || resetStaf.username}`,
         );
         setResetStaf(null);
       }
@@ -202,27 +244,31 @@ export default function ManajemenPiketTab() {
     }
   };
 
-  // Handle Reset Tanda Tangan
-  const handleResetSignature = async (staf) => {
-    if (
-      !window.confirm(
-        `Reset tanda tangan digital untuk ${staf.nama}? Guru ini dapat menggambar tanda tangan baru saat login.`,
-      )
-    ) {
-      return;
-    }
+  // Handle Reset Tanda Tangan (Menggunakan Custom Modal)
+  const handleOpenResetSignature = (staf) => {
+    setResetSignatureStaf(staf);
+  };
+
+  const handleConfirmResetSignature = async () => {
+    if (!resetSignatureStaf) return;
+    setResetSigLoading(true);
     try {
-      const res = await api.post(`/staf/${staf.id}/reset_signature`);
+      const res = await api.post(
+        `/staf/${resetSignatureStaf.id}/reset_signature`,
+      );
       if (res.data && res.data.success) {
         showNotification(
           "success",
-          `Tanda tangan digital ${staf.nama} berhasil direset.`,
+          `Tanda tangan digital ${resetSignatureStaf.nama} berhasil direset. Guru dapat menggambar kembali saat login.`,
         );
+        setResetSignatureStaf(null);
         fetchStafList();
       }
     } catch (err) {
       const msg = err.response?.data?.message || "Gagal mereset tanda tangan.";
       showNotification("error", msg);
+    } finally {
+      setResetSigLoading(false);
     }
   };
 
@@ -274,23 +320,13 @@ export default function ManajemenPiketTab() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md">
-                <ShieldCheck className="w-5 h-5 text-blue-200" />
-              </div>
               <div>
                 <h3 className="text-base sm:text-lg font-black tracking-tight">
                   Manajemen Akun Guru Piket
                 </h3>
-                <p className="text-xs text-blue-200">
-                  SMKN 21 Jakarta • Master Pengguna & Tanda Tangan Petugas
-                </p>
+                <p className="text-xs text-blue-200">SMKN 21 Jakarta</p>
               </div>
             </div>
-            <p className="text-xs text-blue-100/90 mt-2.5 max-w-xl leading-relaxed">
-              Setiap guru memiliki akun personal masing-masing. Saat guru piket
-              login, nama beliau otomatis tertera di formulir Meja Piket,
-              pengesahan izin, dan e-slip surat izin yang dicetak.
-            </p>
           </div>
 
           <div className="flex-shrink-0">
@@ -365,7 +401,7 @@ export default function ManajemenPiketTab() {
           <RefreshCw
             className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`}
           />
-          <span className="hidden sm:inline">Muat Ulang</span>
+          <span className="hidden sm:inline">Refresh</span>
         </button>
       </div>
 
@@ -390,16 +426,96 @@ export default function ManajemenPiketTab() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3 px-4">Nama Lengkap & Gelar</th>
-                  <th className="py-3 px-4">Username / NIP</th>
-                  <th className="py-3 px-4">Peran</th>
-                  <th className="py-3 px-4">Tanda Tangan Digital</th>
-                  <th className="py-3 px-4">Terdaftar Sejak</th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                    onClick={() => handleSort("nama")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Nama Lengkap & Gelar</span>
+                      {sortKey === "nama" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                    onClick={() => handleSort("username")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Username / NIP</span>
+                      {sortKey === "username" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                    onClick={() => handleSort("role")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Peran</span>
+                      {sortKey === "role" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                    onClick={() => handleSort("has_signature")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Tanda Tangan Digital</span>
+                      {sortKey === "has_signature" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                    onClick={() => handleSort("created_at")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Terdaftar Sejak</span>
+                      {sortKey === "created_at" ? (
+                        sortDirection === "asc" ? (
+                          <ArrowUp className="w-3 h-3 text-blue-600" />
+                        ) : (
+                          <ArrowDown className="w-3 h-3 text-blue-600" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-3 px-4 text-center">Aksi Manajemen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredStaf.map((staf) => {
+                {sortedStaf.map((staf) => {
                   const isPrimaryAdmin =
                     staf.username === "admin" || staf.role === "admin";
                   return (
@@ -423,9 +539,6 @@ export default function ManajemenPiketTab() {
                             <p className="font-bold text-slate-800">
                               {staf.nama}
                             </p>
-                            <p className="text-[10px] text-slate-400 font-mono">
-                              ID: #{staf.id}
-                            </p>
                           </div>
                         </div>
                       </td>
@@ -444,7 +557,7 @@ export default function ManajemenPiketTab() {
                               : "bg-emerald-100 text-emerald-700 border border-emerald-200"
                           }`}
                         >
-                          {isPrimaryAdmin ? "Admin Utama" : "Guru Piket"}
+                          {isPrimaryAdmin ? "Admin " : "Guru Piket"}
                         </span>
                       </td>
 
@@ -458,7 +571,7 @@ export default function ManajemenPiketTab() {
                             {!isPrimaryAdmin && (
                               <button
                                 type="button"
-                                onClick={() => handleResetSignature(staf)}
+                                onClick={() => handleOpenResetSignature(staf)}
                                 title="Reset tanda tangan agar guru dapat menandatangani ulang"
                                 className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold underline cursor-pointer"
                               >
@@ -534,9 +647,6 @@ export default function ManajemenPiketTab() {
               {/* Header */}
               <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center">
-                    <UserPlus className="w-5 h-5 text-blue-200" />
-                  </div>
                   <div>
                     <h4 className="text-base font-bold">
                       Tambah Guru Piket Baru
@@ -577,42 +687,47 @@ export default function ManajemenPiketTab() {
                     className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                     required
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Nama ini akan otomatis tertera di Surat Izin Siswa.
-                  </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Username / NIP Akun <span className="text-rose-500">*</span>
+                    NIP Guru (Nomor Induk Pegawai){" "}
+                    <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={addUsername}
-                    onChange={(e) => setAddUsername(e.target.value)}
-                    placeholder="Contoh: 197805122005011002 atau mulyadi"
+                    onChange={(e) => {
+                      setAddUsername(e.target.value);
+                      if (!addPassword) setAddPassword(e.target.value);
+                    }}
+                    placeholder="Contoh: 197805122005011002"
                     className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
                     required
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Digunakan oleh guru untuk masuk ke sistem.
+                    Pendaftaran guru piket cukup menggunakan NIP.
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi Awal <span className="text-rose-500">*</span>
+                    Kata Sandi Awal
                   </label>
                   <input
                     type="text"
                     value={addPassword}
                     onChange={(e) => setAddPassword(e.target.value)}
-                    placeholder="Default: piket123"
+                    placeholder={
+                      addUsername
+                        ? `Otomatis sama: ${addUsername}`
+                        : "Otomatis sama dengan NIP"
+                    }
                     className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
-                    required
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Guru dapat mengubah kata sandi ini kapan saja di Profil.
+                  <p className="text-[11px] text-blue-600 mt-1 font-medium">
+                    * Kata sandi awal otomatis sama seperti NIP guru jika
+                    dikosongkan.
                   </p>
                 </div>
 
@@ -635,7 +750,7 @@ export default function ManajemenPiketTab() {
                         <span>Menyimpan...</span>
                       </>
                     ) : (
-                      <span>Daftarkan Guru Piket</span>
+                      <span>Daftar</span>
                     )}
                   </button>
                 </div>
@@ -659,9 +774,6 @@ export default function ManajemenPiketTab() {
                     <h4 className="text-base font-bold">
                       Edit Akun Guru Piket
                     </h4>
-                    <p className="text-xs text-slate-400">
-                      ID: #{editingStaf.id} • {editingStaf.role.toUpperCase()}
-                    </p>
                   </div>
                 </div>
                 <button
@@ -802,7 +914,7 @@ export default function ManajemenPiketTab() {
                     {resetLoading ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <span>Reset Sandi Sekarang</span>
+                      <span>Reset</span>
                     )}
                   </button>
                 </div>
@@ -812,11 +924,60 @@ export default function ManajemenPiketTab() {
           document.body,
         )}
 
+      {/* ================= MODAL KONFIRMASI RESET TANDA TANGAN ================= */}
+      {resetSignatureStaf &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <PenLine className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h4 className="text-base font-bold text-slate-900">
+                  Reset Tanda Tangan Digital?
+                </h4>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Tanda tangan digital untuk{" "}
+                  <strong>{resetSignatureStaf.nama}</strong> (
+                  {resetSignatureStaf.username}) akan dihapus dari sistem. Guru
+                  ini dapat menggambar tanda tangan baru saat login berikutnya.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setResetSignatureStaf(null)}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmResetSignature}
+                  disabled={resetSigLoading}
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                >
+                  {resetSigLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Mereset...</span>
+                    </>
+                  ) : (
+                    <span>Ya, Reset TTD</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
       {/* ================= MODAL KONFIRMASI HAPUS ================= */}
       {deletingStaf &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
                 <Trash2 className="w-6 h-6" />
               </div>
@@ -824,18 +985,30 @@ export default function ManajemenPiketTab() {
                 <h4 className="text-base font-bold text-slate-900">
                   Hapus Akun Guru Piket?
                 </h4>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
                   Apakah Anda yakin ingin menghapus akun{" "}
-                  <strong>{deletingStaf.nama}</strong> ({deletingStaf.username}
-                  )? Guru ini tidak akan dapat login kembali.
+                  <strong className="text-slate-800">
+                    {deletingStaf.nama}
+                  </strong>{" "}
+                  (NIP:{" "}
+                  <span className="font-mono font-semibold">
+                    {deletingStaf.username}
+                  </span>
+                  )? Seluruh riwayat operasional piket tetap tercatat, namun
+                  guru ini tidak akan dapat login kembali.
                 </p>
               </div>
 
-              <div className="flex items-center justify-center gap-2.5 pt-2">
+              <div className="p-3 bg-rose-50/70 border border-rose-200/60 rounded-xl text-[11px] text-rose-700 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>Tindakan ini permanen dan tidak dapat dibatalkan.</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setDeletingStaf(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
                 >
                   Batal
                 </button>
@@ -843,10 +1016,13 @@ export default function ManajemenPiketTab() {
                   type="button"
                   onClick={handleDeleteStaf}
                   disabled={deleteLoading}
-                  className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
                 >
                   {deleteLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menghapus...</span>
+                    </>
                   ) : (
                     <span>Ya, Hapus Akun</span>
                   )}

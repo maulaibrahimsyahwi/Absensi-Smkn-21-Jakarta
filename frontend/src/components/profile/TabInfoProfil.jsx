@@ -218,7 +218,6 @@ export default function TabInfoProfil({
               }}
               className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
             >
-              <Edit3 className="w-3.5 h-3.5" />
               <span>Ubah Nama</span>
             </button>
           )}
@@ -279,7 +278,7 @@ export default function TabInfoProfil({
               disabled={photoLoading}
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs"
             >
-              Ya, Hapus
+              Hapus
             </button>
             <button
               type="button"

@@ -1,21 +1,72 @@
 # ==============================================================================
-# 1. ENVIRONMENT & SECRETS (Jangan pernah di-commit ke Git)
+# .gitignore - Sistem Absensi & Presensi SMKN 21 Jakarta
+# Konfigurasi proteksi keamanan berkas & data sensitif untuk repositori Git / GitHub
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. ENVIRONMENT VARIABLES, CREDENTIALS & SECRETS (SANGAT PENTING!)
+# ------------------------------------------------------------------------------
+# Jangan pernah commit API keys, token, password, atau secret keys ke GitHub
 .env
 .env.*
+!.env.example
 *.env
 *.env.local
 *.env.*.local
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
 
-# ==============================================================================
-# 2. PYTHON / BACKEND
-# ==============================================================================
-# Python cache & compiled bytecode
+# Kunci SSL / Sertifikat / Keamanan
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# ------------------------------------------------------------------------------
+# 2. DATABASE & DATA SENSITIF (SQLite, Dump, Backups)
+# ------------------------------------------------------------------------------
+# Database SQLite lokal beserta file WAL & SHM
+backend/absensi.db
+backend/absensi.db-journal
+backend/absensi.db-wal
+backend/absensi.db-shm
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Dump database & backup lokal
+*.sql
+*.sql.gz
+*.bak
+*.backup
+
+# File upload atau media runtime pengguna jika ada
+backend/uploads/
+uploads/
+storage/
+
+# ------------------------------------------------------------------------------
+# 3. PYTHON / BACKEND ARTIFACTS & CACHES
+# ------------------------------------------------------------------------------
+# Bytecode & compiled cache
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 
-# Virtual Environment
+# Virtual Environment (Python)
 backend/venv/
 backend/.venv/
 venv/
@@ -23,63 +74,95 @@ venv/
 env/
 .env/
 ENV/
+env.bak/
+venv.bak/
 
-# Database (SQLite / lokal database)
-backend/absensi.db
-*.db
-*.sqlite3
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
 
-# Catatan: Jika bobot model wajah (.onnx) terlalu besar untuk GitHub (>100MB), 
-# buka tanda komentar (#) pada baris di bawah ini:
-# backend/models_weights/
-
-# ==============================================================================
-# 3. NODE / FRONTEND (Vite)
-# ==============================================================================
-# Dependencies
+# ------------------------------------------------------------------------------
+# 4. NODE / FRONTEND (Vite, React, Dependencies)
+# ------------------------------------------------------------------------------
+# Dependencies (Ukuran sangat besar)
 node_modules/
 frontend/node_modules/
 
-# Production / Build output
+# Production Build Output
 dist/
 dist-ssr/
 frontend/dist/
 frontend/dist-ssr/
+build/
+frontend/build/
 
-# Vite cache
+# Vite & Bundle Cache
 .vite/
 frontend/.vite/
+.vite-inspect/
 
-# ==============================================================================
-# 4. LOGS & DIAGNOSTICS
-# ==============================================================================
-logs/
-*.log
+# Package manager lock & temp files
+.package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# ==============================================================================
-# 5. EDITOR & SYSTEM FILES
-# ==============================================================================
-# System files
-.DS_Store
-Thumbs.db
+# ------------------------------------------------------------------------------
+# 5. LOGS & RUNTIME FILES
+# ------------------------------------------------------------------------------
+logs/
+*.log
+backend/*.log
+frontend/*.log
+*.pid
+*.seed
+*.pid.lock
 
-# VS Code
+# ------------------------------------------------------------------------------
+# 6. OPERATING SYSTEM & EDITOR / IDE SPECIFIC
+# ------------------------------------------------------------------------------
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# VS Code (Kecuali rekomendasi ekstensi tim)
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
 !.vscode/tasks.json
+!.vscode/launch.json
 
-# JetBrains (PyCharm, WebStorm, dll)
+# JetBrains IDE (PyCharm, WebStorm, dll)
 .idea/
+*.iws
+*.iml
+*.ipr
 
-# Visual Studio & editor lainnya
+# Visual Studio & Other Editors
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*~
+# Sitemaps / Scratch / AI Artifacts lokal
+.system_generated/
+*.tmp
+*.temp

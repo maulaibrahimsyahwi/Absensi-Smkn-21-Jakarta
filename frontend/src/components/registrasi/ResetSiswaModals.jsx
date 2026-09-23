@@ -84,7 +84,7 @@ export default function ResetSiswaModals({
               <div className="mt-3 p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-left">
                 <p className="text-[11px] text-cyan-800 font-medium leading-relaxed">
                   Siswa ini akan dapat mendaftarkan ulang 3 sampel wajah barunya
-                  melalui Portal Siswa atau direkam ulang oleh Admin.
+                  melalui Portal Siswa atau direkam ulang oleh Admin
                 </p>
               </div>
             </div>

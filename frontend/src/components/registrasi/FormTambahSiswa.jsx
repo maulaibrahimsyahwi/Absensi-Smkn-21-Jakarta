@@ -1,8 +1,19 @@
-import React from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Webcam from "react-webcam";
-import { UserPlus, Camera, GraduationCap, X, Loader2 } from "lucide-react";
+import {
+  UserPlus,
+  Camera,
+  GraduationCap,
+  X,
+  Loader2,
+  PenTool,
+  ArrowLeft,
+} from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
-import { KELAS_GROUPS_DROPDOWN } from "../../constants/schoolData";
+import {
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+} from "../../constants/schoolData";
 
 export default function FormTambahSiswa({
   nis,
@@ -23,6 +34,54 @@ export default function FormTambahSiswa({
   onCancelReRecord,
   siswaList,
 }) {
+  const [isCustomMode, setIsCustomMode] = useState(false);
+
+  // Jika sedang re-record atau nilai kelas awal tidak ada di master baku, aktifkan custom mode jika perlu
+  useEffect(() => {
+    if (kelas && !DAFTAR_KELAS_SMKN21.includes(kelas)) {
+      setIsCustomMode(true);
+    }
+  }, [reRecordingSiswa]);
+
+  // Kelompok opsi dropdown cerdas: Master bawaan + Kelas Tambahan yang sudah ada di DB + Opsi Ketik Baru
+  const availableGroups = useMemo(() => {
+    const existingClasses = new Set(DAFTAR_KELAS_SMKN21);
+    const extraClasses = [];
+    (siswaList || []).forEach((s) => {
+      if (
+        s.kelas &&
+        !existingClasses.has(s.kelas) &&
+        !extraClasses.includes(s.kelas)
+      ) {
+        extraClasses.push(s.kelas);
+      }
+    });
+
+    const groups = [...KELAS_GROUPS_DROPDOWN];
+
+    if (extraClasses.length > 0) {
+      groups.push({
+        group: "Kelas Tambahan Terdaftar",
+        badge: "AKTIF",
+        badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+        options: extraClasses.map((k) => ({ value: k, label: k })),
+      });
+    }
+
+    groups.push({
+      group: "Opsi Tambahan",
+      badge: "+",
+      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      options: [
+        {
+          value: "__CUSTOM__",
+          label: "+ Ketik Kelas Baru...",
+        },
+      ],
+    });
+
+    return groups;
+  }, [siswaList]);
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
       <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
@@ -30,7 +89,7 @@ export default function FormTambahSiswa({
           <UserPlus className="w-5 h-5 text-blue-600" />
           <h2 className="text-base font-bold text-slate-900">
             {reRecordingSiswa
-              ? `Rekam Ulang Wajah: ${reRecordingSiswa.nama}`
+              ? `Rekam Ulang Wajah ${reRecordingSiswa.nama}`
               : "Daftarkan Siswa & Sampel Wajah"}
           </h2>
         </div>
@@ -110,19 +169,57 @@ export default function FormTambahSiswa({
               <label className="block text-xs font-bold text-slate-700">
                 Kelas & Jurusan SMKN 21
               </label>
-              <span className="text-[10px] bg-slate-50/50 font-semibold text-slate-400">
-                Pilih salah satu jurusan
-              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomMode(!isCustomMode);
+                  if (!isCustomMode) {
+                    setKelas("");
+                  }
+                }}
+                disabled={reRecordingSiswa !== null}
+                className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+              >
+                {isCustomMode ? "Pilih dari Dropdown" : "+ Ketik Kelas Baru"}
+              </button>
             </div>
-            <CustomDropdown
-              value={kelas}
-              onChange={setKelas}
-              groups={KELAS_GROUPS_DROPDOWN}
-              disabled={reRecordingSiswa !== null}
-              className="w-full"
-              placeholder="Pilih Kelas & Jurusan SMKN 21"
-              icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
-            />
+
+            {isCustomMode ? (
+              <div className="space-y-1.5">
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: X PPLG atau X PPLG 3"
+                  value={kelas}
+                  onChange={(e) => setKelas(e.target.value.toUpperCase())}
+                  disabled={reRecordingSiswa !== null}
+                  className="w-full px-3.5 py-2 text-xs sm:text-sm font-semibold uppercase border border-blue-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-blue-50/20 font-mono tracking-wide"
+                  autoFocus
+                />
+                <p className="text-[10px] text-slate-400">
+                  Format: Tingkat (X/XI/XII) spasi Jurusan/Rombel. Contoh:{" "}
+                  <strong className="text-slate-600">X PPLG</strong> atau{" "}
+                  <strong className="text-slate-600">X PPLG 3</strong>
+                </p>
+              </div>
+            ) : (
+              <CustomDropdown
+                value={kelas}
+                onChange={(val) => {
+                  if (val === "__CUSTOM__") {
+                    setIsCustomMode(true);
+                    setKelas("");
+                  } else {
+                    setKelas(val);
+                  }
+                }}
+                groups={availableGroups}
+                disabled={reRecordingSiswa !== null}
+                className="w-full"
+                placeholder="Pilih Kelas & Jurusan SMKN 21"
+                icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
+              />
+            )}
           </div>
         </div>
 
@@ -250,11 +347,7 @@ export default function FormTambahSiswa({
           {submitting ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <span>
-              {reRecordingSiswa
-                ? `Perbarui Biometrik (${samples.length} Sampel)`
-                : `Simpan ${samples.length} Foto`}
-            </span>
+            <span>{reRecordingSiswa ? `Perbarui Wajah` : `Simpan`}</span>
           )}
         </button>
       </form>

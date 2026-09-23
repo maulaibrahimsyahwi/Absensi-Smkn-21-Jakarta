@@ -35,6 +35,7 @@ import CustomDropdown from "../components/CustomDropdown";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import DeleteIzinModal from "../components/piket/DeleteIzinModal";
 import SignaturePadModal from "../components/SignaturePadModal";
+import ToastNotification from "../components/common/ToastNotification";
 
 const NAMA_HARI_MAP = [
   "Minggu",
@@ -1098,56 +1099,11 @@ export default function GuruPiket() {
         signerName={petugasPiket || "Guru Piket"}
       />
 
-      {/* ================= FLOATING BOTTOM-RIGHT TOAST NOTIFICATION ================= */}
-      {notification && (
-        <div className="fixed bottom-5 right-4 sm:right-6 z-50 max-w-sm sm:max-w-md w-[calc(100vw-2rem)] animate-in slide-in-from-bottom-5 fade-in duration-200 pointer-events-auto">
-          <div
-            className={`p-4 rounded-2xl border shadow-2xl backdrop-blur-md flex items-start gap-3 relative ${
-              notification.type === "success"
-                ? "bg-slate-900/95 border-emerald-500/40 text-white shadow-emerald-950/30"
-                : notification.type === "info"
-                  ? "bg-slate-900/95 border-blue-500/40 text-white shadow-blue-950/30"
-                  : "bg-slate-900/95 border-rose-500/40 text-white shadow-rose-950/30"
-            }`}
-          >
-            {notification.type === "success" ? (
-              <div className="p-1 rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0 mt-0.5">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-            ) : notification.type === "info" ? (
-              <div className="p-1 rounded-xl bg-blue-500/20 text-blue-400 flex-shrink-0 mt-0.5">
-                <Info className="w-5 h-5" />
-              </div>
-            ) : (
-              <div className="p-1 rounded-xl bg-rose-500/20 text-rose-400 flex-shrink-0 mt-0.5">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-            )}
-
-            <div className="flex-1 pr-6 min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-slate-400">
-                {notification.type === "success"
-                  ? "Berhasil"
-                  : notification.type === "info"
-                    ? "Informasi"
-                    : "Pemberitahuan"}
-              </p>
-              <p className="text-xs sm:text-sm font-medium leading-relaxed text-slate-100 break-words">
-                {notification.message}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setNotification(null)}
-              className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-              title="Tutup Notifikasi"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
     </div>
   );
 }

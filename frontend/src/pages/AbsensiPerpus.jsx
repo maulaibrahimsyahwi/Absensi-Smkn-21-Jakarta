@@ -413,13 +413,13 @@ export default function AbsensiPerpus() {
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-5 leading-relaxed">
             Presensi perpustakaan mewajibkan verifikasi lokasi berada di
-            lingkungan SMKN 21 Jakarta (radius &le; 10m). Pastikan GPS perangkat
-            Anda aktif dan izinkan akses lokasi pada browser.
+            lingkungan SMKN 21 Jakarta. Pastikan Lokasi perangkat Anda aktif dan
+            izinkan akses lokasi pada browser
           </p>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-emerald-950/70 border border-emerald-800/70 text-emerald-300 text-xs font-semibold mb-6 shadow-lg">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>Mencari Sinyal GPS Lokasi Sekolah...</span>
+            <span>Mencari Sinyal Lokasi Sekolah...</span>
           </div>
 
           {/* Localhost dev simulation toggle */}
@@ -450,7 +450,7 @@ export default function AbsensiPerpus() {
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
             {geoState.error
-              ? "Akses Lokasi GPS Diperlukan"
+              ? "Akses Lokasi Diperlukan"
               : "Di Luar Radius SMKN 21"}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-4 leading-relaxed">
@@ -464,7 +464,7 @@ export default function AbsensiPerpus() {
             )}
             {geoState.error && (
               <span className="block mt-2 font-bold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded-lg py-1.5 px-3">
-                Kendala GPS: {geoState.error}
+                {geoState.error}
               </span>
             )}
           </p>
@@ -525,9 +525,9 @@ export default function AbsensiPerpus() {
             {isGpsWaiting
               ? "Menunggu GPS..."
               : !isGpsValid
-                ? "Di Luar Radius SMKN 21"
+                ? "Di Luar Lingkungan SMKN 21"
                 : !isFaceDetected
-                  ? "Arahkan Wajah ke Siluet"
+                  ? "Posisikan Wajah"
                   : !isLiveVerified
                     ? "Kedipkan Mata untuk Absen"
                     : "Pindai Langsung"}

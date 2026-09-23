@@ -194,11 +194,11 @@ export function getCurrentLocation(options = {}) {
       (error) => {
         let msg = "Gagal membaca titik lokasi perangkat.";
         if (error.code === error.PERMISSION_DENIED) {
-          msg = "Izin akses lokasi (GPS) ditolak oleh pengguna/browser.";
+          msg = "Izin akses lokasi ditolak oleh pengguna/browser";
         } else if (error.code === error.POSITION_UNAVAILABLE) {
-          msg = "Sinyal GPS atau informasi lokasi tidak tersedia.";
+          msg = "Sinyal GPS atau informasi lokasi tidak tersedia";
         } else if (error.code === error.TIMEOUT) {
-          msg = "Waktu pencarian sinyal lokasi GPS habis.";
+          msg = "Waktu pencarian sinyal lokasi habis";
         }
         reject(new Error(msg));
       },

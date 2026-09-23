@@ -28,6 +28,7 @@ import api from "../services/api";
 import ProfileModal from "../components/ProfileModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import SignaturePadModal from "../components/SignaturePadModal";
+import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 
 export default function PortalPiket() {
@@ -213,24 +214,11 @@ export default function PortalPiket() {
 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 max-w-6xl mx-auto space-y-6">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center gap-3 animate-in fade-in">
-          {notification.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-          )}
-          <span className="text-sm font-medium">{notification.message}</span>
-          <button
-            type="button"
-            onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-white text-xs ml-2"
-          >
-            Tutup
-          </button>
-        </div>
-      )}
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Header Profil Guru Piket (Hero Card) */}
       <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-950/20 relative">

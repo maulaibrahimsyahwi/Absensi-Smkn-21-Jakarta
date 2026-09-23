@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
+import logoSMKN21 from "../assets/Logo SMKN21.png";
 import {
   MASTER_PELANGGARAN,
   ALLOWED_POIN,
@@ -246,13 +247,14 @@ export default function CatatPelanggaran() {
     }
   };
 
-  // Filter jenis pelanggaran berdasarkan kata kunci pencarian
+  // Filter jenis pelanggaran berdasarkan kata kunci pencarian (diurutkan dari poin terendah ke tertinggi)
   const filteredViolations = useMemo(() => {
-    if (!violationSearch.trim()) return MASTER_PELANGGARAN;
-    const q = violationSearch.toLowerCase();
-    return MASTER_PELANGGARAN.filter((item) =>
-      item.nama.toLowerCase().includes(q),
-    );
+    let list = MASTER_PELANGGARAN;
+    if (violationSearch.trim()) {
+      const q = violationSearch.toLowerCase();
+      list = list.filter((item) => item.nama.toLowerCase().includes(q));
+    }
+    return [...list].sort((a, b) => a.poin_default - b.poin_default);
   }, [violationSearch]);
 
   // Saat jenis pelanggaran dipilih, otomatis tentukan poin bakunya
@@ -466,7 +468,6 @@ export default function CatatPelanggaran() {
       {successData && (
         <div className="bg-white rounded-2xl border border-emerald-200 p-6 sm:p-8 shadow-xl space-y-6 animate-in zoom-in-95">
           <div className="flex items-center gap-3 text-emerald-600">
-            <CheckCircle2 className="w-8 h-8 flex-shrink-0" />
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900">
                 Catatan Pelanggaran Berhasil Disimpan
@@ -480,18 +481,31 @@ export default function CatatPelanggaran() {
 
           {/* Kartu Bukti Pelanggaran */}
           <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/70 space-y-4 print:border-black">
+            <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-900 print:flex">
+              <img
+                src={logoSMKN21}
+                alt="Logo SMKN 21"
+                className="w-12 h-12 sm:w-14 sm:h-14 object-contain flex-shrink-0"
+              />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base sm:text-lg font-extrabold uppercase tracking-tight text-slate-950 font-sans leading-tight">
+                  SMKN 21 JAKARTA
+                </h2>
+                <p className="text-[10px] sm:text-xs text-slate-600 font-sans">
+                  Surat Bukti Catatan Pelanggaran Tata Tertib Siswa
+                </p>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 pb-3">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
-                  Pelanggaran Disiplin
-                </span>
                 <h3 className="text-sm sm:text-base font-bold text-slate-800 mt-1">
                   {successData.jenis_pelanggaran}
                 </h3>
               </div>
               <div className="text-left sm:text-right">
                 <span className="text-xl font-extrabold text-rose-600">
-                  +{successData.poin} Poin
+                  {successData.poin} Poin
                 </span>
                 <p className="text-[11px] text-slate-500">
                   {successData.tanggal_waktu_formatted}
@@ -525,7 +539,7 @@ export default function CatatPelanggaran() {
             <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
               <div>
                 <span className="text-[11px] text-slate-500 block font-medium">
-                  Tanda Tangan Pengakuan Siswa:
+                  Tanda Tangan Pengakuan Siswa
                 </span>
                 <div className="w-40 h-20 border border-slate-200 bg-white rounded-xl mt-1 flex items-center justify-center overflow-hidden">
                   <img
@@ -633,7 +647,7 @@ export default function CatatPelanggaran() {
                 {isSiswa && (
                   <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
                     <Lock className="w-3 h-3" />
-                    <span>Terkunci ke Akun Anda</span>
+                    <span>Terkunci</span>
                   </span>
                 )}
               </div>
@@ -965,29 +979,6 @@ export default function CatatPelanggaran() {
                   required
                 />
               </div>
-
-              {/* Quick Select Chips jika ada daftar staf */}
-              {staffList.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-slate-400 font-semibold mr-1">
-                    Pilihan Cepat:
-                  </span>
-                  {staffList.slice(0, 6).map((staf) => (
-                    <button
-                      key={staf.id}
-                      type="button"
-                      onClick={() => setNamaPenanggungJawab(staf.nama)}
-                      className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors duration-150 cursor-pointer ${
-                        namaPenanggungJawab === staf.nama
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
-                      }`}
-                    >
-                      {staf.nama}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* SECTION 7: KETERANGAN / CATATAN TAMBAHAN (OPSIONAL) */}
@@ -1036,7 +1027,7 @@ export default function CatatPelanggaran() {
               <p className="text-xs text-slate-500">
                 Goreskan tanda tangan digital siswa secara langsung pada area
                 kotak di bawah menggunakan jari atau mouse sebagai tanda bukti
-                pengakuan.
+                pengakuan
               </p>
 
               <div className="border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-2xl p-2 bg-slate-50/50 transition-colors relative">
@@ -1069,7 +1060,7 @@ export default function CatatPelanggaran() {
             <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
               <p className="text-[11px] text-slate-400 text-center sm:text-left">
                 Pelanggaran akan otomatis tercatat ke buku saku kedisiplinan dan
-                portal siswa SMKN 21.
+                portal siswa SMKN 21
               </p>
 
               <button

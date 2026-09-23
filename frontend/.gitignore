@@ -12,9 +12,21 @@ dist
 dist-ssr
 *.local
 
+# Environment variables & Secrets
+.env
+.env.*
+!.env.example
+*.env
+*.env.local
+
+# Vite cache & temporary files
+.vite
+.package-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/settings.json
 .idea
 .DS_Store
 *.suo

@@ -18,6 +18,8 @@ import {
   AlertTriangle,
   RefreshCw,
   GraduationCap,
+  Laptop,
+  Users,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
@@ -40,6 +42,8 @@ export default function AbsensiHarian() {
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // Countdown 3 detik
   const [attendanceToday, setAttendanceToday] = useState(null);
+  const [isPjjActive, setIsPjjActive] = useState(false);
+  const [pjjKeterangan, setPjjKeterangan] = useState("");
 
   const { playSound } = useAudioFeedback();
 
@@ -60,6 +64,30 @@ export default function AbsensiHarian() {
       }
     };
     checkTodayAttendance();
+  }, [isSiswa, user]);
+
+  // Cek Status Kebijakan PJJ (Pembelajaran Jarak Jauh) atau Kiosk Mode
+  useEffect(() => {
+    const checkPjj = async () => {
+      try {
+        if (isSiswa && user?.id) {
+          const res = await api.get("/pjj/cek_siswa", {
+            params: { siswa_id: user.id, kelas: user.kelas || "" },
+          });
+          if (res.data && res.data.is_pjj) {
+            setIsPjjActive(true);
+            setPjjKeterangan(res.data.keterangan || "Mode PJJ Aktif");
+          }
+        } else if (!isSiswa) {
+          // Kiosk mode untuk Admin / Guru Piket: radius GPS otomatis dibebaskan
+          setIsPjjActive(true);
+          setPjjKeterangan("Kiosk Mode Operator");
+        }
+      } catch (err) {
+        // Abaikan jika endpoint gagal
+      }
+    };
+    checkPjj();
   }, [isSiswa, user]);
 
   // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
@@ -92,6 +120,9 @@ export default function AbsensiHarian() {
     isGpsBlocked,
   } = useGeofence(SMKN21_COORDINATES);
 
+  // Jika sedang PJJ atau Kiosk Mode, validitas GPS otomatis terpenuhi
+  const effectiveGpsValid = isGpsValid || isPjjActive;
+
   // Live clock
   useEffect(() => {
     const timer = setInterval(() => {
@@ -118,16 +149,16 @@ export default function AbsensiHarian() {
         !isWeekend &&
         !loading &&
         !result &&
-        isGpsValid &&
-        !attendanceToday?.already_attended,
+        effectiveGpsValid &&
+        (!isSiswa || !attendanceToday?.already_attended),
       onLiveVerified: () => setCountdown(3),
       pollIntervalMs: 600,
     });
 
   const captureAndVerify = useCallback(async () => {
     if (isWeekend) return;
-    if (!isGpsValid) return;
-    if (attendanceToday?.already_attended) return;
+    if (!effectiveGpsValid) return;
+    if (isSiswa && attendanceToday?.already_attended) return;
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) {
@@ -151,7 +182,19 @@ export default function AbsensiHarian() {
 
       const res = await api.post("/verify_harian", payload);
       playSound("success");
-      setResult(res.data);
+
+      const studentName =
+        res.data?.siswa?.nama || res.data?.nama || user?.nama || "Siswa";
+      const studentKelas = res.data?.siswa?.kelas
+        ? `(${res.data.siswa.kelas})`
+        : "";
+
+      setResult({
+        success: true,
+        message: !isSiswa
+          ? `Presensi Berhasil: ${studentName} ${studentKelas}. Silakan siswa berikutnya.`
+          : res.data?.message || "Presensi berhasil dicatat!",
+      });
 
       if (isSiswa) {
         setAttendanceToday({
@@ -164,30 +207,45 @@ export default function AbsensiHarian() {
         });
       }
 
-      // Setelah berhasil, beri waktu 3 detik agar terbaca, lalu otomatis siap untuk siswa berikutnya
+      // Kiosk auto-reset: Siap untuk antrean siswa berikutnya setelah 3.5 detik
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
         resetLiveness();
-      }, 3000);
+      }, 3500);
     } catch (err) {
       playSound("error");
       if (err.response?.data?.already_attended) {
-        setAttendanceToday({
-          already_attended: true,
-          data: {
-            waktu: err.response.data.waktu || "-",
-            status: err.response.data.status || "Hadir",
-            nama: user?.nama,
-          },
+        const studentInfo =
+          err.response.data.siswa?.nama || err.response.data.nama || "";
+        const kelasInfo = err.response.data.siswa?.kelas
+          ? `(${err.response.data.siswa.kelas})`
+          : "";
+        if (isSiswa) {
+          setAttendanceToday({
+            already_attended: true,
+            data: {
+              waktu: err.response.data.waktu || "-",
+              status: err.response.data.status || "Hadir",
+              nama: user?.nama,
+            },
+          });
+        }
+        setResult({
+          success: true,
+          message: !isSiswa
+            ? `Siswa ${studentInfo} ${kelasInfo} sudah tercatat hadir hari ini pukul ${err.response.data.waktu || "-"}.`
+            : err.response.data.message ||
+              "Anda sudah melakukan presensi hari ini.",
+        });
+      } else {
+        setResult({
+          success: false,
+          message:
+            err.response?.data?.message ||
+            "Wajah tidak cocok atau belum terdaftar. Menyiapkan pemindaian ulang...",
         });
       }
-      setResult({
-        success: false,
-        message:
-          err.response?.data?.message ||
-          "Wajah tidak cocok atau belum terdaftar. Menyiapkan pemindaian ulang...",
-      });
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
@@ -198,7 +256,7 @@ export default function AbsensiHarian() {
     }
   }, [
     webcamRef,
-    isGpsValid,
+    effectiveGpsValid,
     geoState,
     isSiswa,
     user,
@@ -213,9 +271,9 @@ export default function AbsensiHarian() {
       isWeekend ||
       loading ||
       result ||
-      !isGpsValid ||
+      !effectiveGpsValid ||
       !isLiveVerified ||
-      attendanceToday?.already_attended
+      (isSiswa && attendanceToday?.already_attended)
     ) {
       if (!isLiveVerified) setCountdown(3);
       return;
@@ -237,7 +295,8 @@ export default function AbsensiHarian() {
     isLiveVerified,
     loading,
     result,
-    isGpsValid,
+    effectiveGpsValid,
+    isSiswa,
     attendanceToday,
     captureAndVerify,
   ]);
@@ -357,37 +416,6 @@ export default function AbsensiHarian() {
           <span className="hidden sm:inline">Kembali</span>
         </Link>
 
-        {/* GPS Geofence Pill */}
-        {geoState.loading ? (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
-            <span className="hidden sm:inline">GPS:</span>{" "}
-            <span>Cek Radius...</span>
-          </div>
-        ) : geoState.simulated ? (
-          <button
-            type="button"
-            onClick={toggleSimulation}
-            title="Klik untuk matikan simulasi dev"
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900/90 backdrop-blur-md border border-purple-400/50 text-purple-200 text-xs font-semibold transition-all cursor-pointer"
-          >
-            <Navigation className="w-3.5 h-3.5 text-purple-300 flex-shrink-0" />
-            <span className="hidden sm:inline">Mode Uji</span>
-          </button>
-        ) : geoState.isWithinRadius ? (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-xs font-semibold">
-            <MapPin className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-            <span className="hidden sm:inline">Area SMKN 21:</span>{" "}
-            <span>{Math.round(geoState.distanceMeters || 0)}m</span>
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/80 backdrop-blur-md border border-rose-400/50 text-rose-200 text-xs font-semibold">
-            <MapPin className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
-            <span className="hidden sm:inline">Luar Radius:</span>{" "}
-            <span>{formatDistance(geoState.distanceMeters)}</span>
-          </div>
-        )}
-
         <div className="flex items-center gap-2">
           <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
@@ -442,7 +470,7 @@ export default function AbsensiHarian() {
       )}
 
       {/* Overlay: Siswa Sudah Melakukan Presensi Hari Ini (1x Per Hari) */}
-      {attendanceToday?.already_attended && (
+      {isSiswa && attendanceToday?.already_attended && (
         <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
           <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mb-5 shadow-xl shadow-emerald-950/50">
             <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12" />
@@ -456,7 +484,7 @@ export default function AbsensiHarian() {
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-6 leading-relaxed">
             Anda sudah tercatat melakukan presensi kehadiran harian untuk hari
             ini. Presensi mandiri dibatasi 1 kali per hari demi ketertiban
-            absensi sekolah.
+            absensi sekolah
           </p>
 
           <div className="bg-white/10 border border-white/15 rounded-2xl p-4 w-full max-w-sm mb-6 text-left space-y-2 backdrop-blur-md">
@@ -476,7 +504,7 @@ export default function AbsensiHarian() {
               <span className="text-slate-400">Siswa / Kelas</span>
               <span className="font-bold text-white">
                 {user?.nama || attendanceToday.data?.nama}{" "}
-                {user?.kelas ? `(${user.kelas})` : ""}
+                {user?.kelas ? `${user.kelas}` : ""}
               </span>
             </div>
           </div>
@@ -493,7 +521,8 @@ export default function AbsensiHarian() {
       )}
 
       {/* Overlay: Presensi Harian Belum Dibuka (< 05:00 WIB) */}
-      {attendanceToday &&
+      {isSiswa &&
+        attendanceToday &&
         attendanceToday.is_presensi_open === false &&
         !attendanceToday.already_attended && (
           <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
@@ -544,8 +573,8 @@ export default function AbsensiHarian() {
           </div>
         )}
 
-      {/* 7A. Overlay Menunggu GPS (Wajib tunggu GPS sebelum bisa absen) */}
-      {isGpsWaiting && (
+      {/* 7A. Overlay Menunggu GPS (Wajib tunggu GPS sebelum bisa absen jika bukan PJJ/Kiosk) */}
+      {!isPjjActive && isGpsWaiting && (
         <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-200">
           <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/40 flex items-center justify-center mb-4 sm:mb-5">
             <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin text-blue-400" />
@@ -556,13 +585,13 @@ export default function AbsensiHarian() {
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-5 leading-relaxed">
             Presensi kehadiran mewajibkan verifikasi lokasi berada di lingkungan
-            SMKN 21 Jakarta. Pastikan GPS perangkat Anda aktif dan izinkan akses
-            lokasi pada browser.
+            SMKN 21 Jakarta. Pastikan Lokasi perangkat Anda aktif dan izinkan
+            akses lokasi pada browser
           </p>
 
           <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-blue-950/70 border border-blue-800/70 text-blue-300 text-xs font-semibold mb-6 shadow-lg">
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
-            <span>Mencari Sinyal GPS Lokasi Sekolah...</span>
+            <span>Mencari Sinyal Lokasi </span>
           </div>
 
           {/* Localhost dev simulation toggle */}
@@ -586,19 +615,19 @@ export default function AbsensiHarian() {
       )}
 
       {/* 7B. Geofence Lock Screen Overlay (Jika di luar radius 10m atau sensor GPS error) */}
-      {isGpsBlocked && (
+      {!isPjjActive && isGpsBlocked && (
         <div className="absolute inset-0 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-300 overflow-y-auto max-h-screen py-8">
           <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/40 flex items-center justify-center mb-4 sm:mb-5">
             <AlertTriangle className="w-8 h-8 sm:w-10 sm:h-10" />
           </div>
           <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white mb-2">
             {geoState.error
-              ? "Akses Lokasi GPS Diperlukan"
+              ? "Akses Lokasi Diperlukan"
               : "Di Luar Lingkungan SMKN 21"}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-4 leading-relaxed">
             Presensi biometrik wajah hanya dapat dilakukan saat Anda berada di
-            lingkungan sekolah SMKN 21 Jakarta (radius &le; 10 meter).
+            lingkungan sekolah SMKN 21 Jakarta.
             {geoState.distanceMeters != null && (
               <span className="block mt-2 font-bold text-rose-300 bg-rose-950/60 border border-rose-800/60 rounded-lg py-1.5 px-3">
                 Jarak Anda saat ini: ~{formatDistance(geoState.distanceMeters)}{" "}
@@ -607,7 +636,7 @@ export default function AbsensiHarian() {
             )}
             {geoState.error && (
               <span className="block mt-2 font-bold text-amber-300 bg-amber-950/60 border border-amber-800/60 rounded-lg py-1.5 px-3">
-                Kendala GPS: {geoState.error}
+                {geoState.error}
               </span>
             )}
           </p>
@@ -618,7 +647,7 @@ export default function AbsensiHarian() {
               disabled={geoState.loading}
               className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-500/25 cursor-pointer"
             >
-              <span>Cek GPS Ulang</span>
+              <span>Cek Ulang</span>
             </button>
 
             <Link
@@ -672,9 +701,9 @@ export default function AbsensiHarian() {
             {isGpsWaiting
               ? "Menunggu GPS..."
               : !isGpsValid
-                ? "Di Luar Radius SMKN 21"
+                ? "Di Luar Lingkungan SMKN 21"
                 : !isFaceDetected
-                  ? "Arahkan Wajah ke Siluet"
+                  ? "Posisikan Wajah"
                   : !isLiveVerified
                     ? "Kedipkan Mata untuk Absen"
                     : "Pindai Langsung"}

@@ -28,10 +28,10 @@ def validate_siswa_input(nis, nama, kelas):
     if not kelas:
         return False, "Kelas dan jurusan wajib dipilih"
     
-    # Validasi jurusan resmi SMKN 21: PPLG, AKL, MPLB, BR
-    kelas_pattern = r'^(X|XI|XII)\s+(PPLG|AKL|MPLB|BR)(\s+\d+)?$'
+    # Validasi format kelas: Wajib diawali tingkat X, XI, atau XII dan nama jurusan/rombel
+    kelas_pattern = r'^(X|XI|XII)\s+[A-Za-z0-9\s\-]+$'
     if not re.match(kelas_pattern, kelas):
-        return False, "Jurusan tidak valid! Jurusan resmi SMKN 21: PPLG, AKL, MPLB, atau BR (Tingkat X, XI, XII). Contoh: X PPLG 1"
+        return False, "Format kelas tidak valid! Wajib diawali tingkat X, XI, atau XII dan nama jurusan/rombel (Contoh: X PPLG 1 atau X PPLG)."
 
     return True, ""
 
@@ -157,11 +157,28 @@ def is_kelas_pjj(kelas_str, dt=None):
         return False, ""
 
 
+# Cache in-memory biometrik wajah siswa untuk mitigasi lonjakan jam 05:00-06:30 WIB
+_FACE_CACHE = {
+    "encodings": [],
+    "siswa_ids": [],
+    "last_updated": 0,
+    "ttl": 60  # simpan di RAM selama 60 detik
+}
+
+def invalidate_face_cache():
+    """Memaksa reload cache biometrik pada saat ada siswa baru mendaftar atau reset wajah."""
+    _FACE_CACHE["last_updated"] = 0
+
 def get_flattened_known_faces():
     """
     Mengambil dan meratakan seluruh sampel biometrik wajah siswa yang berstatus 'Aktif'
-    untuk pencocokan real-time pada detektor SFace.
+    menggunakan in-memory cache cepat untuk performa tinggi tanpa query ulang database SQLite.
     """
+    import time
+    now = time.time()
+    if _FACE_CACHE["encodings"] and (now - _FACE_CACHE["last_updated"] < _FACE_CACHE["ttl"]):
+        return _FACE_CACHE["encodings"], _FACE_CACHE["siswa_ids"]
+
     siswa_list = Siswa.query.filter(
         Siswa.face_encoding != None,
         (Siswa.status == 'Aktif') | (Siswa.status == None)
@@ -181,5 +198,9 @@ def get_flattened_known_faces():
                 siswa_ids.append(s.id)
         except Exception:
             continue
+
+    _FACE_CACHE["encodings"] = encodings
+    _FACE_CACHE["siswa_ids"] = siswa_ids
+    _FACE_CACHE["last_updated"] = now
     return encodings, siswa_ids
 

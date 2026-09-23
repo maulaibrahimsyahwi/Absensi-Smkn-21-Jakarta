@@ -224,23 +224,23 @@ export default function DashboardPeriodFilter({
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">
             <button
               onClick={() => setPeriodeMode("bulan")}
-              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors duration-150 cursor-pointer text-center ${
                 periodeMode === "bulan"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Per Bulan
+              Bulan
             </button>
             <button
               onClick={() => setPeriodeMode("tahun")}
-              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+              className={`flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-colors duration-150 cursor-pointer text-center ${
                 periodeMode === "tahun"
                   ? "bg-white text-blue-700 shadow-xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Per Tahun
+              Tahun
             </button>
           </div>
         </div>

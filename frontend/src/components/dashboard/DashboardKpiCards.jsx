@@ -65,15 +65,25 @@ export default function DashboardKpiCards({ stats = {} }) {
             <HeartPulse className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
         </div>
-        <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-rose-600 truncate">
-          {(stats.total_sakit || 0) + (stats.total_izin || 0)}
+        <div className="flex items-baseline justify-between gap-1 flex-wrap">
+          <span className="text-xl sm:text-2xl md:text-3xl font-extrabold text-rose-600">
+            {(stats.total_sakit || 0) + (stats.total_izin || 0)}
+          </span>
+          <div className="flex items-center gap-1 text-[10px] font-bold">
+            <span
+              className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/70"
+              title={`Sakit: ${stats.total_sakit || 0} Siswa`}
+            >
+              S {stats.total_sakit || 0}
+            </span>
+            <span
+              className="px-1.5 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70"
+              title={`Izin: ${stats.total_izin || 0} Siswa`}
+            >
+              I {stats.total_izin || 0}
+            </span>
+          </div>
         </div>
-        <p className="text-[10px] text-slate-400 mt-1 truncate">
-          Sakit{" "}
-          <strong className="text-slate-700">{stats.total_sakit || 0}</strong> •
-          Izin{" "}
-          <strong className="text-slate-700">{stats.total_izin || 0}</strong>
-        </p>
       </div>
 
       {/* Kunjungan Perpustakaan */}

@@ -230,7 +230,7 @@ def verify_harian():
                 return jsonify({
                     "success": False,
                     "message": f"Wajah yang terdeteksi tidak cocok dengan akun Anda ({target_siswa.nama})! Presensi harian wajib dilakukan oleh pemilik akun sendiri."
-                }), 401
+                }), 400
 
             # Cek apakah siswa sudah presensi hari ini
             sudah_absen = AbsensiHarian.query.filter(
@@ -243,6 +243,12 @@ def verify_harian():
                 return jsonify({
                     "success": False,
                     "already_attended": True,
+                    "siswa": {
+                        "id": siswa.id,
+                        "nama": siswa.nama,
+                        "nis": siswa.nis,
+                        "kelas": siswa.kelas
+                    },
                     "waktu": sudah_absen.waktu.strftime('%H:%M:%S'),
                     "status": sudah_absen.status,
                     "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
@@ -273,15 +279,23 @@ def verify_harian():
                 "success": True,
                 "is_pjj": pjj_active,
                 "pjj_info": pjj_info,
-                "message": f"Berhasil Absen {siswa.nama} - {siswa.kelas} ({status}){confidence_text}"
+                "siswa": {
+                    "id": siswa.id,
+                    "nama": siswa.nama,
+                    "nis": siswa.nis,
+                    "kelas": siswa.kelas
+                },
+                "status": status,
+                "waktu": now_dt.strftime("%H:%M:%S"),
+                "message": f"Berhasil Absen: {siswa.nama} ({siswa.kelas}) - {status}{confidence_text}"
             })
         else:
             if expected_siswa_id:
                 return jsonify({
                     "success": False,
                     "message": f"Wajah tidak cocok dengan akun Anda ({target_siswa.nama}). Pastikan wajah menghadap lurus ke kamera dengan pencahayaan yang cukup."
-                }), 401
-            return jsonify(result), 401
+                }), 400
+            return jsonify(result), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -351,7 +365,7 @@ def verify_perpus():
                 "message": f"Kunjungan Tercatat: {siswa.nama} ({siswa.kelas}) - {keperluan}"
             })
         else:
-            return jsonify(result), 401
+            return jsonify(result), 400
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500

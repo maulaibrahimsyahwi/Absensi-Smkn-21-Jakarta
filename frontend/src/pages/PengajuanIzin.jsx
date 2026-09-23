@@ -548,7 +548,7 @@ export default function PengajuanIzin() {
                 {isSiswa && (
                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
                     <Lock className="w-3 h-3 text-blue-600" />
-                    <span>Terkunci ke Akun Anda</span>
+                    <span>Terkunci</span>
                   </span>
                 )}
               </div>
@@ -866,10 +866,7 @@ export default function PengajuanIzin() {
                   onClick={() => setShowSigModal(true)}
                   className="w-full border-2 border-dashed border-rose-300 hover:border-blue-400 rounded-xl p-3.5 flex items-center justify-center gap-2 text-xs font-bold text-rose-700 hover:text-blue-600 bg-rose-50/50 hover:bg-blue-50/30 transition-colors cursor-pointer shadow-2xs"
                 >
-                  <PenTool className="w-4 h-4 text-rose-500" />
-                  <span>
-                    Bubuhkan Tanda Tangan Digital Siswa / Orang Tua (Wajib)
-                  </span>
+                  <span>Tanda Tangan Digital Siswa / Orang Tua</span>
                 </button>
               )}
             </div>

@@ -865,7 +865,7 @@ export default function Dashboard() {
           />
 
           {loading ? (
-            <div className="p-4 sm:p-6 min-h-[400px]">
+            <div className="min-h-[400px] overflow-hidden">
               <SkeletonTable rows={7} cols={6} />
             </div>
           ) : (

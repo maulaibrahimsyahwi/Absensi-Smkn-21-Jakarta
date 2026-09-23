@@ -18,6 +18,9 @@ import {
   FileText,
   AlertTriangle,
   RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import api from "../../../services/api";
 import {
@@ -32,38 +35,57 @@ import DashboardPagination from "../DashboardPagination";
 import CustomDropdown from "../../CustomDropdown";
 import CustomDatePicker from "../../CustomDatePicker";
 import { Skeleton } from "../../common/Skeleton";
+import ToastNotification from "../../common/ToastNotification";
 
 export default function BukuPelanggaranTab() {
   const [activeSubTab, setActiveSubTab] = useState("riwayat"); // "riwayat" atau "rekap_poin"
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState([]);
   const [rekapData, setRekapData] = useState(null);
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [displayLimit, setDisplayLimit] = useState(25);
+
+  // Sorting State
+  const [sortKey, setSortKey] = useState("tanggal_waktu");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  // Sorting State for SubTab 2 (Akumulasi Poin Siswa)
+  const [sortKeyRekap, setSortKeyRekap] = useState("total_poin");
+  const [sortDirectionRekap, setSortDirectionRekap] = useState("desc");
+
+  const handleSortRekap = (key) => {
+    if (sortKeyRekap === key) {
+      setSortDirectionRekap((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKeyRekap(key);
+      setSortDirectionRekap(
+        key === "total_poin" || key === "jumlah_pelanggaran" ? "desc" : "asc",
+      );
+    }
+  };
 
   // Filters
   const [search, setSearch] = useState("");
   const [kelasFilter, setKelasFilter] = useState("ALL");
   const [tanggalFilter, setTanggalFilter] = useState("");
 
-  // Pagination State
-  const [displayLimit, setDisplayLimit] = useState(15);
-  const [currentPage, setCurrentPage] = useState(1);
-
-  // Group opsi filter kelas dengan pilihan "Semua Kelas"
-  const kelasFilterGroups = useMemo(() => {
-    return [
-      {
-        group: "Pilihan Tingkat",
-        options: [
-          {
-            value: "ALL",
-            label: "Semua Kelas",
-            sublabel: "Tampilkan seluruh rombel kelas",
-          },
-        ],
-      },
-      ...KELAS_GROUPS_DROPDOWN,
-    ];
-  }, []);
+  // Unique Kelas List (Sederhana tanpa kategori langsung)
+  const uniqueKelas = useMemo(() => {
+    const fromRecords = records.map((r) => r.kelas).filter(Boolean);
+    return Array.from(new Set([...DAFTAR_KELAS_SMKN21, ...fromRecords])).filter(
+      Boolean,
+    );
+  }, [records]);
 
   // Modals
   const [selectedDetail, setSelectedDetail] = useState(null);
@@ -163,9 +185,24 @@ export default function BukuPelanggaranTab() {
     startIndexRiwayat + displayLimit,
     totalItemsRiwayat,
   );
+  const sortedRecords = useMemo(() => {
+    return [...records].sort((a, b) => {
+      let valA = a[sortKey] ?? "";
+      let valB = b[sortKey] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [records, sortKey, sortDirection]);
+
   const paginatedRecords = useMemo(() => {
-    return records.slice(startIndexRiwayat, endIndexRiwayat);
-  }, [records, startIndexRiwayat, endIndexRiwayat]);
+    return sortedRecords.slice(startIndexRiwayat, endIndexRiwayat);
+  }, [sortedRecords, startIndexRiwayat, endIndexRiwayat]);
 
   // SubTab 2: Akumulasi Poin Siswa Pagination
   const totalItemsRekap = rekapSiswaList.length;
@@ -182,32 +219,32 @@ export default function BukuPelanggaranTab() {
     startIndexRekap + displayLimit,
     totalItemsRekap,
   );
+  const sortedRekapSiswa = useMemo(() => {
+    return [...rekapSiswaList].sort((a, b) => {
+      let valA = a[sortKeyRekap] ?? "";
+      let valB = b[sortKeyRekap] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirectionRekap === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirectionRekap === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [rekapSiswaList, sortKeyRekap, sortDirectionRekap]);
+
   const paginatedRekapSiswa = useMemo(() => {
-    return rekapSiswaList.slice(startIndexRekap, endIndexRekap);
-  }, [rekapSiswaList, startIndexRekap, endIndexRekap]);
+    return sortedRekapSiswa.slice(startIndexRekap, endIndexRekap);
+  }, [sortedRekapSiswa, startIndexRekap, endIndexRekap]);
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-2xl flex items-center gap-3 animate-in fade-in">
-          {notification.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-          )}
-          <span className="text-xs sm:text-sm font-medium">
-            {notification.message}
-          </span>
-          <button
-            type="button"
-            onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-white text-xs ml-2 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -245,7 +282,7 @@ export default function BukuPelanggaranTab() {
           </div>
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Siswa Tercatat Poin
+              Siswa/i Tercatat Poin
             </p>
             <h3 className="text-2xl font-black text-slate-800 mt-0.5">
               {stat.siswa_tercatat}{" "}
@@ -315,10 +352,13 @@ export default function BukuPelanggaranTab() {
                   setKelasFilter(val);
                   setCurrentPage(1);
                 }}
-                groups={kelasFilterGroups}
-                placeholder="Pilih Kelas..."
-                icon={<GraduationCap className="w-4 h-4 text-rose-600" />}
-                className="w-full"
+                options={[
+                  { value: "ALL", label: "Semua Kelas" },
+                  ...uniqueKelas.map((k) => ({ value: k, label: k })),
+                ]}
+                icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
+                className="w-full sm:w-auto"
+                align="right"
               />
             </div>
 
@@ -331,7 +371,7 @@ export default function BukuPelanggaranTab() {
                     setTanggalFilter(val);
                     setCurrentPage(1);
                   }}
-                  placeholder="Pilih filter tanggal..."
+                  placeholder="Pilih tanggal..."
                   className="w-full"
                 />
               </div>
@@ -395,12 +435,114 @@ export default function BukuPelanggaranTab() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="px-4 py-3">Tanggal & Waktu</th>
-                <th className="px-4 py-3">Siswa</th>
-                <th className="px-4 py-3">Kelas</th>
-                <th className="px-4 py-3">Jenis Pelanggaran</th>
-                <th className="px-4 py-3">Poin</th>
-                <th className="px-4 py-3">Guru / Tendik Penegur</th>
+                <th
+                  onClick={() => handleSort("tanggal_waktu")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Tanggal & Waktu"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Tanggal & Waktu</span>
+                    {sortKey === "tanggal_waktu" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("nama_siswa")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Nama Siswa"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Siswa</span>
+                    {sortKey === "nama_siswa" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("kelas")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Kelas"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Kelas</span>
+                    {sortKey === "kelas" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("jenis_pelanggaran")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Jenis Pelanggaran"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Jenis Pelanggaran</span>
+                    {sortKey === "jenis_pelanggaran" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("poin")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Bobot Poin"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Poin</span>
+                    {sortKey === "poin" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("nama_penanggung_jawab")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Guru Penegur"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Guru / Tendik Penegur</span>
+                    {sortKey === "nama_penanggung_jawab" ? (
+                      sortDirection === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-4 py-3">Tanda Tangan</th>
                 <th className="px-4 py-3 text-center">Aksi</th>
               </tr>
@@ -437,7 +579,7 @@ export default function BukuPelanggaranTab() {
                       <span
                         className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${kat.badge}`}
                       >
-                        +{r.poin}
+                        {r.poin}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
@@ -603,7 +745,7 @@ export default function BukuPelanggaranTab() {
           </h4>
           <p className="text-xs text-slate-400 mt-0.5">
             Daftar siswa dengan catatan poin pelanggaran, diurutkan dari poin
-            tertinggi.
+            tertinggi
           </p>
         </div>
 
@@ -624,13 +766,115 @@ export default function BukuPelanggaranTab() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="px-4 py-3 text-center">No</th>
-                <th className="px-4 py-3">Nama Siswa</th>
-                <th className="px-4 py-3">NIS</th>
-                <th className="px-4 py-3">Kelas</th>
-                <th className="px-4 py-3 text-center">Jumlah Kasus</th>
-                <th className="px-4 py-3">Total Poin</th>
-                <th className="px-4 py-3">Status Pembinaan</th>
+                <th className="px-4 py-3 text-center w-12">No</th>
+                <th
+                  onClick={() => handleSortRekap("nama_siswa")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Nama Siswa"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Nama Siswa</span>
+                    {sortKeyRekap === "nama_siswa" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSortRekap("nis")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan NIS"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>NIS</span>
+                    {sortKeyRekap === "nis" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSortRekap("kelas")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Kelas"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Kelas</span>
+                    {sortKeyRekap === "kelas" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSortRekap("jumlah_pelanggaran")}
+                  className="px-4 py-3 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Jumlah Kasus"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Jumlah Kasus</span>
+                    {sortKeyRekap === "jumlah_pelanggaran" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSortRekap("total_poin")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Total Poin"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Total Poin</span>
+                    {sortKeyRekap === "total_poin" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSortRekap("total_poin")}
+                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                  title="Urutkan Status Pembinaan"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Status Pembinaan</span>
+                    {sortKeyRekap === "total_poin" ? (
+                      sortDirectionRekap === "asc" ? (
+                        <ArrowUp className="w-3 h-3 text-rose-600" />
+                      ) : (
+                        <ArrowDown className="w-3 h-3 text-rose-600" />
+                      )
+                    ) : (
+                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -861,7 +1105,7 @@ export default function BukuPelanggaranTab() {
               <strong className="text-slate-800">
                 {deleteConfirmItem.nama_siswa}
               </strong>{" "}
-              (+{deleteConfirmItem.poin} poin)? Tindakan ini akan mengurangi
+              {deleteConfirmItem.poin} poin ? Tindakan ini akan mengurangi
               akumulasi poin siswa tersebut.
             </p>
 
@@ -883,9 +1127,8 @@ export default function BukuPelanggaranTab() {
                 {deleteLoading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Ya, Hapus</span>
                 )}
-                <span>Ya, Hapus</span>
               </button>
             </div>
           </div>

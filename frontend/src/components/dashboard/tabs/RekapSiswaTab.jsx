@@ -1,11 +1,39 @@
-import React from "react";
-import { Inbox } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Inbox, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
 
 export default function RekapSiswaTab({
   filteredSiswa = [],
   paginatedSiswa = [],
 }) {
+  const [sortKey, setSortKey] = useState("nama");
+  const [sortDirection, setSortDirection] = useState("asc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === "nama" || key === "kelas" ? "asc" : "desc");
+    }
+  };
+
+  const displayList = useMemo(() => {
+    const list = [...paginatedSiswa];
+    return list.sort((a, b) => {
+      let valA = a[sortKey] ?? 0;
+      let valB = b[sortKey] ?? 0;
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [paginatedSiswa, sortKey, sortDirection]);
+
   return (
     <div>
       {/* 1. Mobile Cards View (< md) */}
@@ -22,7 +50,7 @@ export default function RekapSiswaTab({
             </p>
           </div>
         ) : (
-          paginatedSiswa.map((item) => {
+          displayList.map((item) => {
             const isAktif = item.total_hadir > 0;
             const jurInfo = getJurusanInfo(item.kelas) || {
               badge: "bg-slate-100 text-slate-700 border-slate-200",
@@ -73,7 +101,7 @@ export default function RekapSiswaTab({
                       Tepat
                     </span>
                     <span className="text-xs font-black text-emerald-800">
-                      {item.tepat_waktu}x
+                      {item.tepat_waktu}
                     </span>
                   </div>
                   <div className="bg-amber-50/70 border border-amber-100/80 rounded-xl p-1.5">
@@ -81,7 +109,7 @@ export default function RekapSiswaTab({
                       Telat
                     </span>
                     <span className="text-xs font-black text-amber-800">
-                      {item.terlambat}x
+                      {item.terlambat}
                     </span>
                   </div>
                   <div className="bg-rose-50/70 border border-rose-100/80 rounded-xl p-1.5">
@@ -113,7 +141,7 @@ export default function RekapSiswaTab({
                       Perpus
                     </span>
                     <span className="text-xs font-black text-indigo-800">
-                      {item.kunjungan_perpus}x
+                      {item.kunjungan_perpus}
                     </span>
                   </div>
                 </div>
@@ -128,15 +156,168 @@ export default function RekapSiswaTab({
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[760px]">
           <thead>
             <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-6">Siswa</th>
-              <th className="py-3.5 px-6">Kelas</th>
-              <th className="py-3.5 px-4 text-center">Tepat Waktu</th>
-              <th className="py-3.5 px-4 text-center">Terlambat</th>
-              <th className="py-3.5 px-4 text-center">Sakit</th>
-              <th className="py-3.5 px-4 text-center">Izin</th>
-              <th className="py-3.5 px-4 text-center">Total Hadir</th>
-              <th className="py-3.5 px-4 text-center">Kunjungan Perpus</th>
-              <th className="py-3.5 px-6 text-right">Status Aktivitas</th>
+              <th
+                onClick={() => handleSort("nama")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Nama Siswa"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("kelas")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Kelas"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Kelas</span>
+                  {sortKey === "kelas" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("tepat_waktu")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Tepat Waktu"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Tepat Waktu</span>
+                  {sortKey === "tepat_waktu" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("terlambat")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Terlambat"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Terlambat</span>
+                  {sortKey === "terlambat" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("sakit")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Sakit"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Sakit</span>
+                  {sortKey === "sakit" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("izin")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Izin"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Izin</span>
+                  {sortKey === "izin" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("total_hadir")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Total Hadir"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Total Hadir</span>
+                  {sortKey === "total_hadir" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("kunjungan_perpus")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Kunjungan Perpus"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Kunjungan Perpus</span>
+                  {sortKey === "kunjungan_perpus" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("total_hadir")}
+                className="py-3.5 px-6 text-right cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Status Aktivitas"
+              >
+                <div className="flex items-center justify-end gap-1.5">
+                  <span>Status Aktivitas</span>
+                  {sortKey === "total_hadir" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -156,7 +337,7 @@ export default function RekapSiswaTab({
                 </td>
               </tr>
             ) : (
-              paginatedSiswa.map((item) => {
+              displayList.map((item) => {
                 const isAktif = item.total_hadir > 0;
                 return (
                   <tr

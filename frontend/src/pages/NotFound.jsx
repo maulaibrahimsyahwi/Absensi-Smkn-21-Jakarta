@@ -25,13 +25,13 @@ export default function NotFound() {
             onClick={() => window.history.back()}
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-semibold transition"
           >
-            <ArrowLeft className="w-4 h-4" /> Kembali
+            Kembali
           </button>
           <Link
             to="/"
             className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition shadow-sm"
           >
-            <Home className="w-4 h-4" /> Beranda Utama
+            Beranda Utama
           </Link>
         </div>
       </div>

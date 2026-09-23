@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   Inbox,
   Clock,
@@ -8,6 +8,9 @@ import {
   Trash2,
   Calendar,
   ShieldCheck,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
 
@@ -17,6 +20,33 @@ export default function IzinPiketTab({
   onOpenSlipModal,
   onDeleteIzin,
 }) {
+  const [sortKey, setSortKey] = useState("id");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  const displayList = useMemo(() => {
+    const list = [...paginatedIzinPiket];
+    return list.sort((a, b) => {
+      let valA = a[sortKey] ?? "";
+      let valB = b[sortKey] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [paginatedIzinPiket, sortKey, sortDirection]);
   return (
     <div>
       {/* 1. Mobile Cards View (< md) */}
@@ -154,12 +184,97 @@ export default function IzinPiketTab({
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
               <th className="py-3 px-4 w-12 text-center">No</th>
-              <th className="py-3 px-4">Siswa</th>
-              <th className="py-3 px-4">Keperluan</th>
-              <th className="py-3 px-4">Jam Ke-</th>
-              <th className="py-3 px-4">Hari / Tanggal</th>
+              <th
+                onClick={() => handleSort("nama")}
+                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Siswa"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-indigo-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-indigo-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("tipe")}
+                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Keperluan"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Keperluan</span>
+                  {sortKey === "tipe" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-indigo-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-indigo-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("jam_ke")}
+                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Jam Ke"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Jam Ke-</span>
+                  {sortKey === "jam_ke" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-indigo-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-indigo-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("tanggal")}
+                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Tanggal"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Hari / Tanggal</span>
+                  {sortKey === "tanggal" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-indigo-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-indigo-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
               <th className="py-3 px-4">Alasan</th>
-              <th className="py-3 px-4">Petugas Piket</th>
+              <th
+                onClick={() => handleSort("nama_penanggung_jawab")}
+                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Petugas Piket"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Petugas Piket</span>
+                  {sortKey === "nama_penanggung_jawab" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-indigo-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-indigo-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
               <th className="py-3 px-4 text-center w-28">Aksi</th>
             </tr>
           </thead>
@@ -177,7 +292,7 @@ export default function IzinPiketTab({
                 </td>
               </tr>
             ) : (
-              paginatedIzinPiket.map((item, idx) => {
+              displayList.map((item, idx) => {
                 const jurInfo = getJurusanInfo(item.kelas) || {
                   badge: "bg-slate-100 text-slate-700 border-slate-200",
                   kode: item.kelas,

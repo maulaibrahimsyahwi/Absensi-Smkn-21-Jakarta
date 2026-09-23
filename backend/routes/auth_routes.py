@@ -1,10 +1,36 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
 from utils.totp_utils import generate_totp_secret, verify_totp, get_totp_uri, get_qr_url
 from utils.auth_middleware import generate_token, token_required, role_required, decode_token
+from collections import defaultdict
+from datetime import datetime, timedelta
+import time as time_module
 
 auth_bp = Blueprint('auth', __name__)
+
+# Account lockout tracking (in-memory, reset pada restart server)
+_login_attempts = defaultdict(list)  # {username: [timestamp, ...]}
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION_SECONDS = 900  # 15 menit
+
+def _check_account_locked(username):
+    """Memeriksa apakah akun terkunci akibat terlalu banyak percobaan login gagal."""
+    now = time_module.time()
+    # Bersihkan percobaan yang sudah kedaluwarsa
+    _login_attempts[username] = [t for t in _login_attempts[username] if now - t < LOCKOUT_DURATION_SECONDS]
+    if len(_login_attempts[username]) >= MAX_LOGIN_ATTEMPTS:
+        remaining = int(LOCKOUT_DURATION_SECONDS - (now - _login_attempts[username][0]))
+        return True, remaining
+    return False, 0
+
+def _record_failed_attempt(username):
+    """Mencatat percobaan login yang gagal."""
+    _login_attempts[username].append(time_module.time())
+
+def _clear_attempts(username):
+    """Menghapus catatan percobaan login setelah berhasil."""
+    _login_attempts.pop(username, None)
 
 def verify_and_upgrade_password(account, input_pass, is_siswa=False):
     """
@@ -156,7 +182,7 @@ def login():
         if not siswa:
             return jsonify({
                 "success": False, 
-                "message": "Akun siswa dengan NIS tersebut tidak ditemukan. Bapak/Ibu Guru Piket & Admin silakan masuk melalui tab 'Guru Piket & Admin'."
+                "message": "Akun siswa dengan NIS tersebut tidak ditemukan."
             }), 404
         return handle_siswa_login(siswa)
 
@@ -166,7 +192,7 @@ def login():
         if not user:
             return jsonify({
                 "success": False, 
-                "message": "Akun staf (Guru Piket / Admin) dengan username tersebut tidak ditemukan. Siswa SMKN 21 silakan masuk melalui tab 'Siswa SMKN 21'."
+                "message": "Akun Guru Piket / Admin dengan username tersebut tidak ditemukan"
             }), 404
         return handle_user_login(user)
 
@@ -453,8 +479,9 @@ def get_personal_siswa_rekap():
     pengajuan_records = PengajuanIzin.query.filter_by(siswa_id=siswa.id).order_by(PengajuanIzin.created_at.desc()).all()
     piket_records = IzinPiket.query.filter_by(siswa_id=siswa.id).order_by(IzinPiket.created_at.desc()).all()
 
-    tepat_waktu = sum(1 for h in harian_records if h.status == 'Tepat Waktu')
-    terlambat = sum(1 for h in harian_records if h.status == 'Terlambat')
+    tepat_waktu = sum(1 for h in harian_records if 'Tepat Waktu' in (h.status or ''))
+    terlambat = sum(1 for h in harian_records if 'Terlambat' in (h.status or ''))
+    pjj = sum(1 for h in harian_records if '(PJJ)' in (h.status or ''))
     sakit = sum(1 for h in harian_records if h.status == 'Sakit')
     izin = sum(1 for h in harian_records if h.status == 'Izin')
     total_hadir = tepat_waktu + terlambat
@@ -466,6 +493,7 @@ def get_personal_siswa_rekap():
             "total_hadir": total_hadir,
             "tepat_waktu": tepat_waktu,
             "terlambat": terlambat,
+            "pjj": pjj,
             "sakit": sakit,
             "izin": izin,
             "kunjungan_perpus": len(perpus_records)
@@ -482,21 +510,23 @@ def get_personal_siswa_rekap():
 def change_password():
     """
     Mengubah kata sandi mandiri untuk pengguna yang sedang aktif (Siswa, Guru Piket, atau Admin).
+    ID dan role diambil dari JWT token untuk mencegah IDOR.
     """
     data = request.json or {}
-    user_id = data.get('id')
-    role = str(data.get('role', '')).strip().lower()
+    current_user = getattr(request, 'current_user', {})
+    user_id = current_user.get('user_id')
+    role = current_user.get('role', '').lower()
     old_password = str(data.get('old_password', '')).strip()
     new_password = str(data.get('new_password', '')).strip()
 
     if not user_id or not role:
-        return jsonify({"success": False, "message": "Identitas pengguna tidak valid"}), 400
+        return jsonify({"success": False, "message": "Sesi autentikasi tidak valid. Silakan login ulang."}), 401
     if not old_password:
         return jsonify({"success": False, "message": "Kata sandi saat ini wajib diisi"}), 400
     if not new_password:
         return jsonify({"success": False, "message": "Kata sandi baru wajib diisi"}), 400
-    if len(new_password) < 4:
-        return jsonify({"success": False, "message": "Kata sandi baru minimal 4 karakter"}), 400
+    if len(new_password) < 8:
+        return jsonify({"success": False, "message": "Kata sandi baru minimal 8 karakter"}), 400
 
     try:
         if role == 'siswa':
@@ -530,7 +560,7 @@ def change_password():
             })
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": f"Gagal memperbarui kata sandi: {str(e)}"}), 500
+        return jsonify({"success": False, "message": "Gagal memperbarui kata sandi. Silakan coba lagi."}), 500
 
 
 @auth_bp.route('/api/siswa/<int:id>/reset_password', methods=['POST'])
@@ -633,26 +663,30 @@ def get_all_staf():
 @role_required(['admin'])
 def create_staf():
     """
-    Admin mendaftarkan akun Guru Piket baru.
+    Admin mendaftarkan akun Guru Piket baru menggunakan NIP.
+    Kata sandi awal otomatis sama dengan NIP guru jika tidak diisi secara manual.
     """
     data = request.json or {}
     nama = str(data.get('nama', '')).strip()
-    username = str(data.get('username', '')).strip().lower()
+    username = str(data.get('nip') or data.get('username') or '').strip().lower()
     password = str(data.get('password', '')).strip()
     role = str(data.get('role', 'piket')).strip().lower()
 
     if not nama:
         return jsonify({"success": False, "message": "Nama lengkap guru wajib diisi."}), 400
     if not username:
-        return jsonify({"success": False, "message": "Username / NIP akun wajib diisi."}), 400
-    if not password:
-        return jsonify({"success": False, "message": "Kata sandi awal wajib diisi."}), 400
-    if len(password) < 4:
-        return jsonify({"success": False, "message": "Kata sandi minimal 4 karakter."}), 400
+        return jsonify({"success": False, "message": "NIP guru piket wajib diisi."}), 400
 
-    # Cek apakah username sudah dipakai
+    # Kata sandi awal otomatis sama dengan NIP jika kosong
+    if not password:
+        password = username
+
+    if len(password) < 4:
+        return jsonify({"success": False, "message": "Kata sandi / NIP minimal 4 karakter."}), 400
+
+    # Cek apakah username/NIP sudah dipakai
     if User.query.filter_by(username=username).first():
-        return jsonify({"success": False, "message": f"Username '{username}' sudah digunakan oleh pengguna lain."}), 400
+        return jsonify({"success": False, "message": f"NIP / Username '{username}' sudah terdaftar di sistem."}), 400
 
     try:
         new_user = User(
@@ -665,7 +699,7 @@ def create_staf():
         db.session.commit()
         return jsonify({
             "success": True,
-            "message": f"Akun {new_user.nama} ({'Guru Piket' if role == 'piket' else 'Admin'}) berhasil dibuat!",
+            "message": f"Akun Guru Piket {new_user.nama} (NIP: {username}) berhasil dibuat dengan kata sandi awal sama dengan NIP.",
             "user": new_user.to_dict()
         }), 201
     except Exception as e:

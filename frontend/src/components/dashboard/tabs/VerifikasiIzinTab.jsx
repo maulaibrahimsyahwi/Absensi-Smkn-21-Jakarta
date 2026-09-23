@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   Inbox,
   Clock,
@@ -8,6 +8,9 @@ import {
   MapPin,
   Loader2,
   Check,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
 
@@ -20,6 +23,36 @@ export default function VerifikasiIzinTab({
   onOpenRejectModal,
   onOpenSuratModal,
 }) {
+  const [sortKey, setSortKey] = useState("created_at");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection(
+        key === "created_at" || key === "tanggal_mulai" ? "desc" : "asc",
+      );
+    }
+  };
+
+  const displayList = useMemo(() => {
+    const list = [...paginatedPengajuan];
+    return list.sort((a, b) => {
+      let valA = a[sortKey] ?? "";
+      let valB = b[sortKey] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [paginatedPengajuan, sortKey, sortDirection]);
+
   return (
     <div>
       {/* 1. Mobile Cards View (< md) */}
@@ -37,7 +70,7 @@ export default function VerifikasiIzinTab({
             </p>
           </div>
         ) : (
-          paginatedPengajuan.map((item) => {
+          displayList.map((item) => {
             const jurInfo = getJurusanInfo(item.kelas) || {
               badge: "bg-slate-100 text-slate-700 border-slate-200",
               kode: item.kelas,
@@ -205,16 +238,116 @@ export default function VerifikasiIzinTab({
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[920px]">
           <thead>
             <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-5">Waktu Pengajuan</th>
-              <th className="py-3.5 px-5">Siswa</th>
-              <th className="py-3.5 px-4 text-center">Jenis</th>
-              <th className="py-3.5 px-5">Periode</th>
-              <th className="py-3.5 px-5 min-w-[200px] max-w-[300px]">
-                Alasan
+              <th
+                onClick={() => handleSort("created_at")}
+                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Waktu Pengajuan"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Waktu Pengajuan</span>
+                  {sortKey === "created_at" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("nama")}
+                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Siswa"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("jenis")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Jenis"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Jenis</span>
+                  {sortKey === "jenis" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("tanggal_mulai")}
+                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Periode"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Periode</span>
+                  {sortKey === "tanggal_mulai" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("alasan")}
+                className="py-3.5 px-5 min-w-[200px] max-w-[300px] cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Alasan"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Alasan</span>
+                  {sortKey === "alasan" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
               </th>
               <th className="py-3.5 px-4 text-center">Bukti</th>
               <th className="py-3.5 px-4 text-center">Lokasi GPS</th>
-              <th className="py-3.5 px-4 text-center">Status</th>
+              <th
+                onClick={() => handleSort("status_pengajuan")}
+                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Status"
+              >
+                <div className="flex items-center justify-center gap-1.5">
+                  <span>Status</span>
+                  {sortKey === "status_pengajuan" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
               <th className="py-3.5 px-5 text-right">Verifikasi</th>
             </tr>
           </thead>
@@ -236,7 +369,7 @@ export default function VerifikasiIzinTab({
                 </td>
               </tr>
             ) : (
-              paginatedPengajuan.map((item) => {
+              displayList.map((item) => {
                 const isMenunggu = item.status_pengajuan === "Menunggu";
                 const isDisetujui = item.status_pengajuan === "Disetujui";
                 return (

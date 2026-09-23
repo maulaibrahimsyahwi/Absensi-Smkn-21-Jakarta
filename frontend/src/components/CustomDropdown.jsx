@@ -27,9 +27,10 @@ export default function CustomDropdown({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
+  const [horizontalPlacement, setHorizontalPlacement] = useState(align);
   const dropdownRef = useRef(null);
 
-  // Auto detect placement (flip upward if space below is tight)
+  // Auto detect placement (flip upward if space below is tight, flip horizontal if near screen edges)
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
       const rect = dropdownRef.current.getBoundingClientRect();
@@ -39,8 +40,16 @@ export default function CustomDropdown({
       } else {
         setOpenUpward(false);
       }
+
+      if (align === "right" && rect.right < 280) {
+        setHorizontalPlacement("left");
+      } else if (align === "left" && rect.left + 280 > window.innerWidth) {
+        setHorizontalPlacement("right");
+      } else {
+        setHorizontalPlacement(align);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, align]);
 
   // Close on outside click
   useEffect(() => {
@@ -168,7 +177,7 @@ export default function CustomDropdown({
       {isOpen && (
         <div
           className={`absolute ${
-            align === "right" ? "right-0" : "left-0"
+            horizontalPlacement === "right" ? "right-0" : "left-0"
           } ${openUpward ? "bottom-full mb-1.5" : "top-full mt-1.5"} ${
             isFullWidth
               ? "w-full min-w-full max-w-full"

@@ -112,7 +112,6 @@ export default function TabTandaTangan({ user, isSiswa, saveSignature }) {
           onClick={handleInitiateTtdUpdate}
           className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition shadow-xs cursor-pointer"
         >
-          <RefreshCw className="w-3.5 h-3.5" />
           {user?.tanda_tangan
             ? "Perbarui Tanda Tangan"
             : "Buat Tanda Tangan Digital"}

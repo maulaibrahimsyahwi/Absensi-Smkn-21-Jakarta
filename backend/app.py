@@ -29,6 +29,18 @@ CORS(app, origins=CORS_ORIGINS)
 Compress(app)
 db.init_app(app)
 
+# Rate Limiter: Perlindungan anti brute-force dan DDoS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per minute"],
+    storage_uri="memory://",
+)
+app.limiter = limiter  # Expose agar bisa diakses dari blueprint
+
 # Registrasi Blueprints
 app.register_blueprint(auth_bp)
 app.register_blueprint(siswa_bp)
@@ -40,6 +52,9 @@ app.register_blueprint(rekap_bp)
 app.register_blueprint(pelanggaran_bp)
 app.register_blueprint(pjj_bp)
 
+# Bebaskan endpoint biometrik (liveness & deteksi wajah berulang) dari pembatasan rate limiter
+limiter.exempt(biometrik_bp)
+
 
 def check_and_migrate_db():
     """
@@ -50,6 +65,13 @@ def check_and_migrate_db():
         db.create_all()
         try:
             with db.engine.connect() as conn:
+                # 0. Optimasi performa SQLite untuk lonjakan jam 05.00-06.30 WIB (Anti-Lock & Cepat)
+                conn.execute(db.text("PRAGMA journal_mode=WAL;"))
+                conn.execute(db.text("PRAGMA synchronous=NORMAL;"))
+                conn.execute(db.text("PRAGMA busy_timeout=5000;"))
+                conn.execute(db.text("PRAGMA cache_size=-64000;"))
+                conn.commit()
+
                 # 1. Cek kolom di tabel siswa
                 res_siswa = conn.execute(db.text("PRAGMA table_info(siswa)")).fetchall()
                 col_siswa = [row[1] for row in res_siswa]

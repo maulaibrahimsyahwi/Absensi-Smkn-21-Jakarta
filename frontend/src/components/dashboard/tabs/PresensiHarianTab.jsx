@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   Inbox,
   Clock,
-  CheckCircle2,
-  AlertTriangle,
-  HeartPulse,
-  Mail,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Laptop,
 } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
 
@@ -16,6 +16,53 @@ export default function PresensiHarianTab({
   namaBulanTerpilih,
   selectedTahun,
 }) {
+  const [sortKey, setSortKey] = useState("waktu");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  const displayList = useMemo(() => {
+    const list = [...paginatedHarian];
+    return list.sort((a, b) => {
+      let valA = a[sortKey] ?? "";
+      let valB = b[sortKey] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [paginatedHarian, sortKey, sortDirection]);
+
+  const getStatusBadge = (status) => {
+    const s = status || "";
+    if (s.includes("(PJJ)")) {
+      return s.includes("Terlambat")
+        ? "bg-amber-50 text-amber-800 border-amber-300"
+        : "bg-indigo-50 text-indigo-700 border-indigo-200";
+    }
+    if (s === "Tepat Waktu") {
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    }
+    if (s === "Terlambat") {
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    }
+    if (s === "Sakit") {
+      return "bg-rose-50 text-rose-700 border-rose-200";
+    }
+    return "bg-blue-50 text-blue-700 border-blue-200";
+  };
+
   return (
     <div>
       {/* 1. Mobile Cards View (< md) */}
@@ -35,7 +82,7 @@ export default function PresensiHarianTab({
             </p>
           </div>
         ) : (
-          paginatedHarian.map((item, index) => {
+          displayList.map((item, index) => {
             const jurInfo = getJurusanInfo(item.kelas) || {
               badge: "bg-slate-100 text-slate-700 border-slate-200",
               kode: item.kelas,
@@ -62,27 +109,12 @@ export default function PresensiHarianTab({
                     </div>
                   </div>
                   <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex-shrink-0 ${
-                      item.status === "Tepat Waktu"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : item.status === "Terlambat"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : item.status === "Sakit"
-                            ? "bg-rose-50 text-rose-700 border-rose-200"
-                            : "bg-blue-50 text-blue-700 border-blue-200"
-                    }`}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex-shrink-0 ${getStatusBadge(
+                      item.status,
+                    )}`}
                   >
-                    {item.status === "Tepat Waktu" && (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    )}
-                    {item.status === "Terlambat" && (
-                      <AlertTriangle className="w-3 h-3 text-amber-600" />
-                    )}
-                    {item.status === "Sakit" && (
-                      <HeartPulse className="w-3 h-3 text-rose-600" />
-                    )}
-                    {item.status === "Izin" && (
-                      <Mail className="w-3 h-3 text-blue-600" />
+                    {item.status?.includes("(PJJ)") && (
+                      <Laptop className="w-3 h-3 text-indigo-600 flex-shrink-0" />
                     )}
                     <span>{item.status}</span>
                   </span>
@@ -105,10 +137,78 @@ export default function PresensiHarianTab({
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[580px]">
           <thead>
             <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-6">Waktu Presensi</th>
-              <th className="py-3.5 px-6">Nama Siswa</th>
-              <th className="py-3.5 px-6">Kelas</th>
-              <th className="py-3.5 px-6">Status Kehadiran</th>
+              <th
+                onClick={() => handleSort("waktu")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Waktu Presensi"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Waktu Presensi</span>
+                  {sortKey === "waktu" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("nama")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Nama Siswa"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Nama Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("kelas")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Kelas"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Kelas</span>
+                  {sortKey === "kelas" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("status")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Status Kehadiran"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Status Kehadiran</span>
+                  {sortKey === "status" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -131,7 +231,7 @@ export default function PresensiHarianTab({
                 </td>
               </tr>
             ) : (
-              paginatedHarian.map((item, index) => {
+              displayList.map((item, index) => {
                 return (
                   <tr
                     key={item.id || index}
@@ -155,16 +255,13 @@ export default function PresensiHarianTab({
                     </td>
                     <td className="py-4 px-6">
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                          item.status === "Tepat Waktu"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : item.status === "Terlambat"
-                              ? "bg-amber-50 text-amber-700 border-amber-200"
-                              : item.status === "Sakit"
-                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                        }`}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${getStatusBadge(
+                          item.status,
+                        )}`}
                       >
+                        {item.status?.includes("(PJJ)") && (
+                          <Laptop className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+                        )}
                         <span>{item.status}</span>
                       </span>
                     </td>

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Users,
   Search,
@@ -13,9 +13,13 @@ import {
   UserCheck,
   CheckSquare,
   Square,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
 import { getJurusanInfo } from "../../constants/schoolData";
+import { SkeletonTable } from "../common/Skeleton";
 
 export default function TabelDaftarSiswa({
   siswaList,
@@ -46,7 +50,38 @@ export default function TabelDaftarSiswa({
   onResetFace,
   onResetSignature,
   onBulkDelete,
+  loading = false,
 }) {
+  // Sorting State
+  const [sortKey, setSortKey] = useState("nama");
+  const [sortDirection, setSortDirection] = useState("asc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
+    }
+  };
+
+  const sortedSiswa = [...filteredSiswa].sort((a, b) => {
+    let aVal = a[sortKey] ?? "";
+    let bVal = b[sortKey] ?? "";
+
+    if (sortKey === "sample_count") {
+      aVal = a.sample_count || (a.terdaftar ? 1 : 0);
+      bVal = b.sample_count || (b.terdaftar ? 1 : 0);
+    } else if (typeof aVal === "string") {
+      aVal = aVal.toLowerCase();
+      bVal = bVal.toLowerCase();
+    }
+
+    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
   return (
     <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 flex flex-col">
       {/* Title & Stats */}
@@ -59,7 +94,11 @@ export default function TabelDaftarSiswa({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
-            Total {siswaList.length} Siswa
+            {statusFilter === "Aktif"
+              ? `Total ${totalAktif} Siswa Aktif`
+              : statusFilter === "Alumni"
+                ? `Total ${totalAlumni} Siswa Alumni`
+                : `Total ${siswaList.length} Siswa`}
           </span>
         </div>
       </div>
@@ -140,9 +179,6 @@ export default function TabelDaftarSiswa({
           >
             <span className="hidden sm:inline">Luluskan Kelas XII</span>
             <span className="sm:hidden">Luluskan XII</span>
-            <span className="px-1.5 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
-              {totalKelasXIIAktif}
-            </span>
           </button>
         </div>
       </div>
@@ -181,7 +217,20 @@ export default function TabelDaftarSiswa({
 
       {/* 1. Mobile Cards View (< md) */}
       <div className="md:hidden divide-y divide-slate-100 max-h-[560px] overflow-y-auto border border-slate-100 rounded-xl">
-        {filteredSiswa.length === 0 ? (
+        {loading ? (
+          <div className="p-3 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={`mob-skel-${i}`}
+                className="p-3.5 bg-slate-50 rounded-xl space-y-2.5 animate-pulse border border-slate-100"
+              >
+                <div className="h-4 bg-slate-200 rounded w-44"></div>
+                <div className="h-3 bg-slate-200 rounded w-28"></div>
+                <div className="h-6 bg-slate-200 rounded w-20"></div>
+              </div>
+            ))}
+          </div>
+        ) : sortedSiswa.length === 0 ? (
           <div className="text-center py-12 text-slate-400 p-4">
             <Users className="w-8 h-8 text-slate-300 mx-auto mb-2 stroke-1" />
             <p className="font-semibold text-slate-600 text-xs">
@@ -192,7 +241,7 @@ export default function TabelDaftarSiswa({
             </p>
           </div>
         ) : (
-          filteredSiswa.map((s) => {
+          sortedSiswa.map((s) => {
             const jurInfo = getJurusanInfo(s.kelas);
             const isSelected = selectedIds.includes(s.id);
             const isAlumni = s.status === "Alumni";
@@ -237,17 +286,11 @@ export default function TabelDaftarSiswa({
                       <span className="text-[11px] font-bold text-slate-700">
                         {s.kelas}
                       </span>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${jurInfo.badge}`}
-                      >
-                        {jurInfo.kode}
-                      </span>
                     </div>
                   </div>
 
                   {s.terdaftar ? (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                       <span>{s.sample_count || 1} Foto</span>
                     </span>
                   ) : (
@@ -349,7 +392,7 @@ export default function TabelDaftarSiswa({
       {/* 2. Desktop Table View (>= md) */}
       <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[560px] flex-1 border border-slate-100 rounded-xl">
         <table className="w-full text-left border-collapse text-xs min-w-[580px]">
-          <thead className="sticky top-0 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 z-10">
+          <thead className="sticky top-0 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 z-10 select-none">
             <tr>
               <th className="p-3 w-10 text-center">
                 <input
@@ -360,21 +403,75 @@ export default function TabelDaftarSiswa({
                   title="Pilih Semua Siswa pada Daftar"
                 />
               </th>
-              <th className="p-3">Siswa</th>
-              <th className="p-3">Kelas & Status</th>
-              <th className="p-3">Biometrik Wajah</th>
+              <th
+                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
+                onClick={() => handleSort("nama")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
+                onClick={() => handleSort("kelas")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Kelas & Status</span>
+                  {sortKey === "kelas" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
+                onClick={() => handleSort("sample_count")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Biometrik Wajah</span>
+                  {sortKey === "sample_count" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-blue-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-blue-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
               <th className="p-3 text-right">Kelola / Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredSiswa.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan="5" className="p-4">
+                  <SkeletonTable rows={7} cols={5} />
+                </td>
+              </tr>
+            ) : sortedSiswa.length === 0 ? (
               <tr>
                 <td colSpan="5" className="text-center py-12 text-slate-400">
                   Tidak ada siswa ditemukan.
                 </td>
               </tr>
             ) : (
-              filteredSiswa.map((s) => {
+              sortedSiswa.map((s) => {
                 const isSelected = selectedIds.includes(s.id);
                 const isAlumni = s.status === "Alumni";
 
@@ -447,7 +544,7 @@ export default function TabelDaftarSiswa({
                         )}
 
                         <button
-                          title="Rekam Ulang Sampel Wajah"
+                          title="Rekam Ulang Foto Wajah"
                           onClick={() => onReRecord(s)}
                           className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors border border-blue-200/60 cursor-pointer"
                         >

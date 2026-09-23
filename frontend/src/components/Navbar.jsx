@@ -279,15 +279,15 @@ export default function Navbar() {
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (
             <>
-              {/* Tombol Keluar Cepat */}
+              {/* Tombol Keluar Cepat (Hanya tampil di Laptop & Desktop >= 1024px) */}
               <button
                 type="button"
                 onClick={handleLogout}
                 title="Keluar dari akun"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer"
+                className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Keluar</span>
+                <span>Keluar</span>
               </button>
 
               {/* Tombol Hamburger Toggle Menu (HANYA tampil di Mobile & Tablet < 1024px) */}

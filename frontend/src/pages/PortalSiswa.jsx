@@ -441,7 +441,7 @@ export default function PortalSiswa() {
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
                 Setiap siswa SMKN 21 wajib memiliki tanda tangan digital sebelum
-                mengajukan surat izin/sakit atau keperluan presensi resmi.
+                mengajukan surat izin/sakit atau keperluan presensi resmi
               </p>
             </div>
           </div>

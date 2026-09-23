@@ -93,6 +93,25 @@ export default function CustomDatePicker({
   const [viewYear, setViewYear] = useState(initialDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialDate.getMonth()); // 0 - 11
   const [showMonthYearPicker, setShowMonthYearPicker] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [horizontalPlacement, setHorizontalPlacement] = useState(align);
+
+  // Auto detect placement (flip upward if space below is tight, flip horizontal if near screen edges)
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setOpenUpward(spaceBelow < 380 && rect.top > spaceBelow);
+
+      if (align === "right" && rect.right < 340) {
+        setHorizontalPlacement("left");
+      } else if (align === "left" && rect.left + 340 > window.innerWidth) {
+        setHorizontalPlacement("right");
+      } else {
+        setHorizontalPlacement(align);
+      }
+    }
+  }, [isOpen, align]);
 
   // Sinkronkan view kalender saat nilai value berubah
   useEffect(() => {
@@ -335,10 +354,8 @@ export default function CustomDatePicker({
       {isOpen && (
         <div
           className={`absolute ${
-            align === "right"
-              ? "right-0"
-              : "left-0 sm:left-0 max-sm:left-1/2 max-sm:-translate-x-1/2"
-          } top-full mt-2 w-[calc(100vw-2rem)] max-w-[320px] sm:max-w-none sm:w-[330px] bg-white rounded-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 z-50 p-3.5 sm:p-4 animate-in fade-in zoom-in-95 duration-150`}
+            horizontalPlacement === "right" ? "right-0" : "left-0"
+          } ${openUpward ? "bottom-full mb-2" : "top-full mt-2"} w-[calc(100vw-2rem)] max-w-[330px] sm:w-[330px] bg-white rounded-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 z-50 p-3.5 sm:p-4 animate-in fade-in zoom-in-95 duration-150`}
         >
           {/* Header Kalender: Bulan, Tahun & Navigasi */}
           <div className="flex items-center justify-between mb-3.5 pb-3 border-b border-slate-100">

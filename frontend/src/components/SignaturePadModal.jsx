@@ -170,7 +170,7 @@ export default function SignaturePadModal({
           </div>
 
           <p className="text-[11px] text-slate-400 mt-2 text-center">
-            Goreskan tanda tangan Anda dengan rapi di atas garis dasar.
+            Goreskan tanda tangan Anda dengan rapi di atas garis dasar
           </p>
         </div>
 

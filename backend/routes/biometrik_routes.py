@@ -23,7 +23,7 @@ def is_admin_caller():
     return False
 
 
-# ================= REGISTRASI SAMPEL WAJAH (MULTI-SAMPLE) =================
+from utils.helpers import invalidate_face_cache
 
 @biometrik_bp.route('/api/register_face', methods=['POST'])
 @token_required
@@ -65,7 +65,7 @@ def register_face():
     if siswa.face_encoding and not is_admin:
         return jsonify({
             "success": False,
-            "message": "Data wajah Anda sudah terdaftar dan terkunci demi keamanan presensi sekolah. Untuk merekam ulang sampel wajah, silakan hubungi Admin Sekolah untuk melakukan reset biometrik."
+            "message": "Data wajah Anda sudah terdaftar dan terkunci demi keamanan presensi sekolah. Untuk merekam ulang foto wajah, silakan hubungi Admin Sekolah untuk melakukan reset biometrik."
         }), 403
         
     try:
@@ -84,6 +84,7 @@ def register_face():
         # Simpan array multi-sample biometrik wajah ke database
         siswa.face_encoding = json.dumps(encodings)
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({
             "success": True, 
             "message": f"Berhasil menyimpan {len(encodings)} sampel biometrik wajah untuk {siswa.nama}."
@@ -107,8 +108,9 @@ def reset_siswa_face(id):
         
         siswa.face_encoding = None
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({
-            "success": True,
+            "success": True, 
             "message": f"Biometrik wajah {siswa.nama} ({siswa.kelas}) berhasil direset. Siswa kini dapat mendaftarkan ulang wajahnya."
         })
     except Exception as e:

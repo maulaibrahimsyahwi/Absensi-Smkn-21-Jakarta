@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket, PelanggaranSiswa
-from utils.helpers import validate_siswa_input
+from utils.helpers import validate_siswa_input, invalidate_face_cache
 from utils.auth_middleware import token_required, role_required
 
 siswa_bp = Blueprint('siswa', __name__)
@@ -84,6 +84,7 @@ def update_siswa(id):
             elif status_input == "Aktif":
                 siswa.tanggal_lulus = None
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({"success": True, "message": f"Data {siswa.nama} berhasil diperbarui", "siswa": siswa.to_dict()})
     except Exception as e:
         db.session.rollback()
@@ -108,6 +109,7 @@ def update_siswa_status(id):
         elif new_status == "Aktif":
             siswa.tanggal_lulus = None
         db.session.commit()
+        invalidate_face_cache()
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
             "success": True,
@@ -142,6 +144,7 @@ def bulk_update_siswa_status():
             elif new_status == "Aktif":
                 s.tanggal_lulus = None
         db.session.commit()
+        invalidate_face_cache()
         updated_count = len(target_records)
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
@@ -184,6 +187,7 @@ def luluskan_tingkat():
                 s.tanggal_lulus = now
             
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({
             "success": True,
             "count": target_count,
@@ -214,6 +218,7 @@ def bulk_delete_siswa():
         
         deleted_count = Siswa.query.filter(Siswa.id.in_(siswa_ids)).delete(synchronize_session=False)
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({
             "success": True,
             "count": deleted_count,
@@ -241,6 +246,7 @@ def delete_siswa(id):
         PelanggaranSiswa.query.filter_by(siswa_id=id).delete()
         db.session.delete(siswa)
         db.session.commit()
+        invalidate_face_cache()
         return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil dihapus dari database."})
     except Exception as e:
         db.session.rollback()

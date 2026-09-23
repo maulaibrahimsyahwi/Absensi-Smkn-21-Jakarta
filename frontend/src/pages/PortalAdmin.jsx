@@ -24,11 +24,14 @@ import {
   TrendingUp,
   Award,
   RefreshCw,
+  Laptop,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import ProfileModal from "../components/ProfileModal";
+import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
+import ModalPengaturanPJJ from "../components/pjj/ModalPengaturanPJJ";
 
 export default function PortalAdmin() {
   const navigate = useNavigate();
@@ -55,9 +58,11 @@ export default function PortalAdmin() {
   const [pengajuanList, setPengajuanList] = useState([]);
   const [dismissedNotifIds, setDismissedNotifIds] = useState([]);
 
-  // Modal Profile State
+  // Modal Profile & PJJ States
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalTab, setProfileModalTab] = useState("profil");
+  const [isPjjModalOpen, setIsPjjModalOpen] = useState(false);
+  const [pjjActiveInfo, setPjjActiveInfo] = useState(null);
   const [notification, setNotification] = useState(null);
 
   // Live Clock (WIB)
@@ -87,13 +92,14 @@ export default function PortalAdmin() {
     year: "numeric",
   });
 
-  // Fetch Ringkasan Statistik Sekolah & Notifikasi Pengajuan Izin
+  // Fetch Ringkasan Statistik Sekolah & Notifikasi Pengajuan Izin & Status PJJ
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resPengajuan] = await Promise.allSettled([
+      const [resSummary, resPengajuan, resPjj] = await Promise.allSettled([
         api.get("/rekap/admin_summary"),
         api.get("/pengajuan_izin"),
+        api.get("/pjj/status"),
       ]);
 
       if (
@@ -108,6 +114,13 @@ export default function PortalAdmin() {
         Array.isArray(resPengajuan.value.data)
       ) {
         setPengajuanList(resPengajuan.value.data);
+      }
+      if (
+        resPjj.status === "fulfilled" &&
+        resPjj.value.data?.success &&
+        resPjj.value.data.data
+      ) {
+        setPjjActiveInfo(resPjj.value.data.data);
       }
     } catch (err) {
       console.error("Gagal memuat ringkasan admin:", err);
@@ -162,24 +175,11 @@ export default function PortalAdmin() {
 
   return (
     <div className="min-h-screen py-8 px-4 sm:px-6 max-w-6xl mx-auto space-y-6">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center gap-3 animate-in fade-in">
-          {notification.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-          )}
-          <span className="text-sm font-medium">{notification.message}</span>
-          <button
-            type="button"
-            onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-white text-xs ml-2"
-          >
-            Tutup
-          </button>
-        </div>
-      )}
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Header Profil Administrator (Hero Card) */}
       <div className="bg-gradient-to-br from-slate-900 via-purple-950 to-indigo-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-purple-950/20 relative">
@@ -235,7 +235,7 @@ export default function PortalAdmin() {
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/30 border border-purple-400/30 text-[11px] font-bold tracking-wide uppercase text-purple-200">
-                <span>Administrator Sekolah</span>
+                <span>Admin Sekolah</span>
               </span>
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
@@ -287,10 +287,10 @@ export default function PortalAdmin() {
             </div>
           </div>
 
-          {/* Biometrik Wajah */}
+          {/* Absensi Wajah */}
           <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200/60">
             <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-              Biometrik Wajah
+              Absensi Wajah
             </p>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-emerald-700">
@@ -424,7 +424,7 @@ export default function PortalAdmin() {
               <div>
                 <h3 className="font-bold text-base">Presensi Siswa Harian</h3>
                 <p className="text-[11px] text-indigo-100">
-                  Kiosk scan wajah mandiri & GPS
+                  Scan wajah mandiri & Lokasi
                 </p>
               </div>
             </div>
@@ -449,6 +449,38 @@ export default function PortalAdmin() {
             </div>
             <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
+
+          {/* Card 7: Pengaturan Mode PJJ */}
+          <button
+            type="button"
+            onClick={() => setIsPjjModalOpen(true)}
+            className="group bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer sm:col-span-2 lg:col-span-3"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative">
+                <Laptop className="w-6 h-6" />
+                {pjjActiveInfo?.is_active_today && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-violet-700 animate-ping"></span>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-base">
+                    Pengaturan Mode Daring
+                  </h3>
+                </div>
+                <p className="text-[11px] text-violet-100 mt-0.5">
+                  {pjjActiveInfo?.is_active_today
+                    ? `${pjjActiveInfo.keterangan || "Mode Daring"} • ${pjjActiveInfo.tipe_lingkup === "semua" ? "Semua Kelas" : pjjActiveInfo.tipe_lingkup === "tingkat" ? `Tingkat ${pjjActiveInfo.tingkat_aktif?.join(", ")}` : `${pjjActiveInfo.kelas_aktif?.length || 0} Kelas Terpilih`}`
+                    : "Atur jadwal dan kelas yang melaksanakan Pembelajaran Jarak Jauh"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors">
+              <span>Kelola Daring</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
         </div>
       </div>
 
@@ -479,8 +511,8 @@ export default function PortalAdmin() {
               Belum Ada Data Presensi Hari Ini
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Presensi siswa yang melakukan scan wajah mandiri atau melalui
-              kiosk akan otomatis tampil di sini.
+              Presensi siswa yang melakukan scan wajah mandiri akan otomatis
+              tampil di sini
             </p>
           </div>
         ) : (
@@ -527,6 +559,13 @@ export default function PortalAdmin() {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         initialTab={profileModalTab}
+      />
+
+      {/* Modal Pengaturan PJJ */}
+      <ModalPengaturanPJJ
+        isOpen={isPjjModalOpen}
+        onClose={() => setIsPjjModalOpen(false)}
+        onUpdated={fetchSummary}
       />
     </div>
   );

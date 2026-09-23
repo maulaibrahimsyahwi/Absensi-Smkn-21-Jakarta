@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
   Info,
+  Camera,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -15,6 +17,7 @@ import EditSiswaModal from "../components/registrasi/EditSiswaModal";
 import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
 import LuluskanModal from "../components/registrasi/LuluskanModal";
 import ResetSiswaModals from "../components/registrasi/ResetSiswaModals";
+import ToastNotification from "../components/common/ToastNotification";
 
 import {
   JURUSAN_SMKN21,
@@ -34,9 +37,11 @@ export {
 };
 
 export default function RegistrasiSiswa() {
+  const navigate = useNavigate();
   const webcamRef = useRef(null);
   const [siswaList, setSiswaList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [showCancelReRecordModal, setShowCancelReRecordModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [jurusanFilter, setJurusanFilter] = useState("ALL");
@@ -111,6 +116,15 @@ export default function RegistrasiSiswa() {
     return () => clearTimeout(timer);
   }, [notification]);
 
+  const handleBackClick = (e) => {
+    if (reRecordingSiswa) {
+      if (e) e.preventDefault();
+      setShowCancelReRecordModal(true);
+    } else {
+      navigate("/portal-admin");
+    }
+  };
+
   // Ambil foto untuk slot yang aktif
   const takeSamplePhoto = useCallback(() => {
     if (!webcamRef.current) return;
@@ -166,12 +180,12 @@ export default function RegistrasiSiswa() {
       return;
     }
 
-    const cleanKelas = kelas.trim();
-    if (!DAFTAR_KELAS_SMKN21.includes(cleanKelas)) {
+    const cleanKelas = kelas.trim().toUpperCase();
+    if (!cleanKelas || cleanKelas.length < 3) {
       setNotification({
         type: "error",
         message:
-          "Jurusan tidak valid! Jurusan resmi SMKN 21: PPLG, AKL, MPLB, atau BR.",
+          "Kelas & jurusan wajib diisi! Format: Tingkat (X/XI/XII) diikuti nama jurusan/rombel (Contoh: X PPLG atau X PPLG 1).",
       });
       return;
     }
@@ -404,12 +418,14 @@ export default function RegistrasiSiswa() {
       return;
     }
 
-    const cleanKelas = String(editingSiswa.kelas || "").trim();
-    if (!DAFTAR_KELAS_SMKN21.includes(cleanKelas)) {
+    const cleanKelas = String(editingSiswa.kelas || "")
+      .trim()
+      .toUpperCase();
+    if (!cleanKelas || cleanKelas.length < 3) {
       setNotification({
         type: "error",
         message:
-          "Jurusan tidak valid! Pilih jurusan resmi SMKN 21: PPLG, AKL, MPLB, atau BR.",
+          "Kelas & jurusan wajib diisi! Format: Tingkat (X/XI/XII) diikuti nama jurusan/rombel (Contoh: X PPLG atau X PPLG 1).",
       });
       return;
     }
@@ -564,42 +580,23 @@ export default function RegistrasiSiswa() {
 
   return (
     <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto">
-      {/* Toast Notification Floating */}
-      {notification && (
-        <div
-          className={`fixed top-20 right-4 z-50 p-4 rounded-2xl shadow-xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-200 border max-w-md ${
-            notification.type === "success"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : notification.type === "error"
-                ? "bg-rose-50 border-rose-200 text-rose-800"
-                : "bg-blue-50 border-blue-200 text-blue-800"
-          }`}
-        >
-          {notification.type === "success" && (
-            <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-600" />
-          )}
-          {notification.type === "error" && (
-            <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600" />
-          )}
-          {notification.type === "info" && (
-            <Info className="w-5 h-5 flex-shrink-0 text-blue-600" />
-          )}
-          <span className="text-xs sm:text-sm font-semibold">
-            {notification.message}
-          </span>
-        </div>
-      )}
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div className="flex items-center gap-3">
-          <Link
-            to="/portal-admin"
+          <button
+            type="button"
+            onClick={handleBackClick}
             title="Kembali ke Beranda Admin"
-            className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
+            className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0 cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" />
-          </Link>
+          </button>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
               Pendaftaran Siswa SMKN 21
@@ -692,6 +689,7 @@ export default function RegistrasiSiswa() {
           onResetFace={(s) => setResettingFaceSiswa(s)}
           onResetSignature={(s) => setResettingSignatureSiswa(s)}
           onBulkDelete={() => setBulkDeleting(true)}
+          loading={loadingList}
         />
       </div>
 
@@ -730,6 +728,7 @@ export default function RegistrasiSiswa() {
         setEditingSiswa={setEditingSiswa}
         handleUpdateSiswa={handleUpdateSiswa}
         groups={KELAS_GROUPS_DROPDOWN}
+        siswaList={siswaList}
       />
 
       {/* Modal Konfirmasi Reset Password, Wajah, dan TTD Siswa */}
@@ -745,6 +744,57 @@ export default function RegistrasiSiswa() {
         handleResetSignatureConfirm={handleResetSignatureConfirm}
         loading={resettingLoading}
       />
+
+      {/* Modal Konfirmasi Batal Rekam Ulang Wajah */}
+      {showCancelReRecordModal &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <Camera className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h4 className="text-base font-bold text-slate-900">
+                  Batalkan Rekam Ulang Wajah?
+                </h4>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Anda sedang dalam proses merekam ulang wajah untuk siswa{" "}
+                  <strong className="text-slate-800">
+                    {reRecordingSiswa?.nama}
+                  </strong>{" "}
+                  ({reRecordingSiswa?.kelas}). Apakah Anda ingin tetap
+                  melanjutkan rekam foto wajah, atau batalkan tanpa mengubah
+                  foto wajah siswa?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelReRecordModal(false)}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
+                >
+                  Lanjutkan Rekam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelReRecordModal(false);
+                    setReRecordingSiswa(null);
+                    setNis("");
+                    setNama("");
+                    setSamples([]);
+                    navigate("/portal-admin");
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer transition-colors"
+                >
+                  Batalkan & Keluar
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

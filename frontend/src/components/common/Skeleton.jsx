@@ -78,7 +78,7 @@ export function SkeletonTable({ rows = 5, cols = 5, className = "" }) {
  */
 export function DashboardSkeleton() {
   return (
-    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-4">
+    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-4">
       {/* 1. Header Filter Bar Skeleton */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2.5">
@@ -129,7 +129,7 @@ export function DashboardSkeleton() {
           </div>
           <Skeleton className="w-48 h-9 rounded-xl" />
         </div>
-        <div className="p-4 sm:p-6">
+        <div className="overflow-hidden">
           <SkeletonTable rows={7} cols={6} />
         </div>
       </div>
@@ -283,6 +283,132 @@ export function PageSkeleton() {
 }
 
 /**
+ * Contextual Skeleton untuk Halaman Guru Piket (/piket, max-w-7xl, 2-Column Grid).
+ * Menggantikan skeleton beranda hero banner yang tidak sesuai dengan formulir penerbitan & log izin.
+ */
+export function PiketSkeleton() {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 py-6 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+      {/* Header Bar */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <Skeleton className="w-10 h-10 rounded-xl" />
+          <div className="space-y-1.5">
+            <SkeletonLine width="w-64" height="h-6" />
+            <SkeletonLine width="w-48" height="h-3.5" />
+          </div>
+        </div>
+      </div>
+
+      {/* 2-Column Grid: Form Kiri (5 cols), Table Kanan (7 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Kolom Kiri: Form */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <SkeletonLine width="w-40" height="h-5" />
+            <SkeletonLine width="w-24" height="h-3" />
+          </div>
+          <div className="space-y-3">
+            <SkeletonLine width="w-28" height="h-3.5" />
+            <Skeleton className="w-full h-11 rounded-xl" />
+          </div>
+          <div className="space-y-3">
+            <SkeletonLine width="w-24" height="h-3.5" />
+            <div className="grid grid-cols-2 gap-2">
+              <Skeleton className="h-10 rounded-xl" />
+              <Skeleton className="h-10 rounded-xl" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <SkeletonLine width="w-32" height="h-3.5" />
+            <Skeleton className="w-full h-20 rounded-xl" />
+          </div>
+          <Skeleton className="w-full h-11 rounded-xl" />
+        </div>
+
+        {/* Kolom Kanan: Log Riwayat Surat Piket */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <SkeletonLine width="w-48" height="h-5" />
+            <Skeleton className="w-28 h-8 rounded-xl" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="flex-1 h-10 rounded-xl" />
+            <Skeleton className="w-28 h-10 rounded-xl" />
+          </div>
+          <SkeletonTable rows={6} cols={4} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Contextual Skeleton untuk Catat Pelanggaran (/pelanggaran, max-w-3xl).
+ */
+export function PelanggaranSkeleton() {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+        <div className="p-4 sm:p-6 border-b border-slate-200/80 bg-slate-50/60 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-10 h-10 rounded-xl" />
+            <div className="space-y-1.5">
+              <SkeletonLine width="w-48" height="h-5" />
+              <SkeletonLine width="w-64" height="h-3" />
+            </div>
+          </div>
+        </div>
+        <div className="p-5 sm:p-7 space-y-5">
+          <div className="space-y-2">
+            <SkeletonLine width="w-28" height="h-3.5" />
+            <Skeleton className="w-full h-11 rounded-xl" />
+          </div>
+          <div className="space-y-2">
+            <SkeletonLine width="w-32" height="h-3.5" />
+            <Skeleton className="w-full h-11 rounded-xl" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-11 rounded-xl" />
+            <Skeleton className="h-11 rounded-xl" />
+          </div>
+          <Skeleton className="w-full h-24 rounded-xl" />
+          <Skeleton className="w-full h-12 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Contextual Skeleton untuk Pengajuan Izin (/izin, max-w-2xl).
+ */
+export function IzinSkeleton() {
+  return (
+    <div className="min-h-[calc(100vh-4rem)] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-2xl mx-auto space-y-6">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="px-5 py-5 sm:px-7 sm:py-6 border-b border-slate-100 flex items-center gap-3">
+          <Skeleton className="w-10 h-10 rounded-xl" />
+          <div className="space-y-1.5">
+            <SkeletonLine width="w-44" height="h-5" />
+            <SkeletonLine width="w-60" height="h-3" />
+          </div>
+        </div>
+        <div className="p-5 sm:p-7 space-y-4">
+          <Skeleton className="w-full h-11 rounded-xl" />
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-11 rounded-xl" />
+            <Skeleton className="h-11 rounded-xl" />
+          </div>
+          <Skeleton className="w-full h-24 rounded-xl" />
+          <Skeleton className="w-full h-12 rounded-xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * RouteAwareSkeleton: Menyesuaikan tampilan loading skeleton secara otomatis
  * dengan rute URL tujuan, mengeliminasi layout jump & bouncing saat navigasi lazy-loading.
  */
@@ -295,6 +421,15 @@ export function RouteAwareSkeleton() {
   }
   if (pathname.startsWith("/registrasi")) {
     return <RegistrasiSkeleton />;
+  }
+  if (pathname.startsWith("/piket")) {
+    return <PiketSkeleton />;
+  }
+  if (pathname.startsWith("/pelanggaran")) {
+    return <PelanggaranSkeleton />;
+  }
+  if (pathname.startsWith("/izin")) {
+    return <IzinSkeleton />;
   }
   if (pathname.startsWith("/portal")) {
     return <PortalSkeleton />;

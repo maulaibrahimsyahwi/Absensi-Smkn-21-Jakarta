@@ -92,11 +92,11 @@ def cek_siswa_pjj():
 
 @pjj_bp.route('/api/pjj/settings', methods=['POST'])
 @token_required
-@role_required(['admin', 'piket'])
+@role_required(['admin'])
 def update_pjj_settings():
     """
     Memperbarui konfigurasi Mode PJJ (Pembelajaran Jarak Jauh).
-    Hanya dapat diakses oleh Guru Piket dan Admin Sekolah.
+    Hanya dapat diakses secara eksklusif oleh Admin Sekolah.
     """
     data = request.json or {}
     current_user = getattr(request, 'current_user', {})
@@ -137,6 +137,17 @@ def update_pjj_settings():
 
     if tgl_mulai and tgl_selesai and tgl_selesai < tgl_mulai:
         return jsonify({"success": False, "message": "Tanggal selesai tidak boleh lebih awal dari tanggal mulai."}), 400
+
+    today_curr = date.today()
+    if is_active:
+        if tgl_mulai and tgl_mulai < today_curr:
+            return jsonify({"success": False, "message": "Tanggal mulai daring tidak boleh merupakan hari yang sudah berlalu."}), 400
+        if tgl_selesai and tgl_selesai < today_curr:
+            return jsonify({"success": False, "message": "Tanggal selesai daring tidak boleh merupakan hari yang sudah berlalu."}), 400
+        if tgl_mulai and tgl_mulai.weekday() in [5, 6]:
+            return jsonify({"success": False, "message": "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur)."}), 400
+        if tgl_selesai and tgl_selesai.weekday() in [5, 6]:
+            return jsonify({"success": False, "message": "Tanggal selesai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur)."}), 400
 
     try:
         cfg = get_or_create_pjj_config()

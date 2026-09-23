@@ -195,12 +195,20 @@ export default function NotificationDropdown({
         )}
       </button>
 
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-xs z-50 sm:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Popover Dropdown Notifikasi */}
       {isOpen && (
         <div
-          className={`absolute ${
-            align === "right" ? "right-0" : "left-0"
-          } mt-2 w-[calc(100vw-2.5rem)] max-w-sm sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 z-[60] text-slate-900`}
+          className={`max-sm:fixed max-sm:inset-x-3.5 max-sm:top-16 max-sm:w-auto max-sm:max-w-none sm:absolute ${
+            align === "right" ? "sm:right-0" : "sm:left-0"
+          } sm:top-full sm:mt-2 sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 z-[60] text-slate-900`}
         >
           {/* Header Dropdown */}
           <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-slate-200/80 flex items-center justify-between gap-2">

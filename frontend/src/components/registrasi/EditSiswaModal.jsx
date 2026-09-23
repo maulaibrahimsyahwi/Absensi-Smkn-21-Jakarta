@@ -1,13 +1,72 @@
-import React from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { X, GraduationCap, User, Hash } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
+import {
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+} from "../../constants/schoolData";
 
 export default function EditSiswaModal({
   editingSiswa,
   setEditingSiswa,
   handleUpdateSiswa,
   groups,
+  siswaList = [],
 }) {
+  const [isCustomMode, setIsCustomMode] = useState(false);
+
+  useEffect(() => {
+    if (
+      editingSiswa?.kelas &&
+      !DAFTAR_KELAS_SMKN21.includes(editingSiswa.kelas)
+    ) {
+      setIsCustomMode(true);
+    } else {
+      setIsCustomMode(false);
+    }
+  }, [editingSiswa?.id]);
+
+  // Kelompok opsi dropdown cerdas
+  const availableGroups = useMemo(() => {
+    const existingClasses = new Set(DAFTAR_KELAS_SMKN21);
+    const extraClasses = [];
+    (siswaList || []).forEach((s) => {
+      if (
+        s.kelas &&
+        !existingClasses.has(s.kelas) &&
+        !extraClasses.includes(s.kelas)
+      ) {
+        extraClasses.push(s.kelas);
+      }
+    });
+
+    const baseGroups = groups || KELAS_GROUPS_DROPDOWN;
+    const finalGroups = [...baseGroups];
+
+    if (extraClasses.length > 0) {
+      finalGroups.push({
+        group: "Kelas Tambahan Terdaftar",
+        badge: "AKTIF",
+        badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
+        options: extraClasses.map((k) => ({ value: k, label: k })),
+      });
+    }
+
+    finalGroups.push({
+      group: "Opsi Tambahan",
+      badge: "+",
+      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
+      options: [
+        {
+          value: "__CUSTOM__",
+          label: "+ Kelas Baru...",
+        },
+      ],
+    });
+
+    return finalGroups;
+  }, [groups, siswaList]);
+
   if (!editingSiswa) return null;
 
   return (
@@ -75,22 +134,68 @@ export default function EditSiswaModal({
 
             {/* Kelas & Jurusan */}
             <div>
-              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700 mb-1.5">
-                <span>Kelas & Jurusan SMKN 21</span>
-              </label>
-              <CustomDropdown
-                value={editingSiswa.kelas}
-                onChange={(newVal) =>
-                  setEditingSiswa({
-                    ...editingSiswa,
-                    kelas: newVal,
-                  })
-                }
-                groups={groups}
-                className="w-full"
-                placeholder="Pilih Kelas & Jurusan"
-                icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
-              />
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                  <span>Kelas & Jurusan SMKN 21</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCustomMode(!isCustomMode);
+                  }}
+                  className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  {isCustomMode
+                    ? "← Pilih dari Dropdown"
+                    : "+ Ketik Kelas Baru"}
+                </button>
+              </div>
+
+              {isCustomMode ? (
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: X PPLG atau X PPLG 3"
+                    value={editingSiswa.kelas || ""}
+                    onChange={(e) =>
+                      setEditingSiswa({
+                        ...editingSiswa,
+                        kelas: e.target.value.toUpperCase(),
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 text-xs sm:text-sm font-semibold uppercase border border-blue-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-blue-50/20 font-mono tracking-wide"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Format: Tingkat (X/XI/XII) spasi Jurusan/Rombel. Contoh:{" "}
+                    <strong className="text-slate-600">X PPLG</strong> atau{" "}
+                    <strong className="text-slate-600">X PPLG 3</strong>
+                  </p>
+                </div>
+              ) : (
+                <CustomDropdown
+                  value={editingSiswa.kelas}
+                  onChange={(newVal) => {
+                    if (newVal === "__CUSTOM__") {
+                      setIsCustomMode(true);
+                      setEditingSiswa({
+                        ...editingSiswa,
+                        kelas: "",
+                      });
+                    } else {
+                      setEditingSiswa({
+                        ...editingSiswa,
+                        kelas: newVal,
+                      });
+                    }
+                  }}
+                  groups={availableGroups}
+                  className="w-full"
+                  placeholder="Pilih Kelas & Jurusan"
+                  icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
+                />
+              )}
             </div>
           </div>
 

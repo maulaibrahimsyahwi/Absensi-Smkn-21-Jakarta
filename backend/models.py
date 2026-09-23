@@ -265,7 +265,7 @@ class PelanggaranSiswa(db.Model):
             "nama_siswa": self.nama_siswa,
             "kelas": self.kelas,
             "tanggal_waktu": self.tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S"),
-            "tanggal_waktu_formatted": self.tanggal_waktu.strftime("%d-%b-%Y %I:%M %p"),
+            "tanggal_waktu_formatted": self.tanggal_waktu.strftime("%d-%b-%Y %H.%M"),
             "jenis_pelanggaran": self.jenis_pelanggaran,
             "poin": self.poin,
             "nama_penanggung_jawab": self.nama_penanggung_jawab,

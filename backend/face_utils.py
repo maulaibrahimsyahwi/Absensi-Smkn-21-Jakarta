@@ -118,7 +118,7 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
         if faces is None or len(faces) == 0:
             return {
                 "success": False,
-                "message": "Wajah tidak terdeteksi di kamera. Posisikan wajah tegak di depan kamera."
+                "message": "Wajah tidak terdeteksi di kamera. Posisikan wajah tegak di depan kamera"
             }
 
         # Ambil wajah paling dominan

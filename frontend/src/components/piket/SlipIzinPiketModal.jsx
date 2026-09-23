@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import { Printer, X, CheckCircle2, ShieldCheck } from "lucide-react";
+import logoSMKN21 from "../../assets/Logo SMKN21.png";
 
 export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
   const printRef = useRef(null);
@@ -49,15 +50,13 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
           className="p-3.5 sm:p-6 bg-white border border-slate-300 rounded-xl text-slate-900 font-serif shadow-xs print:border-none print:p-0"
         >
           {/* KOP SURAT SMKN 21 JAKARTA */}
-          <div className="flex items-center justify-between gap-2 sm:gap-3 pb-2 border-b-4 border-double border-slate-900">
-            {/* Logo Lingkaran SMKN 21 */}
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-slate-800 flex items-center justify-center p-1 flex-shrink-0 text-center">
-              <div className="text-[9px] sm:text-[10px] font-bold leading-tight uppercase font-sans text-slate-900">
-                SMKN
-                <br />
-                21
-              </div>
-            </div>
+          <div className="flex items-center justify-between gap-2 sm:gap-4 pb-3 border-b-4 border-double border-slate-900">
+            {/* Logo Resmi SMKN 21 */}
+            <img
+              src={logoSMKN21}
+              alt="Logo SMKN 21 Jakarta"
+              className="w-14 h-14 sm:w-18 sm:h-18 object-contain flex-shrink-0"
+            />
 
             {/* Nama & Alamat Sekolah */}
             <div className="text-center flex-1">

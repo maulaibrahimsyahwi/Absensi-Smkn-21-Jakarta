@@ -1,5 +1,12 @@
-import React from "react";
-import { Inbox, Clock, BookOpen } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import {
+  Inbox,
+  Clock,
+  BookOpen,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
 
 export default function PerpustakaanTab({
@@ -9,6 +16,34 @@ export default function PerpustakaanTab({
   namaBulanTerpilih,
   selectedTahun,
 }) {
+  const [sortKey, setSortKey] = useState("waktu");
+  const [sortDirection, setSortDirection] = useState("desc");
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection(key === "waktu" ? "desc" : "asc");
+    }
+  };
+
+  const displayList = useMemo(() => {
+    const list = [...paginatedPerpus];
+    return list.sort((a, b) => {
+      let valA = a[sortKey] ?? "";
+      let valB = b[sortKey] ?? "";
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      valA = String(valA).toLowerCase();
+      valB = String(valB).toLowerCase();
+      return sortDirection === "asc"
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  }, [paginatedPerpus, sortKey, sortDirection]);
+
   return (
     <div>
       {/* 1. Mobile Cards View (< md) */}
@@ -28,7 +63,7 @@ export default function PerpustakaanTab({
             </p>
           </div>
         ) : (
-          paginatedPerpus.map((item, index) => {
+          displayList.map((item, index) => {
             const jurInfo = getJurusanInfo(item.kelas) || {
               badge: "bg-slate-100 text-slate-700 border-slate-200",
               kode: item.kelas,
@@ -77,10 +112,78 @@ export default function PerpustakaanTab({
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[580px]">
           <thead>
             <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th className="py-3.5 px-6">Waktu Kunjungan</th>
-              <th className="py-3.5 px-6">Nama Siswa</th>
-              <th className="py-3.5 px-6">Kelas</th>
-              <th className="py-3.5 px-6">Keperluan Kunjungan</th>
+              <th
+                onClick={() => handleSort("waktu")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Waktu Kunjungan"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Waktu Kunjungan</span>
+                  {sortKey === "waktu" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("nama")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Nama Siswa"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Nama Siswa</span>
+                  {sortKey === "nama" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("kelas")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Kelas"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Kelas</span>
+                  {sortKey === "kelas" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
+              <th
+                onClick={() => handleSort("keperluan")}
+                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                title="Urutkan Keperluan Kunjungan"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Keperluan Kunjungan</span>
+                  {sortKey === "keperluan" ? (
+                    sortDirection === "asc" ? (
+                      <ArrowUp className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3 text-emerald-600" />
+                    )
+                  ) : (
+                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                  )}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -103,7 +206,7 @@ export default function PerpustakaanTab({
                 </td>
               </tr>
             ) : (
-              paginatedPerpus.map((item, index) => {
+              displayList.map((item, index) => {
                 return (
                   <tr
                     key={item.id || index}
