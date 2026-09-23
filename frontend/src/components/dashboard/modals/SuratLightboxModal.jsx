@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import { getFileUrl } from "../../../services/api";
 
 export default function SuratLightboxModal({ item, onClose }) {
   if (!item) return null;
@@ -26,7 +27,7 @@ export default function SuratLightboxModal({ item, onClose }) {
         </div>
         <div className="p-4 overflow-auto flex items-center justify-center bg-slate-900/5 min-h-[200px] sm:min-h-[300px]">
           <img
-            src={item.surat_bukti}
+            src={getFileUrl(item.surat_bukti)}
             alt="Foto Surat Keterangan"
             className="max-h-[55vh] sm:max-h-[70vh] object-contain rounded-lg shadow-sm"
           />

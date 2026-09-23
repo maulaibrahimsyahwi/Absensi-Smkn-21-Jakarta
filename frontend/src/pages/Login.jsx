@@ -43,6 +43,20 @@ export default function Login() {
     }
   }, [user, loadingAuth, navigate]);
 
+  // Tangani query param redirect (akun dihapus atau sesi berakhir)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("deleted") === "1") {
+      setErrorMessage(
+        "Akun Anda telah dinonaktifkan atau dihapus oleh Administrator. Sesi login telah dihentikan.",
+      );
+    } else if (params.get("expired") === "1") {
+      setErrorMessage(
+        "Sesi login Anda telah berakhir demi keamanan. Silakan masuk kembali.",
+      );
+    }
+  }, [location.search]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -386,28 +400,28 @@ export default function Login() {
 
             <div className="p-5 space-y-3.5 text-xs sm:text-sm text-slate-600 leading-relaxed">
               <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 space-y-1">
-                <p className="font-bold text-xs">Untuk Siswa SMKN 21:</p>
+                <p className="font-bold text-xs">Untuk Siswa SMKN 21</p>
                 <p className="text-xs text-blue-800">
                   Untuk menjaga integritas dan keamanan akun presensi sekolah,
                   silakan melapor langsung ke <strong>Guru Piket</strong> atau{" "}
-                  <strong>Petugas Administrator Sekolah</strong> di Ruang Piket
-                  / Tata Usaha.
+                  <strong>Petugas Admin Sekolah</strong> di Ruang Piket / Tata
+                  Usaha
                 </p>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 space-y-1">
-                <p className="font-bold text-xs">Prosedur Reset:</p>
+                <p className="font-bold text-xs">Prosedur Reset</p>
                 <p className="text-xs text-emerald-800">
                   Petugas admin dapat mereset kata sandi Anda dalam 1 detik.
                   Setelah direset, kata sandi Anda akan kembali ke default yaitu{" "}
-                  <strong>Nomor Induk Siswa (NIS)</strong> Anda.
+                  <strong>Nomor Induk Siswa (NIS)</strong> Anda
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-xs">
                 <strong>Catatan Staf:</strong> Guru Piket & Admin dapat
-                menghubungi tim IT / Administrator Utama SMKN 21 untuk
-                permohonan reset sandi akun staf.
+                menghubungi tim IT / Admin SMKN 21 untuk permohonan reset sandi
+                akun staf
               </div>
             </div>
 

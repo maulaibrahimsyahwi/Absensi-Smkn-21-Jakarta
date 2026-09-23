@@ -257,7 +257,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
         const dow1 = new Date(y1, m1 - 1, d1).getDay();
         if (dow1 === 0 || dow1 === 6) {
           setErrorMsg(
-            "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur).",
+            "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu",
           );
           setSubmitting(false);
           return;
@@ -615,8 +615,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-xs font-bold text-slate-700">
-                          Tanggal Mulai Daring{" "}
-                          <span className="text-rose-500">*</span>
+                          Tanggal Mulai <span className="text-rose-500">*</span>
                         </label>
                       </div>
                       <CustomDatePicker
@@ -637,7 +636,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-xs font-bold text-slate-700">
-                          Tanggal Selesai Daring{" "}
+                          Tanggal Selesai{" "}
                           <span className="text-rose-500">*</span>
                         </label>
                       </div>

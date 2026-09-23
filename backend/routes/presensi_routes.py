@@ -1,10 +1,11 @@
 from datetime import datetime, time, date
 from flask import Blueprint, request, jsonify
-from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
+from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_POLYGON, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
 from face_utils import verify_face
-from utils.helpers import calculate_distance_meters, check_status_kehadiran, is_presensi_open, is_school_day, is_kelas_pjj, get_flattened_known_faces
+from utils.helpers import calculate_distance_meters, is_point_in_polygon, check_status_kehadiran, is_presensi_open, is_school_day, is_kelas_pjj, get_flattened_known_faces
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
+from routes.biometrik_routes import verify_liveness_token
 from utils.auth_middleware import token_required
 
 presensi_bp = Blueprint('presensi', __name__)
@@ -152,6 +153,17 @@ def verify_harian():
             return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
         is_pjj_user, pjj_label_user = is_kelas_pjj(target_siswa.kelas, now_dt)
 
+        # Validasi Liveness Token (Anti-Tembak API / Celah Foto Statis)
+        # Khusus presensi mandiri siswa, wajib menyertakan token verifikasi kedipan aktif yang sah dari server
+        if user_role == 'siswa':
+            liveness_token = data.get('liveness_token')
+            is_token_valid, token_msg = verify_liveness_token(liveness_token, expected_siswa_id)
+            if not is_token_valid:
+                return jsonify({
+                    "success": False,
+                    "message": f"Presensi ditolak! {token_msg} Lakukan pemindaian wajah dan kedipan mata langsung di kamera aplikasi."
+                }), 403
+
     # Validasi Geofence:
     # Untuk presensi mandiri siswa atau perangkat non-admin/piket, koordinat GPS WAJIB disertakan
     is_admin_or_piket = user_role in ['admin', 'piket']
@@ -162,14 +174,17 @@ def verify_harian():
                 "message": "Presensi ditolak! Akses lokasi (GPS) wajib diaktifkan untuk mencatat titik lokasi presensi Anda."
             }), 403
 
-    # Bypass batasan radius sekolah 100m jika siswa berstatus PJJ (Belajar dari Rumah / PKL)
+    # Validasi Geofence (Poligon Lahan Pagar SMKN 21 + Toleransi Radius Cadangan 50m)
+    # Bypass batasan jika siswa berstatus PJJ (Belajar dari Rumah / PKL)
     if not is_pjj_user:
         if latitude is not None and longitude is not None:
+            in_polygon = is_point_in_polygon(latitude, longitude, SEKOLAH_POLYGON)
             dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
-            if dist is not None and dist > MAX_RADIUS_SEKOLAH:
+            is_valid_loc = in_polygon or (dist is not None and dist <= MAX_RADIUS_SEKOLAH)
+            if not is_valid_loc:
                 return jsonify({
                     "success": False,
-                    "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
+                    "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar area lingkungan resmi SMKN 21 Jakarta (jarak ~{dist}m dari titik pusat sekolah). Pastikan Anda berada di dalam lingkungan sekolah."
                 }), 403
 
     today_start = datetime.combine(date.today(), time.min)
@@ -338,13 +353,15 @@ def verify_perpus():
             "message": f"Presensi perpustakaan ditolak! Akurasi GPS ({accuracy}m) terindikasi emulator/Fake GPS."
         }), 403
 
-    # Validasi Geofence: Pastikan siswa berada dalam radius resmi sekolah
+    # Validasi Geofence: Pastikan siswa berada dalam area resmi sekolah (Poligon / Radius 50m)
     if latitude is not None and longitude is not None:
+        in_polygon = is_point_in_polygon(latitude, longitude, SEKOLAH_POLYGON)
         dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
-        if dist is not None and dist > MAX_RADIUS_SEKOLAH:
+        is_valid_loc = in_polygon or (dist is not None and dist <= MAX_RADIUS_SEKOLAH)
+        if not is_valid_loc:
             return jsonify({
                 "success": False,
-                "message": f"Presensi perpustakaan ditolak! Posisi Anda terdeteksi di luar radius sekolah SMKN 21 (jarak ~{dist} meter, maksimal {MAX_RADIUS_SEKOLAH}m)."
+                "message": f"Presensi perpustakaan ditolak! Posisi Anda terdeteksi di luar area resmi lingkungan SMKN 21 (jarak ~{dist}m dari pusat sekolah)."
             }), 403
     
     encodings, siswa_ids = get_flattened_known_faces()

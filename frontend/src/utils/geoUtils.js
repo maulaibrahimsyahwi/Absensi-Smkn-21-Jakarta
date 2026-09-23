@@ -1,14 +1,63 @@
 // Utilitas Geofencing & Perhitungan Jarak GPS SMKN 21 Jakarta
 
+export const SMKN21_POLYGON = [
+  [-6.1582, 106.8547], // Sudut Barat Laut (Gerbang Utama / Akses Jl. Siaga I)
+  [-6.1582, 106.8554], // Sudut Timur Laut (Batas Gedung Utara)
+  [-6.1588, 106.85545], // Sudut Timur (Batas Lab / Bengkel Kejuruan)
+  [-6.1592, 106.85535], // Sudut Tenggara (Batas Lapangan / Area Belakang)
+  [-6.1592, 106.85465], // Sudut Barat Daya (Batas Gedung Selatan / Gg. Swadaya III)
+  [-6.1587, 106.85455], // Sudut Barat (Batas Parkir / Kelas Barat)
+];
+
 export const SMKN21_COORDINATES = {
   latitude: -6.1587,
   longitude: 106.855,
   lat: -6.1587,
   lng: 106.855,
-  radiusMeters: 10, // Batas radius resmi: 10 meter
+  radiusMeters: 50, // Radius toleransi cadangan GPS indoor drift: 50 meter
+  polygon: SMKN21_POLYGON,
   name: "SMKN 21 Jakarta",
   alamat: "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat",
 };
+
+/**
+ * Menentukan apakah suatu titik koordinat [lat, lon] berada di dalam area poligon
+ * menggunakan algoritma Ray-Casting (Even-Odd Rule).
+ */
+export function isPointInPolygon(point, polygon) {
+  if (!point || !polygon || polygon.length < 3) return false;
+  const lat = Number(point[0] !== undefined ? point[0] : point.latitude);
+  const lon = Number(point[1] !== undefined ? point[1] : point.longitude);
+  if (isNaN(lat) || isNaN(lon)) return false;
+
+  let inside = false;
+  const n = polygon.length;
+  let p1 = polygon[0];
+  for (let i = 1; i <= n; i++) {
+    const p2 = polygon[i % n];
+    const p1Lat = p1[0] !== undefined ? p1[0] : p1.latitude;
+    const p1Lon = p1[1] !== undefined ? p1[1] : p1.longitude;
+    const p2Lat = p2[0] !== undefined ? p2[0] : p2.latitude;
+    const p2Lon = p2[1] !== undefined ? p2[1] : p2.longitude;
+
+    if (lon > Math.min(p1Lon, p2Lon)) {
+      if (lon <= Math.max(p1Lon, p2Lon)) {
+        if (lat <= Math.max(p1Lat, p2Lat)) {
+          let latInters = p1Lat;
+          if (p1Lon !== p2Lon) {
+            latInters =
+              ((lon - p1Lon) * (p2Lat - p1Lat)) / (p2Lon - p1Lon) + p1Lat;
+          }
+          if (p1Lat === p2Lat || lat <= latInters) {
+            inside = !inside;
+          }
+        }
+      }
+    }
+    p1 = p2;
+  }
+  return inside;
+}
 
 /**
  * Menghitung jarak antara dua titik koordinat bumi (dalam meter) menggunakan Haversine Formula.

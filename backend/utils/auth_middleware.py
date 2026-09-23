@@ -55,18 +55,61 @@ def token_required(f):
         except jwt.ExpiredSignatureError:
             return jsonify({
                 'status': 'error',
+                'error_code': 'TOKEN_EXPIRED',
                 'message': 'Sesi login Anda telah berakhir. Silakan login ulang.'
             }), 401
         except jwt.InvalidTokenError:
             return jsonify({
                 'status': 'error',
+                'error_code': 'INVALID_TOKEN',
                 'message': 'Token autentikasi tidak valid atau telah dirusak.'
             }), 401
         except Exception as e:
             return jsonify({
                 'status': 'error',
+                'error_code': 'TOKEN_ERROR',
                 'message': f'Gagal memverifikasi token: {str(e)}'
             }), 401
+
+        # ================= REAL-TIME DATABASE EXISTENCE VERIFICATION =================
+        # Memastikan akun yang memiliki token JWT masih benar-benar ada di database (belum dihapus oleh Admin)
+        user_id = payload.get('user_id')
+        role = str(payload.get('role', '')).strip().lower()
+
+        try:
+            from models import User, Siswa
+            user_account = None
+
+            if role == 'siswa':
+                user_account = Siswa.query.get(user_id)
+                if not user_account:
+                    return jsonify({
+                        'status': 'error',
+                        'error_code': 'ACCOUNT_DELETED',
+                        'message': 'Akun siswa Anda telah dinonaktifkan atau dihapus oleh Administrator. Sesi login telah dihentikan.'
+                    }), 401
+                
+                # Cek apakah akun alumni telah melewati masa tenggang 1 tahun
+                if getattr(user_account, 'status', 'Aktif') == 'Alumni' and user_account.is_alumni_expired():
+                    return jsonify({
+                        'status': 'error',
+                        'error_code': 'ACCOUNT_EXPIRED',
+                        'message': 'Masa aktif akses akun alumni Anda telah berakhir.'
+                    }), 401
+
+            elif role in ['admin', 'piket', 'staf']:
+                user_account = User.query.get(user_id)
+                if not user_account:
+                    return jsonify({
+                        'status': 'error',
+                        'error_code': 'ACCOUNT_DELETED',
+                        'message': 'Akun staf/guru Anda telah dinonaktifkan atau dihapus dari sistem. Sesi login telah dihentikan.'
+                    }), 401
+            
+            request.current_user_obj = user_account
+        except Exception as db_err:
+            # Jika terjadi error koneksi database, log dan izinkan payload yang valid tetap berjalan agar tidak memblokir sementara
+            current_app.logger.warning(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")
             
         return f(*args, **kwargs)
     return decorated

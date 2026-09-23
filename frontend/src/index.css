@@ -2,6 +2,9 @@
 
 html {
   scrollbar-gutter: stable;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
 }
 
 body {
@@ -15,6 +18,9 @@ body {
     sans-serif;
   background-color: #f8fafc;
   color: #1e293b;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
 }
 
 @keyframes scanline {

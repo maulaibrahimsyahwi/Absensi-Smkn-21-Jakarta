@@ -398,7 +398,7 @@ export default function PengajuanIzin() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto flex flex-col justify-center">
+    <div className="w-full max-w-3xl mx-auto min-h-[calc(100vh-4rem)] py-4 sm:py-10 px-3 sm:px-6 lg:px-8 flex flex-col justify-center overflow-x-hidden">
       {submittedData ? (
         /* SUCCESS RECEIPT CARD */
         <div className="bg-white rounded-2xl border border-emerald-200/80 shadow-lg shadow-emerald-500/5 overflow-hidden p-4 sm:p-8 animate-in fade-in duration-300">
@@ -505,20 +505,20 @@ export default function PengajuanIzin() {
         /* SUBMISSION FORM */
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-900/5 overflow-hidden">
           {/* Form Header */}
-          <div className="px-5 py-5 sm:px-7 sm:py-6 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-white">
-            <div className="flex items-center gap-3">
+          <div className="px-4 py-4 sm:px-7 sm:py-6 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-white">
+            <div className="flex items-center gap-3 min-w-0">
               <Link
-                to="/portal-siswa"
+                to={backTarget}
                 className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Link>
 
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold text-slate-900">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900 truncate">
                   Pengajuan Surat Izin / Sakit
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 truncate">
                   Formulir mandiri untuk siswa dan orang tua murid SMKN 21
                   Jakarta
                 </p>
@@ -873,7 +873,7 @@ export default function PengajuanIzin() {
 
             {/* GPS Location Status Indicator (Wajib) */}
             <div
-              className={`p-3.5 rounded-xl border transition-all ${
+              className={`p-3.5 rounded-xl border transition-all overflow-hidden ${
                 geoLoc.latitude
                   ? "bg-emerald-50/70 border-emerald-300"
                   : geoLoc.error
@@ -881,8 +881,8 @@ export default function PengajuanIzin() {
                     : "bg-blue-50/60 border-blue-200"
               }`}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5 min-w-0">
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
                   <div
                     className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
                       geoLoc.latitude
@@ -894,7 +894,7 @@ export default function PengajuanIzin() {
                   >
                     <MapPin className="w-4 h-4" />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-bold text-slate-900 text-xs">
                         {geoLoc.loading
@@ -940,9 +940,9 @@ export default function PengajuanIzin() {
 
               {/* Peringatan & tombol uji dev jika GPS belum aktif / error */}
               {!geoLoc.latitude && !geoLoc.loading && (
-                <div className="mt-2.5 pt-2 border-t border-rose-200/80 text-[11px] text-rose-800 flex items-center justify-between gap-2 flex-wrap">
-                  <span>
-                    Pengajuan surat izin/sakit mewajibkan rekaman titik GPS
+                <div className="mt-2.5 pt-2 border-t border-rose-200/80 text-[11px] text-rose-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="break-words">
+                    Pengajuan surat izin/sakit mewajibkan rekaman titik lokasi
                     perangkat. Pastikan izin lokasi diizinkan.
                   </span>
                   {(window.location.hostname === "localhost" ||
@@ -950,7 +950,7 @@ export default function PengajuanIzin() {
                     <button
                       type="button"
                       onClick={handleSimulasiLokasi}
-                      className="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded border border-indigo-200 transition-colors cursor-pointer"
+                      className="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded border border-indigo-200 transition-colors cursor-pointer self-start sm:self-auto flex-shrink-0"
                     >
                       🧪 Uji GPS Dev
                     </button>

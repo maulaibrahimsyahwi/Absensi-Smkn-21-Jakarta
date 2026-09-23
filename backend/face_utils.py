@@ -1,6 +1,7 @@
 import os
 import base64
 import json
+import threading
 import cv2
 import numpy as np
 
@@ -9,26 +10,43 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 YUNET_PATH = os.path.join(BASE_DIR, "models_weights", "face_detection_yunet_2023mar.onnx")
 SFACE_PATH = os.path.join(BASE_DIR, "models_weights", "face_recognition_sface_2021dec.onnx")
 
-detector = None
-recognizer = None
+# Thread-Local Storage (TLS) untuk isolasi model AI per Worker Thread (Multi-threading safe)
+_tls = threading.local()
 
+def get_detector():
+    """Mengembalikan instance FaceDetectorYN unik per worker thread agar thread-safe tanpa race condition."""
+    if not hasattr(_tls, 'detector') or _tls.detector is None:
+        if os.path.exists(YUNET_PATH):
+            _tls.detector = cv2.FaceDetectorYN.create(
+                model=YUNET_PATH,
+                config="",
+                input_size=(320, 320),
+                score_threshold=0.6,
+                nms_threshold=0.3,
+                top_k=5000
+            )
+        else:
+            _tls.detector = None
+    return _tls.detector
+
+def get_recognizer():
+    """Mengembalikan instance FaceRecognizerSF unik per worker thread agar thread-safe tanpa race condition."""
+    if not hasattr(_tls, 'recognizer') or _tls.recognizer is None:
+        if os.path.exists(SFACE_PATH):
+            _tls.recognizer = cv2.FaceRecognizerSF.create(
+                model=SFACE_PATH,
+                config=""
+            )
+        else:
+            _tls.recognizer = None
+    return _tls.recognizer
+
+# Inisialisasi awal & verifikasi model saat modul diimpor
 try:
     if os.path.exists(YUNET_PATH) and os.path.exists(SFACE_PATH):
-        # YuNet: Detektor wajah deep learning ultra cepat & akurat
-        detector = cv2.FaceDetectorYN.create(
-            model=YUNET_PATH,
-            config="",
-            input_size=(320, 320),
-            score_threshold=0.6,
-            nms_threshold=0.3,
-            top_k=5000
-        )
-        # SFace: Model pengenal biometrik wajah (128-dimensi feature embedding)
-        recognizer = cv2.FaceRecognizerSF.create(
-            model=SFACE_PATH,
-            config=""
-        )
-        print("SUCCESS: OpenCV YuNet & SFace AI models loaded successfully!")
+        get_detector()
+        get_recognizer()
+        print("SUCCESS: OpenCV YuNet & SFace AI models loaded successfully (Thread-Isolated Ready)!")
     else:
         print(f"WARNING: Model ONNX tidak ditemukan di {YUNET_PATH} atau {SFACE_PATH}")
 except Exception as e:
@@ -58,6 +76,8 @@ def get_face_encoding(base64_image):
     if img is None:
         return None
 
+    detector = get_detector()
+    recognizer = get_recognizer()
     if detector is None or recognizer is None:
         print("WARNING: Detektor atau recognizer belum dimuat.")
         return None
@@ -98,6 +118,8 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
     if img is None:
         return {"success": False, "message": "Gambar kamera tidak valid atau kosong"}
 
+    detector = get_detector()
+    recognizer = get_recognizer()
     if detector is None or recognizer is None:
         return {
             "success": False,
@@ -180,6 +202,7 @@ def check_face_present(base64_image):
     if img is None:
         return False
 
+    detector = get_detector()
     if detector is None:
         return False
 
@@ -206,6 +229,7 @@ def analyze_liveness(base64_image):
     if img is None:
         return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0}
 
+    detector = get_detector()
     if detector is None:
         return {"face_detected": False, "eye_state": "UNKNOWN", "openness_score": 0.0}
 

@@ -50,6 +50,8 @@ export default function PortalSiswa() {
   const [profileModalTab, setProfileModalTab] = useState("profil");
   const [notification, setNotification] = useState(null);
   const [pelanggaranList, setPelanggaranList] = useState([]);
+  const [notifikasiList, setNotifikasiList] = useState([]);
+  const prevNotifIdsRef = useRef(null);
 
   const openProfile = (tab = "profil") => {
     setProfileModalTab(tab);
@@ -69,17 +71,22 @@ export default function PortalSiswa() {
     if (!user) return;
     if (!isSilent) setLoading(true);
     try {
-      const [resRekap, resPelanggaran] = await Promise.all([
+      const [resRekap, resPelanggaran, resNotif] = await Promise.allSettled([
         api.get("/siswa/me/rekap", {
           params: { siswa_id: user.id, nis: user.nis },
         }),
         api.get("/pelanggaran", {
           params: { siswa_id: user.id, nis: user.nis },
         }),
+        api.get("/siswa/notifikasi"),
       ]);
 
-      if (resRekap.data && resRekap.data.success) {
-        const newRekap = resRekap.data;
+      if (
+        resRekap.status === "fulfilled" &&
+        resRekap.value?.data &&
+        resRekap.value.data.success
+      ) {
+        const newRekap = resRekap.value.data;
         const newPengajuan = newRekap.riwayat_pengajuan || [];
 
         // Sinkronisasi status siswa ke AuthContext & localStorage jika ada perubahan dari admin
@@ -95,40 +102,58 @@ export default function PortalSiswa() {
           });
         }
 
-        // Deteksi perubahan status secara realtime untuk trigger chime & toast
-        if (prevPengajuanRef.current !== null) {
-          const oldList = prevPengajuanRef.current;
-          newPengajuan.forEach((item) => {
-            const old = oldList.find((o) => o.id === item.id);
-            if (
-              old &&
-              old.status_pengajuan === "Menunggu" &&
-              item.status_pengajuan === "Disetujui"
-            ) {
-              playNotificationSound("success");
-              setNotification({
-                type: "success",
-                message: `Kabar Baik! Pengajuan Surat ${item.jenis} (${item.tanggal_mulai}) telah DISETUJUI oleh pihak sekolah!`,
-              });
-            } else if (
-              old &&
-              old.status_pengajuan === "Menunggu" &&
-              item.status_pengajuan === "Ditolak"
-            ) {
-              playNotificationSound("error");
-              setNotification({
-                type: "error",
-                message: `Pengajuan Surat ${item.jenis} Ditolak: "${item.catatan_guru || "Silakan hubungi pihak sekolah"}"`,
-              });
-            }
-          });
-        }
-
         prevPengajuanRef.current = newPengajuan;
         setPersonalData(newRekap);
       }
-      if (resPelanggaran.data && resPelanggaran.data.success) {
-        setPelanggaranList(resPelanggaran.data.data || []);
+
+      if (
+        resPelanggaran.status === "fulfilled" &&
+        resPelanggaran.value?.data &&
+        resPelanggaran.value.data.success
+      ) {
+        setPelanggaranList(resPelanggaran.value.data.data || []);
+      }
+
+      if (
+        resNotif.status === "fulfilled" &&
+        resNotif.value?.data &&
+        resNotif.value.data.success
+      ) {
+        const incomingNotifs = resNotif.value.data.notifikasi || [];
+        setNotifikasiList(incomingNotifs);
+
+        // Deteksi notifikasi baru secara realtime untuk trigger chime & toast
+        if (prevNotifIdsRef.current !== null) {
+          const oldIds = prevNotifIdsRef.current;
+          const freshItems = incomingNotifs.filter(
+            (item) => !oldIds.includes(item.id),
+          );
+          if (freshItems.length > 0) {
+            const topItem = freshItems[0];
+            const isDanger = freshItems.some((i) => i.category === "danger");
+            const isSuccess = freshItems.some((i) => i.category === "success");
+            if (isDanger) {
+              playNotificationSound("error");
+              setNotification({
+                type: "error",
+                message: `${topItem.judul}: ${topItem.pesan}`,
+              });
+            } else if (isSuccess) {
+              playNotificationSound("success");
+              setNotification({
+                type: "success",
+                message: `${topItem.judul}: ${topItem.pesan}`,
+              });
+            } else {
+              playNotificationSound("info");
+              setNotification({
+                type: "info",
+                message: `${topItem.judul}: ${topItem.pesan}`,
+              });
+            }
+          }
+        }
+        prevNotifIdsRef.current = incomingNotifs.map((n) => n.id);
       }
     } catch (err) {
       if (!isSilent) {
@@ -158,7 +183,12 @@ export default function PortalSiswa() {
       if (typeof BroadcastChannel !== "undefined") {
         bc = new BroadcastChannel("smkn21_absensi_channel");
         bc.onmessage = (event) => {
-          if (event.data?.type === "IZIN_VERIFIED") {
+          if (
+            event.data?.type === "IZIN_VERIFIED" ||
+            event.data?.type === "PJJ_UPDATED" ||
+            event.data?.type === "PELANGGARAN_RECORDED" ||
+            event.data?.type === "PIKET_ISSUED"
+          ) {
             fetchPersonalData(true);
           }
         };
@@ -169,7 +199,12 @@ export default function PortalSiswa() {
 
     // 3. Storage event listener (sync jika tab guru verifikasi di browser yang sama)
     const handleStorage = (e) => {
-      if (e.key === "smkn21_last_izin_update") {
+      if (
+        e.key === "smkn21_last_izin_update" ||
+        e.key === "smkn21_pjj_updated" ||
+        e.key === "smkn21_last_pelanggaran_update" ||
+        e.key === "smkn21_last_piket_update"
+      ) {
         fetchPersonalData(true);
       }
     };
@@ -352,11 +387,27 @@ export default function PortalSiswa() {
           </button>
 
           <NotificationDropdown
-            notifications={personalData?.riwayat_pengajuan || []}
+            notifications={
+              notifikasiList.length > 0
+                ? notifikasiList
+                : personalData?.riwayat_pengajuan || []
+            }
             variant="header"
             align="right"
             role="siswa"
             userId={user?.id}
+            onNavigate={(target) => {
+              if (typeof target === "string") {
+                navigate(target);
+              }
+            }}
+            onActionClick={(notif) => {
+              if (notif.action_url === "modal_face") {
+                setIsFaceModalOpen(true);
+              } else if (notif.action_url) {
+                navigate(notif.action_url);
+              }
+            }}
           />
         </div>
 

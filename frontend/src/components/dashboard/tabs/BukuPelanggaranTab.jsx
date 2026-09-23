@@ -247,57 +247,57 @@ export default function BukuPelanggaranTab() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
-            <ShieldAlert className="w-6 h-6" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+            <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
               Pelanggaran Hari Ini
             </p>
-            <h3 className="text-2xl font-black text-slate-800 mt-0.5">
-              {stat.pelanggaran_hari_ini}{" "}
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
+              {stat.pelanggaran_hari_ini}
             </h3>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
-            <FileText className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+            <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
               Total Catatan Pelanggaran
             </p>
-            <h3 className="text-2xl font-black text-slate-800 mt-0.5">
-              {stat.total_catatan}{" "}
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
+              {stat.total_catatan}
             </h3>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
-            <GraduationCap className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4 sm:col-span-2 lg:col-span-1">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 flex-shrink-0">
+            <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
               Siswa/i Tercatat Poin
             </p>
-            <h3 className="text-2xl font-black text-slate-800 mt-0.5">
-              {stat.siswa_tercatat}{" "}
+            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
+              {stat.siswa_tercatat}
             </h3>
           </div>
         </div>
       </div>
 
       {/* Control Bar: Sub-tabs & Action Button */}
-      <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
             onClick={() => setActiveSubTab("riwayat")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer border ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-center transition-colors duration-150 cursor-pointer border ${
               activeSubTab === "riwayat"
                 ? "bg-rose-600 text-white shadow-xs border-rose-600"
                 : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/80"
@@ -308,7 +308,7 @@ export default function BukuPelanggaranTab() {
           <button
             type="button"
             onClick={() => setActiveSubTab("rekap_poin")}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-150 cursor-pointer border ${
+            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-center transition-colors duration-150 cursor-pointer border ${
               activeSubTab === "rekap_poin"
                 ? "bg-rose-600 text-white shadow-xs border-rose-600"
                 : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/80"
@@ -320,7 +320,7 @@ export default function BukuPelanggaranTab() {
 
         <Link
           to="/pelanggaran"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer w-full sm:w-auto"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Input Pelanggaran</span>
@@ -329,8 +329,8 @@ export default function BukuPelanggaranTab() {
 
       {/* Filters (Hanya untuk SubTab Riwayat) */}
       {activeSubTab === "riwayat" && (
-        <div className="bg-white rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-xs space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
             {/* Search Input */}
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -357,13 +357,13 @@ export default function BukuPelanggaranTab() {
                   ...uniqueKelas.map((k) => ({ value: k, label: k })),
                 ]}
                 icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-                className="w-full sm:w-auto"
+                className="w-full"
                 align="right"
               />
             </div>
 
             {/* Filter Tanggal Menggunakan CustomDatePicker */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-1">
               <div className="flex-1 min-w-0">
                 <CustomDatePicker
                   value={tanggalFilter}
@@ -397,11 +397,11 @@ export default function BukuPelanggaranTab() {
       <div
         className={
           activeSubTab === "riwayat"
-            ? "bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs min-h-[450px]"
+            ? "bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs min-h-[450px]"
             : "hidden"
         }
       >
-        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between">
+        <div className="p-3.5 sm:p-4 border-b border-slate-200 flex items-center justify-between">
           <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
             Daftar Catatan Pelanggaran ({records.length})
           </h4>
@@ -431,8 +431,112 @@ export default function BukuPelanggaranTab() {
           endIndex={endIndexRiwayat}
         />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        {/* 1. Mobile Cards View (< md) */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {paginatedRecords.map((r) => {
+            const kat = getKategoriPelanggaran(r.poin);
+            return (
+              <div
+                key={r.id}
+                className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5"
+              >
+                {/* Baris Atas: Tanggal/Waktu & Poin Badge */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-mono text-slate-500 font-medium">
+                    {r.tanggal_waktu_formatted}
+                  </span>
+                  <span
+                    className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${kat.badge}`}
+                  >
+                    +{r.poin} Poin
+                  </span>
+                </div>
+
+                {/* Baris Siswa & Kelas */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 text-sm truncate">
+                      {r.nama_siswa}
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                      NIS: {r.nis}
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 flex-shrink-0">
+                    {r.kelas}
+                  </span>
+                </div>
+
+                {/* Jenis Pelanggaran */}
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Pelanggaran
+                  </span>
+                  <p className="font-semibold text-slate-800 line-clamp-2 leading-relaxed">
+                    {r.jenis_pelanggaran}
+                  </p>
+                </div>
+
+                {/* Footer Kartu: Guru Penegur & Tombol Aksi */}
+                <div className="flex items-center justify-between pt-1 gap-2 border-t border-slate-100">
+                  <div className="text-[11px] text-slate-500 truncate min-w-0">
+                    Penegur:{" "}
+                    <strong className="text-slate-700 font-semibold">
+                      {r.nama_penanggung_jawab}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDetail(r)}
+                      title="Lihat Detail Tiket"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-200"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Slip</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmItem(r)}
+                      title="Hapus Catatan"
+                      className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {loading && (
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, idx) => (
+                <div
+                  key={`skel-m-${idx}`}
+                  className="p-3.5 rounded-xl border border-slate-100 space-y-2 animate-pulse"
+                >
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-5 w-14 rounded-md" />
+                  </div>
+                  <Skeleton className="h-4 w-36" />
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!loading && records.length === 0 && (
+            <div className="py-12 text-center text-slate-400 font-medium text-xs px-4">
+              Belum ada catatan pelanggaran yang sesuai.
+            </div>
+          )}
+        </div>
+
+        {/* 2. Desktop & Tablet Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[780px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th
@@ -734,11 +838,11 @@ export default function BukuPelanggaranTab() {
       <div
         className={
           activeSubTab === "rekap_poin"
-            ? "bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs min-h-[450px]"
+            ? "bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs min-h-[450px]"
             : "hidden"
         }
       >
-        <div className="p-4 sm:p-5 border-b border-slate-200">
+        <div className="p-3.5 sm:p-4 border-b border-slate-200">
           <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
             Peringkat Akumulasi Poin Kedisiplinan Siswa ({rekapSiswaList.length}
             )
@@ -762,8 +866,62 @@ export default function BukuPelanggaranTab() {
           endIndex={endIndexRekap}
         />
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        {/* 1. Mobile Cards View (< md) */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {paginatedRekapSiswa.map((item, idx) => {
+            const statusInfo = getStatusPembinaan(item.total_poin);
+            const actualNo = startIndexRekap + idx + 1;
+            return (
+              <div
+                key={idx}
+                className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-extrabold text-xs flex items-center justify-center flex-shrink-0">
+                      {actualNo}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm truncate">
+                        {item.nama_siswa}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        NIS: {item.nis} • {item.kelas}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 flex-shrink-0">
+                    {item.total_poin} Poin
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                  <span className="text-[11px] text-slate-500">
+                    Total Kasus:{" "}
+                    <strong className="text-slate-800">
+                      {item.jumlah_pelanggaran} Kali
+                    </strong>
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.badge}`}
+                  >
+                    {statusInfo.status}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {rekapSiswaList.length === 0 && (
+            <div className="py-12 text-center text-slate-400 font-medium text-xs px-4">
+              Belum ada akumulasi poin tercatat.
+            </div>
+          )}
+        </div>
+
+        {/* 2. Desktop & Tablet Table View (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full text-left text-xs min-w-[650px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="px-4 py-3 text-center w-12">No</th>
@@ -930,7 +1088,7 @@ export default function BukuPelanggaranTab() {
         </div>
 
         {/* Footer Navigasi Halaman Bawah SubTab 2 */}
-        <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
+        <div className="p-3.5 sm:p-4 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
           <p className="text-xs text-slate-500 text-center sm:text-left">
             {totalItemsRekap === 0 ? (
               "Tidak ada baris data untuk ditampilkan."
@@ -981,8 +1139,8 @@ export default function BukuPelanggaranTab() {
 
       {/* Modal Detail & Cetak Tiket Pelanggaran */}
       {selectedDetail && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-5 animate-in zoom-in-95">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-in zoom-in-95 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2.5">
                 <div>
@@ -1001,7 +1159,7 @@ export default function BukuPelanggaranTab() {
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+            <div className="space-y-3 text-xs bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
               <div className="flex justify-between border-b border-slate-200 pb-2">
                 <span className="text-slate-400">Waktu Kejadian</span>
                 <span className="font-bold text-slate-800">
@@ -1045,7 +1203,7 @@ export default function BukuPelanggaranTab() {
               <span className="text-xs font-bold text-slate-700 block mb-1">
                 Tanda Tangan Digital Pengakuan Siswa
               </span>
-              <div className="w-full h-28 border border-slate-200 bg-white rounded-2xl flex items-center justify-center p-2 shadow-inner">
+              <div className="w-full h-24 sm:h-28 border border-slate-200 bg-white rounded-2xl flex items-center justify-center p-2 shadow-inner">
                 {selectedDetail.tanda_tangan_siswa ? (
                   <img
                     src={selectedDetail.tanda_tangan_siswa}
@@ -1065,11 +1223,11 @@ export default function BukuPelanggaranTab() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-1">
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Cetak Slip</span>
@@ -1089,8 +1247,8 @@ export default function BukuPelanggaranTab() {
 
       {/* Modal Konfirmasi Hapus */}
       {deleteConfirmItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
             <div className="flex items-center gap-3 text-rose-600">
               <div className="p-2 rounded-xl bg-rose-50 border border-rose-100">
                 <Trash2 className="w-5 h-5" />

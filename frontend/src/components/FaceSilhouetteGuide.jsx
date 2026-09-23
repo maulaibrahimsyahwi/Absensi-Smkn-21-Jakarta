@@ -16,62 +16,138 @@ export default function FaceSilhouetteGuide({
       ? isBlue
         ? "#60a5fa"
         : "#34d399"
-      : "rgba(255,255,255,0.75)";
+      : "rgba(255,255,255,0.85)";
 
   const glowColor = isLiveVerified
-    ? "rgba(16, 185, 129, 0.65)"
+    ? "rgba(16, 185, 129, 0.75)"
     : isBlue
-      ? "rgba(59, 130, 246, 0.55)"
-      : "rgba(16, 185, 129, 0.55)";
+      ? "rgba(59, 130, 246, 0.65)"
+      : "rgba(16, 185, 129, 0.65)";
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 select-none">
+    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 select-none px-4">
       <div className="relative flex flex-col items-center justify-center">
-        {/* SVG Siluet Wajah Proporsional & Pas (Responsif untuk Berbagai Device) */}
+        {/* SVG Siluet Wajah Proporsional, Luas & Pas untuk HP serta Tablet */}
         <svg
-          viewBox="0 0 360 480"
-          className={`w-[260px] sm:w-[370px] md:w-[430px] lg:w-[490px] max-w-[80vw] h-auto max-h-[56vh] sm:max-h-[66vh] transition-all duration-300 ${
-            isDetected ? "scale-100 opacity-100" : "scale-98 opacity-80"
+          viewBox="0 0 380 500"
+          className={`w-[88vw] max-w-[340px] xs:max-w-[360px] sm:max-w-[440px] md:max-w-[490px] lg:max-w-[530px] h-auto max-h-[68vh] sm:max-h-[74vh] transition-all duration-300 ${
+            isDetected ? "scale-100 opacity-100" : "scale-[0.98] opacity-85"
           }`}
           style={{
-            filter: isDetected ? `drop-shadow(0 0 24px ${glowColor})` : "none",
+            filter: isDetected
+              ? `drop-shadow(0 0 28px ${glowColor})`
+              : "drop-shadow(0 4px 16px rgba(0,0,0,0.5))",
           }}
         >
-          {/* Garis Luar Siluet Wajah Halus & Luas */}
+          {/* 1. Sudut Bingkai Pemindai (Corner Scanning Brackets) Modern Biometrik */}
+          {/* Pojok Kiri Atas */}
           <path
-            d="M 180 35
-               C 260 35, 305 90, 305 180
-               C 305 265, 275 340, 230 395
-               C 205 425, 195 435, 180 435
-               C 165 435, 155 425, 130 395
-               C 85 340, 55 265, 55 180
-               C 55 90, 100 35, 180 35 Z"
+            d="M 25 65 L 25 35 Q 25 25 35 25 L 65 25"
+            fill="none"
+            stroke={activeColor}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          {/* Pojok Kanan Atas */}
+          <path
+            d="M 315 25 L 345 25 Q 355 25 355 35 L 355 65"
+            fill="none"
+            stroke={activeColor}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          {/* Pojok Kiri Bawah */}
+          <path
+            d="M 25 435 L 25 465 Q 25 475 35 475 L 65 475"
+            fill="none"
+            stroke={activeColor}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+          {/* Pojok Kanan Bawah */}
+          <path
+            d="M 315 475 L 345 475 Q 355 475 355 465 L 355 435"
+            fill="none"
+            stroke={activeColor}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+
+          {/* 2. Kontur Kepala & Wajah Manusia yang Luas, Natural & Nyaman */}
+          <path
+            d="M 190 32
+               C 275 32, 332 85, 332 178
+               C 332 268, 298 348, 248 402
+               C 220 432, 206 442, 190 442
+               C 174 442, 160 432, 132 402
+               C 82 348, 48 268, 48 178
+               C 48 85, 105 32, 190 32 Z"
             fill="none"
             stroke={activeColor}
             strokeWidth={isDetected ? "3.5" : "2.5"}
-            strokeDasharray={isDetected ? "none" : "10 7"}
+            strokeDasharray={isDetected ? "none" : "12 8"}
             strokeLinecap="round"
             className="transition-all duration-300"
           />
 
-          {/* Garis Aksen Halus Penanda Dagu Bawah */}
+          {/* 3. Garis Panduan Area Mata (Soft Eye Alignment Guide) */}
+          <line
+            x1="130"
+            y1="185"
+            x2="170"
+            y2="185"
+            stroke={isDetected ? activeColor : "rgba(255,255,255,0.4)"}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray="4 4"
+          />
+          <line
+            x1="210"
+            y1="185"
+            x2="250"
+            y2="185"
+            stroke={isDetected ? activeColor : "rgba(255,255,255,0.4)"}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray="4 4"
+          />
+
+          {/* 4. Garis Aksen Dagu Bawah (Chin Rest Guide) */}
           <path
-            d="M 160 418 Q 180 426 200 418"
+            d="M 165 422 Q 190 432 215 422"
             fill="none"
             stroke={isDetected ? activeColor : "rgba(255,255,255,0.4)"}
             strokeWidth="2"
             strokeLinecap="round"
           />
+
+          {/* 5. Siluet Bahu / Leher Halus di Bagian Bawah */}
+          <path
+            d="M 132 405 C 110 440, 70 470, 35 488"
+            fill="none"
+            stroke={isDetected ? activeColor : "rgba(255,255,255,0.3)"}
+            strokeWidth="2"
+            strokeDasharray={isDetected ? "none" : "8 6"}
+            strokeLinecap="round"
+          />
+          <path
+            d="M 248 405 C 270 440, 310 470, 345 488"
+            fill="none"
+            stroke={isDetected ? activeColor : "rgba(255,255,255,0.3)"}
+            strokeWidth="2"
+            strokeDasharray={isDetected ? "none" : "8 6"}
+            strokeLinecap="round"
+          />
         </svg>
 
-        {/* 2. Floating Countdown Badge: Muncul SETELAH Kedipan Terverifikasi */}
+        {/* 6. Floating Countdown Badge: Muncul di Tengah Wajah saat Kedipan Terverifikasi */}
         {isDetected && isLiveVerified && countdown !== null && !loading && (
-          <div className="absolute top-[34%] flex flex-col items-center gap-1.5 animate-in zoom-in-95 duration-200 pointer-events-none">
+          <div className="absolute top-[38%] flex flex-col items-center gap-1.5 animate-in zoom-in-95 duration-200 pointer-events-none">
             <div
-              className={`w-18 h-18 sm:w-20 sm:h-20 rounded-full flex items-center justify-center font-black text-3xl sm:text-4xl text-white shadow-2xl backdrop-blur-md border ${
+              className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center font-black text-4xl sm:text-5xl text-white shadow-2xl backdrop-blur-md border ${
                 isBlue
-                  ? "bg-blue-600/85 border-blue-400 shadow-blue-500/50"
-                  : "bg-emerald-600/85 border-emerald-400 shadow-emerald-500/50"
+                  ? "bg-blue-600/90 border-blue-300 shadow-blue-500/60"
+                  : "bg-emerald-600/90 border-emerald-300 shadow-emerald-500/60"
               } animate-pulse`}
             >
               {countdown}
@@ -79,24 +155,33 @@ export default function FaceSilhouetteGuide({
           </div>
         )}
 
-        {/* 3. Floating Prompt Above Face Silhouette */}
-        <div className="absolute -top-8 sm:-top-10 inset-x-0 text-center pointer-events-none px-4 z-20">
+        {/* 7. Floating Prompt di Atas Siluet Wajah (Nyaman & Terlihat Jelas di HP & Tablet) */}
+        <div className="absolute -top-10 sm:-top-12 inset-x-0 text-center pointer-events-none px-4 z-20">
           {isDetected ? (
             isLiveVerified ? (
-              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/85 border-emerald-400 text-emerald-200">
-                <span className="truncate">Tahan posisi</span>
+              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/90 border-emerald-400 text-emerald-200 animate-in fade-in zoom-in-95">
+                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 animate-bounce" />
+                <span className="truncate">
+                  Wajah Terverifikasi • Tahan Posisi
+                </span>
               </span>
             ) : eyeState === "CLOSED" ? (
-              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-cyan-950/85 border-cyan-400 text-cyan-200">
-                <span className="truncate">Kedipkan mata Anda</span>
+              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-cyan-950/90 border-cyan-400 text-cyan-200 animate-pulse">
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+                <span className="truncate">Buka mata Anda kembali...</span>
               </span>
             ) : (
-              <span className=""></span>
+              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-blue-950/90 border-blue-400 text-blue-200">
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
+                <span className="truncate">
+                  Wajah Pas • Silakan Berkedip Santai
+                </span>
+              </span>
             )
           ) : (
-            <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-sm font-semibold bg-black/70 border border-white/20 text-slate-300 backdrop-blur-md shadow-lg">
-              <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-slate-400 flex-shrink-0"></span>
-              <span className="truncate">Posisikan wajah di dalam siluet</span>
+            <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold bg-black/75 border border-white/20 text-slate-200 backdrop-blur-md shadow-lg">
+              <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-blue-400 animate-ping flex-shrink-0"></span>
+              <span className="truncate">Arahkan wajah ke dalam siluet</span>
             </span>
           )}
         </div>

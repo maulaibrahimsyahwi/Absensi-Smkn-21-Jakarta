@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "../services/api";
+import { rekapService, izinService } from "../services";
 import {
   Users,
   CheckCircle2,
@@ -78,11 +79,11 @@ export default function Dashboard() {
 
   // Ambil daftar tahun dinamis dari database
   useEffect(() => {
-    api
-      .get("/rekap/available_years")
-      .then((res) => {
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          setAvailableYears(res.data);
+    rekapService
+      .getAvailableYears()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAvailableYears(data);
         }
       })
       .catch((err) => {
@@ -213,43 +214,35 @@ export default function Dashboard() {
       const delayPromise = isManual
         ? new Promise((resolve) => setTimeout(resolve, 450))
         : Promise.resolve();
-      const [resPeriode, resHarian, resPerpus, resPengajuan, resPiket] =
+      const [dataPeriode, dataHarian, dataPerpus, dataPengajuan, dataPiket] =
         await Promise.all([
-          api.get("/rekap/siswa_periode", {
-            params: {
-              mode: periodeMode,
-              bulan: selectedBulan,
-              tahun: selectedTahun,
-            },
+          rekapService.getSiswaPeriode({
+            mode: periodeMode,
+            bulan: selectedBulan,
+            tahun: selectedTahun,
           }),
-          api.get("/rekap/harian", {
-            params: {
-              mode: periodeMode,
-              bulan: selectedBulan,
-              tahun: selectedTahun,
-            },
+          rekapService.getHarian({
+            mode: periodeMode,
+            bulan: selectedBulan,
+            tahun: selectedTahun,
           }),
-          api.get("/rekap/perpus", {
-            params: {
-              mode: periodeMode,
-              bulan: selectedBulan,
-              tahun: selectedTahun,
-            },
+          rekapService.getPerpus({
+            mode: periodeMode,
+            bulan: selectedBulan,
+            tahun: selectedTahun,
           }),
-          api.get("/pengajuan_izin"),
-          api.get("/piket/izin", {
-            params: {
-              tanggal: "ALL",
-            },
+          izinService.getPengajuanList(),
+          izinService.getIzinPiketList({
+            tanggal: "ALL",
           }),
           delayPromise,
         ]);
 
-      setSiswaPeriode(resPeriode.data || { statistik: {}, daftar: [] });
-      setRiwayatHarian(resHarian.data || []);
-      setRiwayatPerpus(resPerpus.data || []);
-      setPengajuanList(resPengajuan.data || []);
-      setIzinPiketList(resPiket.data || []);
+      setSiswaPeriode(dataPeriode || { statistik: {}, daftar: [] });
+      setRiwayatHarian(dataHarian || []);
+      setRiwayatPerpus(dataPerpus || []);
+      setPengajuanList(dataPengajuan || []);
+      setIzinPiketList(dataPiket || []);
 
       if (isManual) {
         setNotification({
@@ -279,7 +272,7 @@ export default function Dashboard() {
     )
       return;
     try {
-      await api.delete(`/piket/izin/${id}`);
+      await izinService.deleteIzinPiket(id);
       fetchData();
     } catch (err) {
       alert("Gagal menghapus surat izin piket.");
@@ -289,11 +282,8 @@ export default function Dashboard() {
   const handleVerifikasi = async (id, aksi, catatan = "") => {
     setVerifyingId(id);
     try {
-      const res = await api.post(`/pengajuan_izin/${id}/verifikasi`, {
-        aksi,
-        catatan,
-      });
-      if (res.data && res.data.success) {
+      const res = await izinService.verifikasiPengajuan(id, aksi, catatan);
+      if (res && res.success) {
         await fetchData();
         setRejectModalItem(null);
         setRejectNote("");
@@ -787,14 +777,14 @@ export default function Dashboard() {
 
         {/* Tab 6: Buku Catatan Pelanggaran */}
         {activeTab === "pelanggaran_siswa" && (
-          <div className="p-4 sm:p-6 min-h-[500px]">
+          <div className="p-3 sm:p-5 md:p-6 min-h-[500px]">
             <BukuPelanggaranTab />
           </div>
         )}
 
         {/* Tab 7: Manajemen Guru Piket (Khusus Admin) */}
         {isAdmin && activeTab === "manajemen_piket" && (
-          <div className="p-4 sm:p-6 min-h-[500px]">
+          <div className="p-3 sm:p-5 md:p-6 min-h-[500px]">
             <ManajemenPiketTab />
           </div>
         )}

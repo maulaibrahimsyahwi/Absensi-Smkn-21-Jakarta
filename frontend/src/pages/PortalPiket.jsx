@@ -108,9 +108,9 @@ export default function PortalPiket() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resPengajuan] = await Promise.allSettled([
+      const [resSummary, resNotif] = await Promise.allSettled([
         api.get("/piket/summary_today"),
-        api.get("/pengajuan_izin"),
+        api.get("/piket/notifikasi"),
       ]);
 
       if (
@@ -121,10 +121,11 @@ export default function PortalPiket() {
         setSummaryData(resSummary.value.data.data);
       }
       if (
-        resPengajuan.status === "fulfilled" &&
-        Array.isArray(resPengajuan.value.data)
+        resNotif.status === "fulfilled" &&
+        resNotif.value.data?.success &&
+        Array.isArray(resNotif.value.data.notifikasi)
       ) {
-        setPengajuanList(resPengajuan.value.data);
+        setPengajuanList(resNotif.value.data.notifikasi);
       }
     } catch (err) {
       // Fallback silent
@@ -147,9 +148,11 @@ export default function PortalPiket() {
           })
           .catch(() => {});
         api
-          .get("/pengajuan_izin")
+          .get("/piket/notifikasi")
           .then((res) => {
-            if (Array.isArray(res.data)) setPengajuanList(res.data);
+            if (res.data?.success && Array.isArray(res.data.notifikasi)) {
+              setPengajuanList(res.data.notifikasi);
+            }
           })
           .catch(() => {});
       }
@@ -173,9 +176,11 @@ export default function PortalPiket() {
               })
               .catch(() => {});
             api
-              .get("/pengajuan_izin")
+              .get("/piket/notifikasi")
               .then((res) => {
-                if (Array.isArray(res.data)) setPengajuanList(res.data);
+                if (res.data?.success && Array.isArray(res.data.notifikasi)) {
+                  setPengajuanList(res.data.notifikasi);
+                }
               })
               .catch(() => {});
           }

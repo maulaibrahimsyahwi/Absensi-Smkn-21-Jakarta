@@ -141,19 +141,28 @@ export default function AbsensiHarian() {
   // Pengecekan Akhir Pekan (Sabtu = 6, Minggu = 0)
   const isWeekend = [0, 6].includes(new Date().getDay());
 
-  // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
-  const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
-    useLivenessDetector({
-      webcamRef,
-      isActive:
-        !isWeekend &&
-        !loading &&
-        !result &&
-        effectiveGpsValid &&
-        (!isSiswa || !attendanceToday?.already_attended),
-      onLiveVerified: () => setCountdown(3),
-      pollIntervalMs: 600,
-    });
+  // Liveness Detection Adaptif & Anti-DDoS Polling (~750ms sequential loop via useFaceScanner hook)
+  const verifiedTokenRef = useRef(null);
+  const {
+    isFaceDetected,
+    eyeState,
+    isLiveVerified,
+    livenessToken,
+    resetLiveness,
+  } = useLivenessDetector({
+    webcamRef,
+    isActive:
+      !isWeekend &&
+      !loading &&
+      !result &&
+      effectiveGpsValid &&
+      (!isSiswa || !attendanceToday?.already_attended),
+    onLiveVerified: (token) => {
+      if (token) verifiedTokenRef.current = token;
+      setCountdown(3);
+    },
+    pollIntervalMs: 750,
+  });
 
   const captureAndVerify = useCallback(async () => {
     if (isWeekend) return;
@@ -178,6 +187,7 @@ export default function AbsensiHarian() {
         accuracy: geoState.accuracy,
         is_mock: geoState.isMock,
         expected_siswa_id: isSiswa ? user?.id : null,
+        liveness_token: verifiedTokenRef.current || livenessToken,
       };
 
       const res = await api.post("/verify_harian", payload);
@@ -211,6 +221,7 @@ export default function AbsensiHarian() {
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
+        verifiedTokenRef.current = null;
         resetLiveness();
       }, 3500);
     } catch (err) {

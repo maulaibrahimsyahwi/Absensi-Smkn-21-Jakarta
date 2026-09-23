@@ -37,7 +37,7 @@ function AppLayout() {
       className={`min-h-screen font-sans ${
         isKioskMode
           ? "bg-black overflow-hidden h-screen w-screen"
-          : "bg-slate-50 flex flex-col text-slate-800"
+          : "bg-slate-50 flex flex-col text-slate-800 w-full max-w-full overflow-x-hidden"
       }`}
     >
       {!isKioskMode && <Navbar />}
@@ -46,7 +46,7 @@ function AppLayout() {
         className={
           isKioskMode
             ? "h-screen w-screen overflow-hidden"
-            : "flex-1 flex flex-col"
+            : "flex-1 flex flex-col w-full max-w-full overflow-x-hidden"
         }
       >
         <Suspense fallback={<RouteAwareSkeleton />}>

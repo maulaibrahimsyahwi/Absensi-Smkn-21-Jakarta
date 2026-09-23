@@ -361,6 +361,20 @@ export default function RegistrasiSiswa() {
           res.data.message ||
           `${selectedIds.length} data siswa berhasil dihapus dari database.`,
       });
+
+      // Broadcast penghapusan massal akun siswa agar tab yang sedang aktif langsung keluar
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("smkn21_auth_channel");
+          bc.postMessage({
+            type: "BULK_USERS_DELETED",
+            role: "siswa",
+            ids: selectedIds,
+          });
+          bc.close();
+        }
+      } catch (e) {}
+
       setSelectedIds([]);
       setBulkDeleting(false);
       fetchSiswa();
@@ -384,6 +398,20 @@ export default function RegistrasiSiswa() {
         type: "success",
         message: `Siswa ${deletingSiswa.nama} berhasil dihapus dari database.`,
       });
+
+      // Broadcast penghapusan akun siswa agar tab yang sedang aktif langsung keluar
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("smkn21_auth_channel");
+          bc.postMessage({
+            type: "USER_DELETED",
+            role: "siswa",
+            id: deletingSiswa.id,
+          });
+          bc.close();
+        }
+      } catch (e) {}
+
       setDeletingSiswa(null);
       setSelectedIds((prev) => prev.filter((id) => id !== deletingSiswa.id));
       fetchSiswa();

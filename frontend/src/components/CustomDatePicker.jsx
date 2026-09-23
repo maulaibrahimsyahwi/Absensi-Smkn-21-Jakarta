@@ -350,12 +350,20 @@ export default function CustomDatePicker({
         />
       </button>
 
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 backdrop-blur-xs z-50 sm:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Popover Kalender Modern */}
       {isOpen && (
         <div
-          className={`absolute ${
-            horizontalPlacement === "right" ? "right-0" : "left-0"
-          } ${openUpward ? "bottom-full mb-2" : "top-full mt-2"} w-[calc(100vw-2rem)] max-w-[330px] sm:w-[330px] bg-white rounded-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 z-50 p-3.5 sm:p-4 animate-in fade-in zoom-in-95 duration-150`}
+          className={`max-sm:fixed max-sm:inset-x-4 max-sm:top-1/2 max-sm:-translate-y-1/2 max-sm:w-auto max-sm:max-w-xs max-sm:mx-auto sm:absolute ${
+            horizontalPlacement === "right" ? "sm:right-0" : "sm:left-0"
+          } ${openUpward ? "sm:bottom-full sm:mb-2" : "sm:top-full sm:mt-2"} sm:w-[330px] bg-white rounded-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 z-50 p-3.5 sm:p-4 animate-in fade-in zoom-in-95 duration-150`}
         >
           {/* Header Kalender: Bulan, Tahun & Navigasi */}
           <div className="flex items-center justify-between mb-3.5 pb-3 border-b border-slate-100">

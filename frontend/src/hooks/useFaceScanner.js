@@ -71,37 +71,54 @@ export function useLivenessDetector({
   webcamRef,
   isActive = true,
   onLiveVerified,
-  pollIntervalMs = 600,
+  pollIntervalMs = 750,
 }) {
   const [isFaceDetected, setIsFaceDetected] = useState(false);
   const [eyeState, setEyeState] = useState("UNKNOWN");
   const [isLiveVerified, setIsLiveVerified] = useState(false);
+  const [livenessToken, setLivenessToken] = useState(null);
 
   const blinkCycleRef = useRef({ hasBeenOpen: false, hasClosed: false });
   const baselineOpenScoreRef = useRef(null);
   const openSamplesRef = useRef([]);
   const isCheckingRef = useRef(false);
+  const noFaceCountRef = useRef(0);
+  const livenessTokenRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const checkLivenessFrame = useCallback(async () => {
     if (
       !webcamRef?.current ||
       isCheckingRef.current ||
       isLiveVerified ||
-      !isActive
+      !isActive ||
+      document.hidden
     )
       return;
 
     const frameData = getOptimizedWebcamFrame(webcamRef, 320, 0.65);
     if (!frameData) return;
 
+    // Batalkan request sebelumnya jika server belum selesai merespons
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     isCheckingRef.current = true;
     try {
       const res = await api.post(
         "/detect_liveness",
         { image: frameData },
-        { timeout: 2500 },
+        { timeout: 2500, signal: abortControllerRef.current.signal },
       );
       const data = res.data;
+
+      // Simpan token verifikasi jika server telah memvalidasi kedipan aktif
+      if (data.liveness_token) {
+        livenessTokenRef.current = data.liveness_token;
+        setLivenessToken(data.liveness_token);
+      }
 
       if (!data.face_detected) {
         setIsFaceDetected(false);
@@ -109,9 +126,11 @@ export function useLivenessDetector({
         blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
         baselineOpenScoreRef.current = null;
         openSamplesRef.current = [];
+        noFaceCountRef.current += 1;
         return;
       }
 
+      noFaceCountRef.current = 0;
       setIsFaceDetected(true);
       const score = Number(data.openness_score || 0);
 
@@ -143,7 +162,8 @@ export function useLivenessDetector({
         ) {
           // Siklus Kedipan Berhasil: OPEN -> CLOSED -> OPEN
           setIsLiveVerified(true);
-          if (onLiveVerified) onLiveVerified();
+          const verifiedToken = data.liveness_token || livenessTokenRef.current;
+          if (onLiveVerified) onLiveVerified(verifiedToken);
         }
       } else if (isEyeClosed) {
         setEyeState("CLOSED");
@@ -151,14 +171,16 @@ export function useLivenessDetector({
           blinkCycleRef.current.hasClosed = true;
         }
       }
-    } catch {
-      // Abaikan kegagalan jaringan sesaat
+    } catch (err) {
+      if (err.name !== "CanceledError" && err.name !== "AbortError") {
+        // Abaikan kegagalan jaringan sesaat
+      }
     } finally {
       isCheckingRef.current = false;
     }
   }, [webcamRef, isActive, isLiveVerified, onLiveVerified]);
 
-  // Polling terkendali berjarak aman (Sequential Async Loop)
+  // Polling terkendali berjarak aman & adaptif (Hemat CPU saat tidak ada wajah / tab background)
   useEffect(() => {
     let isMounted = true;
     let timerId = null;
@@ -167,25 +189,39 @@ export function useLivenessDetector({
       if (!isLiveVerified) {
         setIsFaceDetected(false);
         setEyeState("UNKNOWN");
+        noFaceCountRef.current = 0;
       }
       return;
     }
 
     const runLoop = async () => {
       if (!isMounted) return;
-      if (isActive && !isLiveVerified) {
+      if (isActive && !isLiveVerified && !document.hidden) {
         await checkLivenessFrame();
       }
       if (isMounted && !isLiveVerified) {
-        timerId = setTimeout(runLoop, pollIntervalMs);
+        // Jika kamera kosong (tidak ada wajah > 2 frame berturut-turut), perlambat interval untuk hemat CPU server & baterai HP
+        const currentDelay =
+          noFaceCountRef.current > 2
+            ? Math.max(pollIntervalMs, 1100)
+            : pollIntervalMs;
+        timerId = setTimeout(runLoop, currentDelay);
       }
     };
 
     runLoop();
 
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isActive && !isLiveVerified) {
+        runLoop();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       isMounted = false;
       isCheckingRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (timerId) clearTimeout(timerId);
     };
   }, [isActive, isLiveVerified, checkLivenessFrame, pollIntervalMs]);
@@ -194,6 +230,8 @@ export function useLivenessDetector({
     setIsLiveVerified(false);
     setIsFaceDetected(false);
     setEyeState("UNKNOWN");
+    setLivenessToken(null);
+    livenessTokenRef.current = null;
     blinkCycleRef.current = { hasBeenOpen: false, hasClosed: false };
     baselineOpenScoreRef.current = null;
     openSamplesRef.current = [];
@@ -204,6 +242,7 @@ export function useLivenessDetector({
     isFaceDetected,
     eyeState,
     isLiveVerified,
+    livenessToken,
     resetLiveness,
   };
 }

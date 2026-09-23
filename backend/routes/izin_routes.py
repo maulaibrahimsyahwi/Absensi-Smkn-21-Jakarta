@@ -1,9 +1,48 @@
+import os
+import uuid
+import base64
 from datetime import datetime, time, timedelta
 from flask import Blueprint, request, jsonify
+from config import BASE_DIR
 from models import db, Siswa, AbsensiHarian, PengajuanIzin
 from utils.auth_middleware import token_required, role_required
 
 izin_bp = Blueprint('izin', __name__)
+
+UPLOAD_SURAT_DIR = os.path.join(BASE_DIR, 'static', 'uploads', 'surat')
+os.makedirs(UPLOAD_SURAT_DIR, exist_ok=True)
+
+def save_base64_surat(base64_str, folder=UPLOAD_SURAT_DIR, prefix='surat'):
+    """
+    Menyimpan data URI base64 ke berkas file fisik di disk server.
+    Mengembalikan path relatif URL untuk disimpan di database (misal: /static/uploads/surat/surat_xxx.jpg).
+    """
+    if not base64_str or not isinstance(base64_str, str):
+        return None
+    
+    # Jika sudah berupa path URL atau bukan data URI base64, kembalikan apa adanya
+    if not base64_str.startswith('data:image'):
+        return base64_str
+
+    try:
+        header, encoded = base64_str.split(',', 1)
+        ext = 'jpg'
+        if 'png' in header:
+            ext = 'png'
+        elif 'webp' in header:
+            ext = 'webp'
+        
+        file_bytes = base64.b64decode(encoded)
+        filename = f"{prefix}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}.{ext}"
+        filepath = os.path.join(folder, filename)
+        
+        with open(filepath, 'wb') as f:
+            f.write(file_bytes)
+            
+        return f"/static/uploads/surat/{filename}"
+    except Exception as e:
+        print("Gagal menyimpan berkas surat fisik:", e)
+        return base64_str  # Fallback to original string if decode fails
 
 # ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
 
@@ -107,13 +146,16 @@ def submit_pengajuan_izin():
         }), 400
 
     try:
+        # Simpan foto surat keterangan fisik di folder disk server (menghemat RAM & database)
+        file_path_surat = save_base64_surat(surat_bukti, folder=UPLOAD_SURAT_DIR, prefix=f"surat_{siswa.nis}")
+
         pengajuan = PengajuanIzin(
             siswa_id=siswa.id,
             jenis=jenis,
             tanggal_mulai=tgl_mulai,
             tanggal_selesai=tgl_selesai,
             alasan=alasan,
-            surat_bukti=surat_bukti,
+            surat_bukti=file_path_surat,
             tanda_tangan_siswa=tanda_tangan_siswa,
             latitude=latitude,
             longitude=longitude,

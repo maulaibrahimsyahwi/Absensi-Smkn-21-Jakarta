@@ -28,6 +28,104 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  // Listener Cross-Tab Synchronizer (BroadcastChannel & Storage Event)
+  useEffect(() => {
+    let bc = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        bc = new BroadcastChannel("smkn21_auth_channel");
+        bc.onmessage = (event) => {
+          const evtType = event.data?.type;
+          if (evtType === "FORCE_LOGOUT") {
+            setUser(null);
+            if (!window.location.pathname.includes("/login")) {
+              const reason =
+                event.data?.reason === "deleted" ? "deleted=1" : "expired=1";
+              window.location.href = `/login?${reason}`;
+            }
+          } else if (evtType === "USER_DELETED") {
+            // Jika ID pengguna aktif sama dengan yang dihapus admin
+            const deletedId = event.data?.id;
+            const deletedRole = event.data?.role;
+            if (
+              user &&
+              String(user.id) === String(deletedId) &&
+              (!deletedRole || user.role === deletedRole)
+            ) {
+              logout();
+              if (!window.location.pathname.includes("/login")) {
+                window.location.href = "/login?deleted=1";
+              }
+            }
+          } else if (evtType === "BULK_USERS_DELETED") {
+            const deletedIds = event.data?.ids || [];
+            const deletedRole = event.data?.role;
+            if (
+              user &&
+              deletedIds.some((id) => String(id) === String(user.id)) &&
+              (!deletedRole || user.role === deletedRole)
+            ) {
+              logout();
+              if (!window.location.pathname.includes("/login")) {
+                window.location.href = "/login?deleted=1";
+              }
+            }
+          }
+        };
+      }
+    } catch (e) {
+      // Ignore broadcast channel error
+    }
+
+    const handleStorageChange = (e) => {
+      if (e.key === STORAGE_KEY && !e.newValue) {
+        setUser(null);
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener("storage", handleStorageChange);
+    };
+  }, []);
+
+  // Active Session Heartbeat: Memvalidasi eksistensi akun di DB setiap 8 detik
+  useEffect(() => {
+    if (!user) return;
+
+    const verifySession = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const res = await api.get("/auth/verify_session");
+        if (res.data?.success && res.data.user) {
+          const remoteUser = res.data.user;
+          // Sinkronisasi data jika ada perubahan data akun dari sisi Admin
+          setUser((prev) => {
+            if (!prev) return null;
+            if (
+              prev.nama !== remoteUser.nama ||
+              prev.kelas !== remoteUser.kelas ||
+              prev.status !== remoteUser.status ||
+              prev.foto_profil !== remoteUser.foto_profil
+            ) {
+              return { ...prev, ...remoteUser };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        // Jika 401 ACCOUNT_DELETED, sudah otomatis ditangani oleh interceptor api.js
+      }
+    };
+
+    // Jalankan pemeriksaan awal saat komponen aktif
+    verifySession();
+
+    const intervalId = setInterval(verifySession, 8000);
+    return () => clearInterval(intervalId);
+  }, [user?.id]);
+
   /**
    * Login pengguna (Admin, Guru Piket, atau Siswa)
    */

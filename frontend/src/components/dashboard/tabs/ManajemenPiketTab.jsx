@@ -283,6 +283,20 @@ export default function ManajemenPiketTab() {
           "success",
           res.data.message || "Akun berhasil dihapus.",
         );
+
+        // Broadcast penghapusan akun staf agar tab guru piket yang aktif langsung logout
+        try {
+          if (typeof BroadcastChannel !== "undefined") {
+            const bc = new BroadcastChannel("smkn21_auth_channel");
+            bc.postMessage({
+              type: "USER_DELETED",
+              role: "piket",
+              id: deletingStaf.id,
+            });
+            bc.close();
+          }
+        } catch (e) {}
+
         setDeletingStaf(null);
         fetchStafList();
       }
@@ -315,9 +329,9 @@ export default function ManajemenPiketTab() {
       )}
 
       {/* Header Info & Action Card */}
-      <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-800 rounded-3xl p-5 sm:p-6 text-white shadow-xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-80 h-80 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 relative z-10">
           <div>
             <div className="flex items-center gap-2.5">
               <div>
@@ -339,7 +353,7 @@ export default function ManajemenPiketTab() {
                 setAddError("");
                 setShowAddModal(true);
               }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white text-blue-700 font-bold text-xs sm:text-sm shadow-md hover:bg-blue-50 transition-colors duration-150 cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl sm:rounded-2xl bg-white text-blue-700 font-bold text-xs sm:text-sm shadow-md hover:bg-blue-50 transition-colors duration-150 cursor-pointer w-full sm:w-auto"
             >
               <UserPlus className="w-4 h-4 text-blue-600" />
               <span>Tambah Guru Piket</span>
@@ -348,30 +362,30 @@ export default function ManajemenPiketTab() {
         </div>
 
         {/* 3 Metrik Cepat Staf */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-4 border-t border-white/10">
-          <div className="bg-white/10 rounded-2xl p-3 border border-white/10 backdrop-blur-xs">
-            <span className="text-[11px] text-blue-200 block font-medium">
-              Total Guru Piket
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-4 sm:mt-5 pt-3.5 sm:pt-4 border-t border-white/10">
+          <div className="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 backdrop-blur-xs min-w-0">
+            <span className="text-[10px] sm:text-[11px] text-blue-200 block font-medium truncate">
+              Total Piket
             </span>
-            <span className="text-lg sm:text-xl font-black text-white">
+            <span className="text-sm sm:text-xl font-black text-white truncate block">
               {totalGuruPiket} Akun
             </span>
           </div>
 
-          <div className="bg-white/10 rounded-2xl p-3 border border-white/10 backdrop-blur-xs">
-            <span className="text-[11px] text-emerald-300 block font-medium">
-              Tanda Tangan Aktif
+          <div className="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 backdrop-blur-xs min-w-0">
+            <span className="text-[10px] sm:text-[11px] text-emerald-300 block font-medium truncate">
+              TTD Aktif
             </span>
-            <span className="text-lg sm:text-xl font-black text-white">
+            <span className="text-sm sm:text-xl font-black text-white truncate block">
               {guruDenganTtd} Guru
             </span>
           </div>
 
-          <div className="bg-white/10 rounded-2xl p-3 border border-white/10 backdrop-blur-xs col-span-2 sm:col-span-1">
-            <span className="text-[11px] text-amber-200 block font-medium">
-              Belum Ada TTD
+          <div className="bg-white/10 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 border border-white/10 backdrop-blur-xs min-w-0">
+            <span className="text-[10px] sm:text-[11px] text-amber-200 block font-medium truncate">
+              Belum TTD
             </span>
-            <span className="text-lg sm:text-xl font-black text-white">
+            <span className="text-sm sm:text-xl font-black text-white truncate block">
               {totalGuruPiket - guruDenganTtd} Guru
             </span>
           </div>
@@ -379,7 +393,7 @@ export default function ManajemenPiketTab() {
       </div>
 
       {/* Toolbar Pencarian & Refresh */}
-      <div className="flex items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+      <div className="flex items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -395,7 +409,7 @@ export default function ManajemenPiketTab() {
           type="button"
           onClick={fetchStafList}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer disabled:opacity-50 flex-shrink-0"
           title="Segarkan daftar"
         >
           <RefreshCw
@@ -405,7 +419,7 @@ export default function ManajemenPiketTab() {
         </button>
       </div>
 
-      {/* Tabel Data Staf / Guru Piket */}
+      {/* Tabel & Kartu Data Staf / Guru Piket */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden min-h-[380px]">
         {loading ? (
           <SkeletonTable rows={4} cols={6} className="min-h-[380px]" />
@@ -422,220 +436,334 @@ export default function ManajemenPiketTab() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th
-                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                    onClick={() => handleSort("nama")}
+          <>
+            {/* 1. Mobile Cards View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {sortedStaf.map((staf) => {
+                const isPrimaryAdmin =
+                  staf.username === "admin" || staf.role === "admin";
+                return (
+                  <div
+                    key={staf.id}
+                    className="p-3.5 hover:bg-slate-50/60 transition-colors space-y-2.5"
                   >
-                    <div className="flex items-center gap-1.5">
-                      <span>Nama Lengkap & Gelar</span>
-                      {sortKey === "nama" ? (
-                        sortDirection === "asc" ? (
-                          <ArrowUp className="w-3 h-3 text-blue-600" />
-                        ) : (
-                          <ArrowDown className="w-3 h-3 text-blue-600" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                    onClick={() => handleSort("username")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Username / NIP</span>
-                      {sortKey === "username" ? (
-                        sortDirection === "asc" ? (
-                          <ArrowUp className="w-3 h-3 text-blue-600" />
-                        ) : (
-                          <ArrowDown className="w-3 h-3 text-blue-600" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                    onClick={() => handleSort("role")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Peran</span>
-                      {sortKey === "role" ? (
-                        sortDirection === "asc" ? (
-                          <ArrowUp className="w-3 h-3 text-blue-600" />
-                        ) : (
-                          <ArrowDown className="w-3 h-3 text-blue-600" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                    onClick={() => handleSort("has_signature")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Tanda Tangan Digital</span>
-                      {sortKey === "has_signature" ? (
-                        sortDirection === "asc" ? (
-                          <ArrowUp className="w-3 h-3 text-blue-600" />
-                        ) : (
-                          <ArrowDown className="w-3 h-3 text-blue-600" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                      )}
-                    </div>
-                  </th>
-                  <th
-                    className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                    onClick={() => handleSort("created_at")}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span>Terdaftar Sejak</span>
-                      {sortKey === "created_at" ? (
-                        sortDirection === "asc" ? (
-                          <ArrowUp className="w-3 h-3 text-blue-600" />
-                        ) : (
-                          <ArrowDown className="w-3 h-3 text-blue-600" />
-                        )
-                      ) : (
-                        <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                      )}
-                    </div>
-                  </th>
-                  <th className="py-3 px-4 text-center">Aksi Manajemen</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {sortedStaf.map((staf) => {
-                  const isPrimaryAdmin =
-                    staf.username === "admin" || staf.role === "admin";
-                  return (
-                    <tr
-                      key={staf.id}
-                      className="hover:bg-slate-50/60 transition-colors"
-                    >
-                      {/* Nama Guru */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
-                              isPrimaryAdmin
-                                ? "bg-purple-100 text-purple-700"
-                                : "bg-blue-100 text-blue-700"
-                            }`}
-                          >
-                            {staf.nama.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-800">
-                              {staf.nama}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Username / NIP */}
-                      <td className="py-3 px-4 font-mono font-semibold text-slate-700">
-                        {staf.username}
-                      </td>
-
-                      {/* Peran */}
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    {/* Baris Atas: Avatar, Nama, dan Badge Peran */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs flex-shrink-0 ${
                             isPrimaryAdmin
-                              ? "bg-purple-100 text-purple-700 border border-purple-200"
-                              : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-blue-100 text-blue-700"
                           }`}
                         >
-                          {isPrimaryAdmin ? "Admin " : "Guru Piket"}
-                        </span>
-                      </td>
+                          {staf.nama.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 text-sm truncate">
+                            {staf.nama}
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-500 font-semibold">
+                            NIP: {staf.username}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0 ${
+                          isPrimaryAdmin
+                            ? "bg-purple-100 text-purple-700 border border-purple-200"
+                            : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        }`}
+                      >
+                        {isPrimaryAdmin ? "Admin" : "Guru Piket"}
+                      </span>
+                    </div>
 
-                      {/* Status Tanda Tangan Digital */}
-                      <td className="py-3 px-4">
+                    {/* Status Tanda Tangan & Tanggal */}
+                    <div className="flex items-center justify-between gap-2 text-[11px] bg-slate-50/80 p-2 rounded-xl border border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400">TTD:</span>
                         {staf.has_signature ? (
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                              <span>Tersedia</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Tersedia
                             </span>
                             {!isPrimaryAdmin && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenResetSignature(staf)}
-                                title="Reset tanda tangan agar guru dapat menandatangani ulang"
                                 className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold underline cursor-pointer"
                               >
-                                Reset TTD
+                                Reset
                               </button>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          <span className="text-[10px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                             Belum Dibuat
                           </span>
                         )}
-                      </td>
+                      </div>
+                      <span className="text-slate-400 text-[10px]">
+                        {staf.created_at || "Bawaan"}
+                      </span>
+                    </div>
 
-                      {/* Tanggal Terdaftar */}
-                      <td className="py-3 px-4 text-slate-500 text-[11px]">
-                        {staf.created_at || "Bawaan Sistem"}
-                      </td>
+                    {/* Tombol Aksi Mobile */}
+                    <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(staf)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 cursor-pointer"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
 
-                      {/* Tombol Aksi */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="inline-flex items-center gap-1.5">
-                          {/* Edit Data */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(staf)}
-                            title="Edit nama / username"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetStaf(staf);
+                          setResetNewPass("piket123");
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200 cursor-pointer"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Reset Pass</span>
+                      </button>
+
+                      {!isPrimaryAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingStaf(staf)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 2. Desktop & Tablet Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[680px]">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                      onClick={() => handleSort("nama")}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Nama Lengkap & Gelar</span>
+                        {sortKey === "nama" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                      onClick={() => handleSort("username")}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Username / NIP</span>
+                        {sortKey === "username" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                      onClick={() => handleSort("role")}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Peran</span>
+                        {sortKey === "role" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                      onClick={() => handleSort("has_signature")}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Tanda Tangan Digital</span>
+                        {sortKey === "has_signature" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
+                      onClick={() => handleSort("created_at")}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Terdaftar Sejak</span>
+                        {sortKey === "created_at" ? (
+                          sortDirection === "asc" ? (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                          ) : (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-4 text-center">Aksi Manajemen</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {sortedStaf.map((staf) => {
+                    const isPrimaryAdmin =
+                      staf.username === "admin" || staf.role === "admin";
+                    return (
+                      <tr
+                        key={staf.id}
+                        className="hover:bg-slate-50/60 transition-colors"
+                      >
+                        {/* Nama Guru */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
+                                isPrimaryAdmin
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {staf.nama.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800">
+                                {staf.nama}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Username / NIP */}
+                        <td className="py-3 px-4 font-mono font-semibold text-slate-700">
+                          {staf.username}
+                        </td>
+
+                        {/* Peran */}
+                        <td className="py-3 px-4">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                              isPrimaryAdmin
+                                ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            }`}
                           >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                            {isPrimaryAdmin ? "Admin " : "Guru Piket"}
+                          </span>
+                        </td>
 
-                          {/* Reset Kata Sandi */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setResetStaf(staf);
-                              setResetNewPass("piket123");
-                            }}
-                            title="Reset Kata Sandi Akun"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
-                          >
-                            <KeyRound className="w-4 h-4" />
-                          </button>
+                        {/* Status Tanda Tangan Digital */}
+                        <td className="py-3 px-4">
+                          {staf.has_signature ? (
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                <span>Tersedia</span>
+                              </span>
+                              {!isPrimaryAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenResetSignature(staf)}
+                                  title="Reset tanda tangan agar guru dapat menandatangani ulang"
+                                  className="text-[10px] text-slate-400 hover:text-rose-600 font-semibold underline cursor-pointer"
+                                >
+                                  Reset TTD
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-amber-600 font-semibold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Belum Dibuat
+                            </span>
+                          )}
+                        </td>
 
-                          {/* Hapus (Hanya untuk guru piket, dilarang hapus admin utama) */}
-                          {!isPrimaryAdmin && (
+                        {/* Tanggal Terdaftar */}
+                        <td className="py-3 px-4 text-slate-500 text-[11px]">
+                          {staf.created_at || "Bawaan Sistem"}
+                        </td>
+
+                        {/* Tombol Aksi */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="inline-flex items-center gap-1.5">
+                            {/* Edit Data */}
                             <button
                               type="button"
-                              onClick={() => setDeletingStaf(staf)}
-                              title="Hapus Akun Guru Piket"
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              onClick={() => handleOpenEdit(staf)}
+                              title="Edit nama / username"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Edit className="w-4 h-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                            {/* Reset Kata Sandi */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setResetStaf(staf);
+                                setResetNewPass("piket123");
+                              }}
+                              title="Reset Kata Sandi Akun"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </button>
+
+                            {/* Hapus (Hanya untuk guru piket, dilarang hapus admin utama) */}
+                            {!isPrimaryAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => setDeletingStaf(staf)}
+                                title="Hapus Akun Guru Piket"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
@@ -643,7 +771,7 @@ export default function ManajemenPiketTab() {
       {showAddModal &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               {/* Header */}
               <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -764,7 +892,7 @@ export default function ManajemenPiketTab() {
       {editingStaf &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
@@ -865,7 +993,7 @@ export default function ManajemenPiketTab() {
       {resetStaf &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
                 <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700">
                   <KeyRound className="w-5 h-5" />
@@ -928,7 +1056,7 @@ export default function ManajemenPiketTab() {
       {resetSignatureStaf &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
                 <PenLine className="w-6 h-6" />
               </div>
@@ -977,7 +1105,7 @@ export default function ManajemenPiketTab() {
       {deletingStaf &&
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
                 <Trash2 className="w-6 h-6" />
               </div>

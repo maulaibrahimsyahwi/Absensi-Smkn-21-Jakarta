@@ -611,19 +611,6 @@ export default function CatatPelanggaran() {
                 </p>
               </div>
             </div>
-
-            {/* Badges Info Identitas Pembuat */}
-            {isSiswa ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 px-3 py-1 rounded-xl border border-blue-200 self-start sm:self-auto">
-                <span>
-                  {user?.nama} {user?.kelas || "Siswa"}
-                </span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-white px-3 py-1 rounded-xl border border-slate-200 self-start sm:self-auto shadow-2xs">
-                <span>Guru Piket {user?.nama || "Guru Piket"}</span>
-              </span>
-            )}
           </div>
 
           <form
@@ -965,7 +952,7 @@ export default function CatatPelanggaran() {
                   <span className="text-rose-500">*</span>
                 </label>
                 <span className="text-[11px] text-slate-400">
-                  Nama lengkap guru yang menegur
+                  Nama Guru Yang Menegur
                 </span>
               </div>
 

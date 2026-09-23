@@ -55,6 +55,42 @@ def calculate_distance_meters(lat1, lon1, lat2, lon2):
     return round(R * c)
 
 
+def is_point_in_polygon(lat, lon, polygon):
+    """
+    Menentukan apakah suatu titik koordinat (lat, lon) berada di dalam area poligon
+    menggunakan algoritma Ray-Casting (Even-Odd Rule).
+    
+    :param lat: Latitude titik pengujian (float)
+    :param lon: Longitude titik pengujian (float)
+    :param polygon: List koordinat poligon berurutan [[lat, lon], ...]
+    :return: True jika titik berada di dalam poligon, False jika di luar
+    """
+    if not polygon or len(polygon) < 3:
+        return False
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return False
+
+    inside = False
+    n = len(polygon)
+    p1_lat, p1_lon = polygon[0]
+    for i in range(1, n + 1):
+        p2_lat, p2_lon = polygon[i % n]
+        if lon > min(p1_lon, p2_lon):
+            if lon <= max(p1_lon, p2_lon):
+                if lat <= max(p1_lat, p2_lat):
+                    if p1_lon != p2_lon:
+                        lat_inters = (lon - p1_lon) * (p2_lat - p1_lat) / (p2_lon - p1_lon) + p1_lat
+                    else:
+                        lat_inters = p1_lat
+                    if p1_lat == p2_lat or lat <= lat_inters:
+                        inside = not inside
+        p1_lat, p1_lon = p2_lat, p2_lon
+
+    return inside
+
+
 def is_school_day(dt=None):
     """
     Mengecek apakah hari ini adalah hari operasional sekolah SMKN 21 (Senin s/d Jumat).

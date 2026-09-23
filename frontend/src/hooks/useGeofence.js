@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
-import { getCurrentLocation, calculateDistanceMeters } from "../utils/geoUtils";
+import {
+  getCurrentLocation,
+  calculateDistanceMeters,
+  isPointInPolygon,
+} from "../utils/geoUtils";
 
 /**
  * Custom hook untuk mengelola status geofencing GPS,
- * perhitungan jarak ke titik target (SMKN 21), simulasi testing lokal,
- * serta flags status validitas GPS.
+ * perhitungan jarak ke titik target (SMKN 21), verifikasi batas poligon pagar sekolah,
+ * simulasi testing lokal, serta flags status validitas GPS.
  *
- * @param {Object} targetCoordinates - { latitude, longitude, radiusMeters }
+ * @param {Object} targetCoordinates - { latitude, longitude, radiusMeters, polygon }
  */
 export function useGeofence(targetCoordinates) {
   const [geoState, setGeoState] = useState({
@@ -16,6 +20,7 @@ export function useGeofence(targetCoordinates) {
     accuracy: null,
     distanceMeters: null,
     isWithinRadius: false,
+    insidePolygon: false,
     error: null,
     simulated: false,
     isMock: false,
@@ -34,7 +39,16 @@ export function useGeofence(targetCoordinates) {
         targetCoordinates.latitude,
         targetCoordinates.longitude,
       );
-      const isWithin = dist <= targetCoordinates.radiusMeters;
+
+      // Verifikasi ganda: Poligon Batas Pagar Lahan Sekolah ATAU Toleransi Radius Cadangan (50m)
+      const targetPoly = targetCoordinates.polygon || [];
+      const inPoly = isPointInPolygon(
+        [loc.latitude, loc.longitude],
+        targetPoly,
+      );
+      const radiusLimit = targetCoordinates.radiusMeters || 50;
+      const isWithin = inPoly || (dist !== null && dist <= radiusLimit);
+
       setGeoState({
         loading: false,
         latitude: loc.latitude,
@@ -42,6 +56,7 @@ export function useGeofence(targetCoordinates) {
         accuracy: loc.accuracy,
         distanceMeters: dist,
         isWithinRadius: isWithin,
+        insidePolygon: inPoly,
         error: null,
         simulated: false,
         isMock: loc.isMock || false,
@@ -57,6 +72,7 @@ export function useGeofence(targetCoordinates) {
     targetCoordinates.latitude,
     targetCoordinates.longitude,
     targetCoordinates.radiusMeters,
+    targetCoordinates.polygon,
   ]);
 
   useEffect(() => {

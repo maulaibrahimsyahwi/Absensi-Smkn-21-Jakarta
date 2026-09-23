@@ -215,3 +215,110 @@ def get_piket_summary_today():
     except Exception as e:
         return jsonify({"success": False, "message": str(e)}), 500
 
+
+# ================= PUSAT NOTIFIKASI GURU PIKET (EVENT-DRIVEN & ACTIONABLE) =================
+
+@piket_bp.route('/api/piket/notifikasi', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
+def get_piket_notifikasi():
+    """
+    Mengambil daftar notifikasi terpadu untuk Guru Piket sesuai kaidah notifikasi:
+    1. Surat Pengajuan Izin/Sakit Siswa yang MENUNGGU VERIFIKASI (Perlu Tindakan).
+    2. Siswa yang Tercatat Terlambat Hari Ini (Kejadian Presensi Pagi Hari Ini).
+    3. Dispensasi Masuk/Meninggalkan Kelas (E-Slip) yang diterbitkan hari ini.
+    """
+    today = date.today()
+    notifikasi = []
+
+    try:
+        # 1. Pengajuan Izin Siswa yang Masih Menunggu Persetujuan Guru Piket (Prioritas Utama)
+        pending_izin = PengajuanIzin.query.filter_by(status_pengajuan='Menunggu')\
+            .order_by(PengajuanIzin.created_at.desc()).limit(15).all()
+
+        for p in pending_izin:
+            siswa = Siswa.query.get(p.siswa_id)
+            nama_siswa = siswa.nama if siswa else "Siswa"
+            kelas_siswa = siswa.kelas if siswa else "-"
+
+            notifikasi.append({
+                "id": f"piket-izin-pending-{p.id}",
+                "type": "izin_menunggu",
+                "category": "warning",
+                "judul": f"Pengajuan {p.jenis}: {nama_siswa}",
+                "pesan": f"{nama_siswa} ({kelas_siswa}) mengajukan surat {p.jenis} periode {p.tanggal_mulai.strftime('%d/%m')} s/d {p.tanggal_selesai.strftime('%d/%m')}. Alasan: \"{p.alasan}\"",
+                "waktu": p.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "badge": "Perlu Verifikasi",
+                "nama": nama_siswa,
+                "kelas": kelas_siswa,
+                "status_pengajuan": "Menunggu",
+                "action_url": "/dashboard?tab=verifikasi_izin",
+                "action_label": "Verifikasi"
+            })
+    except Exception:
+        pass
+
+    try:
+        # 2. Siswa yang Terlambat Hari Ini (Informasi Operasional Pagi Ini)
+        terlambat_today = AbsensiHarian.query.filter(
+            db.func.date(AbsensiHarian.waktu) == today,
+            AbsensiHarian.status == 'Terlambat'
+        ).order_by(AbsensiHarian.waktu.desc()).limit(15).all()
+
+        for ab in terlambat_today:
+            siswa = Siswa.query.get(ab.siswa_id)
+            nama_siswa = siswa.nama if siswa else "Siswa"
+            kelas_siswa = siswa.kelas if siswa else "-"
+
+            notifikasi.append({
+                "id": f"piket-terlambat-{ab.id}",
+                "type": "terlambat",
+                "category": "danger",
+                "judul": f"Keterlambatan: {nama_siswa}",
+                "pesan": f"{nama_siswa} ({kelas_siswa}) melakukan presensi pada {ab.waktu.strftime('%H:%M:%S')} WIB (melewati batas 06:30 WIB).",
+                "waktu": ab.waktu.strftime("%Y-%m-%d %H:%M:%S"),
+                "badge": "Terlambat",
+                "nama": nama_siswa,
+                "kelas": kelas_siswa,
+                "action_url": "/dashboard?tab=buku_pelanggaran",
+                "action_label": "Lihat Pelanggaran"
+            })
+    except Exception:
+        pass
+
+    try:
+        # 3. E-Slip Dispensasi Meja Piket Hari Ini
+        piket_today = IzinPiket.query.filter(IzinPiket.tanggal == today)\
+            .order_by(IzinPiket.created_at.desc()).limit(10).all()
+
+        for ip in piket_today:
+            siswa = Siswa.query.get(ip.siswa_id)
+            nama_siswa = siswa.nama if siswa else "Siswa"
+            kelas_siswa = siswa.kelas if siswa else "-"
+
+            notifikasi.append({
+                "id": f"piket-slip-{ip.id}",
+                "type": "piket",
+                "category": "info",
+                "judul": f"E-Slip {ip.tipe}: {nama_siswa}",
+                "pesan": f"{nama_siswa} ({kelas_siswa}) izin jam ke-{ip.jam_ke} (\"{ip.alasan}\"). Disahkan oleh {ip.petugas_piket}.",
+                "waktu": ip.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "badge": ip.tipe,
+                "nama": nama_siswa,
+                "kelas": kelas_siswa,
+                "action_url": "/dashboard?tab=manajemen_piket",
+                "action_label": "Buka Meja Piket"
+            })
+    except Exception:
+        pass
+
+    # Urutkan dari notifikasi yang paling baru
+    notifikasi.sort(key=lambda x: x.get('waktu', ''), reverse=True)
+
+    return jsonify({
+        "success": True,
+        "total": len(notifikasi),
+        "notifikasi": notifikasi
+    })
+
+

@@ -96,9 +96,9 @@ export default function PortalAdmin() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resPengajuan, resPjj] = await Promise.allSettled([
+      const [resSummary, resNotif, resPjj] = await Promise.allSettled([
         api.get("/rekap/admin_summary"),
-        api.get("/pengajuan_izin"),
+        api.get("/piket/notifikasi"),
         api.get("/pjj/status"),
       ]);
 
@@ -110,10 +110,11 @@ export default function PortalAdmin() {
         setSummaryData(resSummary.value.data.data);
       }
       if (
-        resPengajuan.status === "fulfilled" &&
-        Array.isArray(resPengajuan.value.data)
+        resNotif.status === "fulfilled" &&
+        resNotif.value.data?.success &&
+        Array.isArray(resNotif.value.data.notifikasi)
       ) {
-        setPengajuanList(resPengajuan.value.data);
+        setPengajuanList(resNotif.value.data.notifikasi);
       }
       if (
         resPjj.status === "fulfilled" &&
@@ -143,9 +144,11 @@ export default function PortalAdmin() {
           })
           .catch(() => {});
         api
-          .get("/pengajuan_izin")
+          .get("/piket/notifikasi")
           .then((res) => {
-            if (Array.isArray(res.data)) setPengajuanList(res.data);
+            if (res.data?.success && Array.isArray(res.data.notifikasi)) {
+              setPengajuanList(res.data.notifikasi);
+            }
           })
           .catch(() => {});
       }
