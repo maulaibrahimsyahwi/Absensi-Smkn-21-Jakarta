@@ -11,7 +11,7 @@ const CORE_ASSETS = [
   "/index.html",
   "/manifest.json",
   "/favicon.svg",
-  "/icons.svg"
+  "/icons.svg",
 ];
 
 // 1. Install Event: Pra-cache aset inti
@@ -20,7 +20,7 @@ self.addEventListener("install", (event) => {
     caches
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(CORE_ASSETS))
-      .then(() => self.skipWaiting())
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -35,10 +35,10 @@ self.addEventListener("activate", (event) => {
             if (name !== CACHE_NAME) {
               return caches.delete(name);
             }
-          })
+          }),
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -60,16 +60,17 @@ self.addEventListener("fetch", (event) => {
         return new Response(
           JSON.stringify({
             success: false,
-            message: "Koneksi offline. Silakan periksa jaringan internet / Wi-Fi sekolah Anda.",
-            is_offline: true
+            message:
+              "Koneksi offline. Silakan periksa jaringan internet / Wi-Fi sekolah Anda.",
+            is_offline: true,
           }),
           {
             status: 503,
             statusText: "Service Unavailable",
-            headers: { "Content-Type": "application/json" }
-          }
+            headers: { "Content-Type": "application/json" },
+          },
         );
-      })
+      }),
     );
     return;
   }
@@ -90,7 +91,7 @@ self.addEventListener("fetch", (event) => {
           return caches.match("/index.html").then((cached) => {
             return cached || caches.match("/");
           });
-        })
+        }),
     );
     return;
   }
@@ -119,6 +120,6 @@ self.addEventListener("fetch", (event) => {
         });
 
       return cachedResponse || fetchPromise;
-    })
+    }),
   );
 });

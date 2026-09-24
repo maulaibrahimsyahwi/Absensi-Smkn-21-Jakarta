@@ -7,7 +7,7 @@ import { WifiOff, Wifi, X } from "lucide-react";
  */
 export default function OfflineBanner() {
   const [isOnline, setIsOnline] = useState(
-    typeof navigator !== "undefined" ? navigator.onLine : true
+    typeof navigator !== "undefined" ? navigator.onLine : true,
   );
   const [showReconnected, setShowReconnected] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
@@ -44,7 +44,10 @@ export default function OfflineBanner() {
       <div className="fixed top-0 left-0 right-0 z-50 bg-emerald-600 text-white text-xs sm:text-sm font-medium py-2.5 px-4 shadow-md flex items-center justify-between animate-in slide-in-from-top duration-300">
         <div className="flex items-center gap-2 max-w-6xl mx-auto w-full justify-center">
           <Wifi className="w-4 h-4 animate-pulse shrink-0" />
-          <span>Koneksi internet kembali aktif! Sistem siap melakukan sinkronisasi presensi.</span>
+          <span>
+            Koneksi internet kembali aktif! Sistem siap melakukan sinkronisasi
+            presensi.
+          </span>
         </div>
       </div>
     );
@@ -62,7 +65,9 @@ export default function OfflineBanner() {
             <WifiOff className="w-3.5 h-3.5" />
           </div>
           <p className="leading-tight">
-            <strong className="font-semibold">Mode Offline:</strong> Anda sedang tidak terhubung ke internet. Aplikasi tetap dapat dibaca dari memori lokal. Pengiriman presensi memerlukan koneksi stabil.
+            <strong className="font-semibold">Mode Offline:</strong> Anda sedang
+            tidak terhubung ke internet. Aplikasi tetap dapat dibaca dari memori
+            lokal. Pengiriman presensi memerlukan koneksi stabil.
           </p>
         </div>
         <button

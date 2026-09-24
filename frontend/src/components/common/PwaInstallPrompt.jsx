@@ -13,25 +13,36 @@ export default function PwaInstallPrompt() {
   useEffect(() => {
     // 1. Cek apakah aplikasi sudah berjalan dalam mode standalone (sudah ter-install)
     const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true;
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+        window.navigator.standalone === true);
 
     if (isStandalone) {
       return; // Sudah terpasang, jangan tampilkan banner
     }
 
     // 2. Cek apakah pengguna sudah pernah menutup prompt dalam 5 hari terakhir
-    const dismissedTime = localStorage.getItem("smkn21_pwa_prompt_dismissed");
-    if (dismissedTime && Date.now() - Number(dismissedTime) < 5 * 24 * 60 * 60 * 1000) {
-      return;
+    try {
+      const dismissedTime = localStorage.getItem("smkn21_pwa_prompt_dismissed");
+      if (
+        dismissedTime &&
+        Date.now() - Number(dismissedTime) < 5 * 24 * 60 * 60 * 1000
+      ) {
+        return;
+      }
+    } catch {
+      // ignore localStorage error
     }
 
     // 3. Deteksi perangkat iOS (iPhone / iPad)
-    const userAgent = window.navigator.userAgent.toLowerCase();
+    const userAgent =
+      typeof window !== "undefined"
+        ? window.navigator.userAgent.toLowerCase()
+        : "";
     const isIos = /iphone|ipad|ipod/.test(userAgent);
 
     if (isIos && !isStandalone) {
-      // Tampilkan banner panduan iOS setelah 3 detik
+      // Tampilkan banner panduan iOS setelah jeda
       const timer = setTimeout(() => {
         setIsIosPrompt(true);
         setIsVisible(true);
@@ -43,7 +54,6 @@ export default function PwaInstallPrompt() {
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Tampilkan banner setelah jeda santai 2.5 detik
       setTimeout(() => {
         setIsVisible(true);
       }, 2500);
@@ -52,14 +62,16 @@ export default function PwaInstallPrompt() {
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
     };
   }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
 
-    // Tampilkan prompt instalasi native bawaan browser
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
 
@@ -72,7 +84,10 @@ export default function PwaInstallPrompt() {
   const handleDismiss = () => {
     setIsVisible(false);
     try {
-      localStorage.setItem("smkn21_pwa_prompt_dismissed", Date.now().toString());
+      localStorage.setItem(
+        "smkn21_pwa_prompt_dismissed",
+        Date.now().toString()
+      );
     } catch {
       // ignore
     }
@@ -93,7 +108,8 @@ export default function PwaInstallPrompt() {
                 Pasang Aplikasi SMKN 21
               </h4>
               <p className="text-xs text-slate-300 mt-0.5 leading-snug">
-                Pasang ke layar utama HP untuk akses cepat, layar penuh, dan tanpa bilah browser.
+                Pasang ke layar utama HP untuk akses cepat, layar penuh, dan
+                tanpa bilah browser.
               </p>
             </div>
           </div>
