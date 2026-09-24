@@ -1,24 +1,14 @@
 import React, { useState, useEffect } from "react";
-import {
-  Download,
-  Share2,
-  X,
-  Smartphone,
-  CheckCircle2,
-  HelpCircle,
-  MoreVertical,
-  PlusSquare,
-} from "lucide-react";
+import { Download, X, Smartphone, Share2 } from "lucide-react";
 
 /**
- * Komponen PWA Install Prompt yang Cerdas & Responsif.
- * Mendukung Android, iOS, tablet, dan desktop.
- * Dilengkapi panduan visual langkah-demi-langkah jika browser berjalan pada mode dev / self-signed SSL.
+ * Komponen PWA Install Prompt Minimalis.
+ * Hanya muncul satu kali saat pengguna pertama kali membuka website (first visit).
+ * Terintegrasi langsung dengan dialog instalasi native browser (Android Chrome PWA).
  */
 export default function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
 
   // Deteksi perangkat
   const userAgent =
@@ -26,8 +16,8 @@ export default function PwaInstallPrompt() {
       ? window.navigator.userAgent.toLowerCase()
       : "";
   const isIos = /iphone|ipad|ipod/.test(userAgent);
-  const isAndroid = /android/.test(userAgent);
-  const isMobile = isIos || isAndroid || /mobile|tablet/.test(userAgent);
+  const isMobile =
+    isIos || /android|mobile|tablet/i.test(userAgent);
 
   useEffect(() => {
     // 1. Cek apakah aplikasi sudah berjalan dalam mode standalone (sudah terpasang di HP)
@@ -38,91 +28,81 @@ export default function PwaInstallPrompt() {
         document.referrer.includes("android-app://"));
 
     if (isStandalone) {
-      return; // Sudah terpasang, jangan tampilkan banner
+      return; // Sudah terpasang, jangan tampilkan
     }
 
-    // 2. Cek apakah pengguna sudah pernah menutup prompt baru-baru ini
+    // 2. Cek apakah pengguna sudah pernah melihat/menutup prompt ini sebelumnya
+    // HANYA MUNCUL SATU KALI SAAT PERTAMA KALI MEMBUKA WEBSITE
     try {
-      const dismissedTime = localStorage.getItem("smkn21_pwa_prompt_dismissed");
-      if (
-        dismissedTime &&
-        Date.now() - Number(dismissedTime) < 12 * 60 * 60 * 1000
-      ) {
-        // Hanya lewati jika bukan event manual
-      } else {
-        // Tampilkan otomatis di HP / tablet setelah 1.5 detik
-        if (isMobile) {
-          const autoTimer = setTimeout(() => {
-            setIsVisible(true);
-          }, 1500);
-          return () => clearTimeout(autoTimer);
-        }
+      const alreadyHandled =
+        localStorage.getItem("smkn21_pwa_first_visit_handled") === "true";
+      if (alreadyHandled) {
+        return; // Sudah pernah muncul sebelumnya, jangan munculkan lagi
       }
     } catch {
-      if (isMobile) {
-        setIsVisible(true);
-      }
+      // ignore
     }
 
-    // 3. Tangkap event native beforeinstallprompt (jika didukung & diizinkan browser)
+    // 3. Tangkap event native beforeinstallprompt (Android / Chrome)
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setIsVisible(true);
     };
 
-    // 4. Tangkap event kustom jika dipicu dari menu / tombol navbar
-    const handleManualTrigger = () => {
-      setIsVisible(true);
-      setShowGuide(true);
-    };
+    window.addEventListener(
+      "beforeinstallprompt",
+      handleBeforeInstallPrompt,
+    );
 
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("show-pwa-prompt", handleManualTrigger);
+    // 4. Di perangkat mobile, tampilkan banner pertama kali setelah jeda 1.5 detik
+    let timer;
+    if (isMobile) {
+      timer = setTimeout(() => {
+        setIsVisible(true);
+      }, 1500);
+    }
 
     return () => {
       window.removeEventListener(
         "beforeinstallprompt",
         handleBeforeInstallPrompt,
       );
-      window.removeEventListener("show-pwa-prompt", handleManualTrigger);
+      if (timer) clearTimeout(timer);
     };
   }, [isMobile]);
 
-  const handleInstallClick = async () => {
-    if (deferredPrompt) {
-      // Jalankan dialog instalasi native jika tersedia
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === "accepted") {
-        setIsVisible(false);
-      }
-      setDeferredPrompt(null);
-    } else {
-      // Jika browser belum mendukung dialog otomatis (misal: di IP lokal self-signed SSL atau iOS),
-      // buka panduan visual langkah-demi-langkah
-      setShowGuide((prev) => !prev);
-    }
-  };
-
-  const handleDismiss = () => {
+  const markAsHandled = () => {
     setIsVisible(false);
     try {
-      localStorage.setItem(
-        "smkn21_pwa_prompt_dismissed",
-        Date.now().toString(),
-      );
+      // Tandai bahwa prompt pertama kali sudah selesai (tidak akan muncul lagi)
+      localStorage.setItem("smkn21_pwa_first_visit_handled", "true");
     } catch {
       // ignore
     }
   };
 
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      // Munculkan dialog instalasi native browser
+      deferredPrompt.prompt();
+      try {
+        await deferredPrompt.userChoice;
+      } catch {
+        // ignore
+      }
+      setDeferredPrompt(null);
+    }
+    // Tutup dan jangan tampilkan lagi di masa mendatang
+    markAsHandled();
+  };
+
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-5 sm:max-w-md z-50 animate-in slide-in-from-bottom duration-300">
+    <div className="fixed bottom-3 left-3 right-3 sm:left-auto sm:right-5 sm:max-w-sm z-50 animate-in slide-in-from-bottom duration-300">
       <div className="bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-slate-700/80 flex flex-col gap-3">
-        {/* Header Banner */}
+        {/* Konten Utama */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
@@ -138,132 +118,49 @@ export default function PwaInstallPrompt() {
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5 leading-snug">
-                Pasang ke layar utama HP untuk akses cepat tanpa bilah browser.
+                Pasang ke layar utama HP untuk akses presensi cepat dan layar
+                penuh.
               </p>
             </div>
           </div>
           <button
             type="button"
-            onClick={handleDismiss}
+            onClick={markAsHandled}
             aria-label="Tutup saran instalasi"
-            className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+            className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Panduan Langkah-Demi-Langkah (Jika panduan dibuka atau di iOS) */}
-        {(showGuide || isIos) && (
-          <div className="bg-slate-800/90 rounded-xl p-3 text-xs text-slate-200 border border-slate-700/60 flex flex-col gap-2 animate-in fade-in duration-200">
-            <div className="flex items-center gap-1.5 text-indigo-400 font-semibold text-[11px] uppercase tracking-wider">
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>
-                Cara Pasang di {isIos ? "iPhone (Safari)" : "Android (Chrome)"}:
-              </span>
-            </div>
-
-            {isIos ? (
-              <ol className="space-y-1.5 pl-1 text-[11.5px] text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">1.</span>
-                  <span>
-                    Ketuk tombol{" "}
-                    <strong>
-                      Bagikan (Share{" "}
-                      <Share2 className="w-3.5 h-3.5 inline text-sky-400" />)
-                    </strong>{" "}
-                    di bilah bawah Safari.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">2.</span>
-                  <span>
-                    Gulir ke bawah dan pilih{" "}
-                    <strong>
-                      'Add to Home Screen' (
-                      <PlusSquare className="w-3.5 h-3.5 inline text-slate-300" />
-                      )
-                    </strong>
-                    .
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">3.</span>
-                  <span>
-                    Ketuk <strong>'Tambah'</strong> di pojok kanan atas.
-                  </span>
-                </li>
-              </ol>
-            ) : (
-              <ol className="space-y-1.5 pl-1 text-[11.5px] text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">1.</span>
-                  <span>
-                    Ketuk ikon{" "}
-                    <strong>
-                      titik tiga (
-                      <MoreVertical className="w-3.5 h-3.5 inline text-slate-300" />
-                      )
-                    </strong>{" "}
-                    di pojok kanan atas browser Chrome.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">2.</span>
-                  <span>
-                    Pilih menu <strong>'Tambahkan ke Layar Utama'</strong> (atau{" "}
-                    <strong>'Instal aplikasi'</strong>).
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold text-indigo-400">3.</span>
-                  <span>
-                    Ketuk <strong>'Instal'</strong> / <strong>'Tambah'</strong>.
-                  </span>
-                </li>
-              </ol>
-            )}
-
-            <div className="flex items-center gap-1.5 text-emerald-400 text-[11px] pt-1 border-t border-slate-700/50">
-              <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-              <span>Ikon SMKN 21 akan langsung muncul di beranda HP Anda!</span>
-            </div>
+        {/* Khusus Safari iOS: Petunjuk singkat satu baris */}
+        {isIos && (
+          <div className="bg-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 flex items-center gap-2 border border-slate-700/50">
+            <Share2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+            <span>
+              Ketuk tombol <strong>Bagikan ⎋</strong> lalu pilih{" "}
+              <strong>'Add to Home Screen' (+)</strong>.
+            </span>
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800">
+        {/* Tombol Aksi */}
+        <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
           <button
             type="button"
-            onClick={() => setShowGuide((prev) => !prev)}
-            className="text-xs text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition-colors cursor-pointer"
+            onClick={markAsHandled}
+            className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
-            {showGuide ? "Sembunyikan Petunjuk" : "Lihat Petunjuk"}
+            Nanti Saja
           </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDismiss}
-              className="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors cursor-pointer"
-            >
-              Nanti Saja
-            </button>
-            <button
-              type="button"
-              onClick={handleInstallClick}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>
-                {deferredPrompt
-                  ? "Pasang Sekarang"
-                  : showGuide
-                    ? "Tutup"
-                    : "Pasang Sekarang"}
-              </span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleInstallClick}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Pasang Sekarang</span>
+          </button>
         </div>
       </div>
     </div>
