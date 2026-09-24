@@ -6,7 +6,6 @@ import TabInfoProfil from "./profile/TabInfoProfil";
 import TabUbahPassword from "./profile/TabUbahPassword";
 import TabKeamanan2FA from "./profile/TabKeamanan2FA";
 import TabTandaTangan from "./profile/TabTandaTangan";
-import SelfFaceEnrollModal from "./SelfFaceEnrollModal";
 
 export default function ProfileModal({
   isOpen,
@@ -23,7 +22,6 @@ export default function ProfileModal({
   } = useAuth();
 
   const [activeTab, setActiveTab] = useState(initialTab);
-  const [showFaceEnrollModal, setShowFaceEnrollModal] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -112,7 +110,6 @@ export default function ProfileModal({
               isSiswa={isSiswa}
               updateFotoProfil={updateFotoProfil}
               deleteFotoProfil={deleteFotoProfil}
-              onOpenFaceEnroll={() => setShowFaceEnrollModal(true)}
             />
           )}
 
@@ -131,18 +128,6 @@ export default function ProfileModal({
           )}
         </div>
       </div>
-
-      {/* Modal Rekam Wajah Mandiri untuk Siswa */}
-      {showFaceEnrollModal && (
-        <SelfFaceEnrollModal
-          isOpen={showFaceEnrollModal}
-          onClose={() => setShowFaceEnrollModal(false)}
-          onSuccess={() => {
-            setShowFaceEnrollModal(false);
-            updateUserProfile({ terdaftar: true });
-          }}
-        />
-      )}
     </div>
   );
 

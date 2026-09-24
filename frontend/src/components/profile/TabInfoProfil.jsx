@@ -22,7 +22,6 @@ export default function TabInfoProfil({
   isSiswa,
   updateFotoProfil,
   deleteFotoProfil,
-  onOpenFaceEnroll,
 }) {
   const { updateName } = useAuth();
   const fileInputRef = useRef(null);
@@ -370,13 +369,14 @@ export default function TabInfoProfil({
           </div>
 
           {!user?.terdaftar && (
-            <button
-              type="button"
-              onClick={onOpenFaceEnroll}
-              className="w-full py-2.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" /> Daftarkan Wajah Sekarang
-            </button>
+            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-800">
+              <span className="font-bold block text-slate-800 mb-0.5">
+                Perekaman Biometrik Resmi
+              </span>
+              <p className="text-[11px] text-slate-600 leading-relaxed">
+                Perekaman dan pembaruan biometrik wajah siswa dilakukan secara resmi oleh Administrator / Operator Sekolah. Silakan lapor ke bagian Tata Usaha jika data wajah Anda belum terdaftar.
+              </p>
+            </div>
           )}
         </div>
       )}

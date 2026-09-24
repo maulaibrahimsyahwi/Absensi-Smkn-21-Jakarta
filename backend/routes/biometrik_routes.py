@@ -47,25 +47,11 @@ def register_face():
     current_user = getattr(request, 'current_user', {})
     is_admin = is_admin_caller() or current_user.get('role') == 'admin'
 
-    # Proteksi Anti-Hijacking / IDOR: Siswa hanya boleh merekam sampel wajah untuk akunnya sendiri
+    # Perekaman biometrik wajah siswa HANYA DAPAT DILAKUKAN OLEH ADMINISTRATOR SEKOLAH
     if not is_admin:
-        if current_user.get('role') == 'siswa' and str(current_user.get('user_id')) != str(siswa_id):
-            return jsonify({
-                "success": False,
-                "message": "Akses ditolak: Anda hanya dapat merekam biometrik wajah untuk akun Anda sendiri."
-            }), 403
-        elif current_user.get('role') != 'siswa':
-            return jsonify({
-                "success": False,
-                "message": "Akses ditolak: Hanya Administrator yang berwenang merekam/mereset biometrik siswa."
-            }), 403
-
-    # Proteksi Anti-Penyalahgunaan: Jika wajah sudah pernah terdaftar, tolak timpa data
-    # KECUALI jika pemanggil terverifikasi sebagai Administrator
-    if siswa.face_encoding and not is_admin:
         return jsonify({
             "success": False,
-            "message": "Data wajah Anda sudah terdaftar dan terkunci demi keamanan presensi sekolah. Untuk merekam ulang foto wajah, silakan hubungi Admin Sekolah untuk melakukan reset biometrik."
+            "message": "Akses ditolak: Perekaman dan pembaruan biometrik wajah siswa hanya dapat dilakukan secara resmi oleh Administrator Sekolah melalui menu Pendaftaran Siswa."
         }), 403
         
     try:

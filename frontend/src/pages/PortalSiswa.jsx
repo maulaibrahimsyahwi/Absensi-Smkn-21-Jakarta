@@ -31,7 +31,6 @@ import {
   getKategoriPelanggaran,
 } from "../data/pelanggaranData";
 import SignaturePadModal from "../components/SignaturePadModal";
-import SelfFaceEnrollModal from "../components/SelfFaceEnrollModal";
 import ChangePasswordModal from "../components/ChangePasswordModal";
 import ProfileModal from "../components/ProfileModal";
 import NotificationDropdown from "../components/NotificationDropdown";
@@ -44,7 +43,6 @@ export default function PortalSiswa() {
   const [loading, setLoading] = useState(true);
   const [personalData, setPersonalData] = useState(null);
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
-  const [isFaceModalOpen, setIsFaceModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalTab, setProfileModalTab] = useState("profil");
@@ -405,9 +403,7 @@ export default function PortalSiswa() {
               }
             }}
             onActionClick={(notif) => {
-              if (notif.action_url === "modal_face") {
-                setIsFaceModalOpen(true);
-              } else if (notif.action_url) {
+              if (notif.action_url && notif.action_url !== "modal_face") {
                 navigate(notif.action_url);
               }
             }}
@@ -816,18 +812,6 @@ export default function PortalSiswa() {
         title={`Tanda Tangan Digital ${user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}`}
         subtitle={`Goreskan tanda tangan digital ${user?.nama || (user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa")} untuk verifikasi perizinan.`}
         initialSignature={user?.tanda_tangan}
-      />
-
-      {/* Self Face Biometric Enroll Modal */}
-      <SelfFaceEnrollModal
-        isOpen={isFaceModalOpen}
-        onClose={() => setIsFaceModalOpen(false)}
-        user={user}
-        onSuccess={(msg) => {
-          updateUserProfile({ terdaftar: true });
-          setNotification({ type: "success", message: msg });
-          fetchPersonalData();
-        }}
       />
 
       {/* Change Password Modal */}

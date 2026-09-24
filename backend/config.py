@@ -37,9 +37,11 @@ else:
 
 
 # Kunci Rahasia Keamanan Aplikasi & JWT Signing
-_DEFAULT_FALLBACK_KEY = os.environ.get('SECRET_KEY') or "smkn21_absensi_jwt_secret_key_prod_2026_secured_e8f9b2c3d4a1"
-SECRET_KEY = _DEFAULT_FALLBACK_KEY
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
+_raw_sec = (os.environ.get('SECRET_KEY') or '').strip()
+SECRET_KEY = _raw_sec if _raw_sec else "smkn21_absensi_jwt_secret_key_prod_2026_secured_e8f9b2c3d4a1"
+
+_raw_jwt = (os.environ.get('JWT_SECRET_KEY') or '').strip()
+JWT_SECRET_KEY = _raw_jwt if _raw_jwt else SECRET_KEY
 
 # Konfigurasi Keamanan CORS (Hanya izinkan frontend dev server)
 CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]

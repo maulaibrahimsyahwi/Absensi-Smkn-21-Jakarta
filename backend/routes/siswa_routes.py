@@ -129,7 +129,7 @@ def batch_import_siswa():
         db.session.commit()
         invalidate_face_cache()
 
-        msg = f"Import selesai: {added_count} siswa baru ditambahkan, {updated_count} diperbarui."
+        msg = f"Import selesai {added_count} siswa baru ditambahkan, {updated_count} diperbarui"
         if skipped_count > 0:
             msg += f" {skipped_count} siswa dilewati."
 
@@ -590,11 +590,11 @@ def get_siswa_notifikasi():
                 "type": "akun",
                 "category": "warning",
                 "judul": "Data Wajah Belum Terdaftar",
-                "pesan": "Wajah Anda belum terdaftar di sistem presensi. Silakan daftarkan sampel wajah mandiri agar dapat melakukan presensi kehadiran harian.",
+                "pesan": "Wajah Anda belum terdaftar di sistem presensi. Silakan hubungi Administrator atau Tata Usaha Sekolah untuk perekaman biometrik wajah resmi.",
                 "waktu": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                 "badge": "Biometrik",
-                "action_url": "modal_face",
-                "action_label": "Daftar Wajah"
+                "action_url": None,
+                "action_label": None
             })
     except Exception:
         pass
