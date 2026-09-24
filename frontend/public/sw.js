@@ -12,6 +12,8 @@ const CORE_ASSETS = [
   "/manifest.json",
   "/favicon.svg",
   "/icons.svg",
+  "/icon-192.png",
+  "/icon-512.png",
 ];
 
 // 1. Install Event: Pra-cache aset inti
@@ -49,6 +51,17 @@ self.addEventListener("fetch", (event) => {
 
   // Jangan cache request non-GET atau request WebSocket/Chrome Extension
   if (request.method !== "GET" || url.protocol.startsWith("chrome-extension")) {
+    return;
+  }
+
+  // Lewati semua request internal Vite / HMR / Dev modules agar tidak mengganggu hot reload
+  if (
+    url.pathname.startsWith("/@") ||
+    url.pathname.startsWith("/node_modules/") ||
+    url.pathname.includes(".vite") ||
+    url.pathname.endsWith(".jsx") ||
+    url.searchParams.has("t")
+  ) {
     return;
   }
 

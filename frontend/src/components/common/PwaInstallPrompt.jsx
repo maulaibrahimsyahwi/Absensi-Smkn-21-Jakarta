@@ -43,9 +43,7 @@ export default function PwaInstallPrompt() {
 
     // 2. Cek apakah pengguna sudah pernah menutup prompt baru-baru ini
     try {
-      const dismissedTime = localStorage.getItem(
-        "smkn21_pwa_prompt_dismissed",
-      );
+      const dismissedTime = localStorage.getItem("smkn21_pwa_prompt_dismissed");
       if (
         dismissedTime &&
         Date.now() - Number(dismissedTime) < 12 * 60 * 60 * 1000
@@ -79,10 +77,7 @@ export default function PwaInstallPrompt() {
       setShowGuide(true);
     };
 
-    window.addEventListener(
-      "beforeinstallprompt",
-      handleBeforeInstallPrompt,
-    );
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("show-pwa-prompt", handleManualTrigger);
 
     return () => {
@@ -162,7 +157,9 @@ export default function PwaInstallPrompt() {
           <div className="bg-slate-800/90 rounded-xl p-3 text-xs text-slate-200 border border-slate-700/60 flex flex-col gap-2 animate-in fade-in duration-200">
             <div className="flex items-center gap-1.5 text-indigo-400 font-semibold text-[11px] uppercase tracking-wider">
               <HelpCircle className="w-3.5 h-3.5" />
-              <span>Cara Pasang di {isIos ? "iPhone (Safari)" : "Android (Chrome)"}:</span>
+              <span>
+                Cara Pasang di {isIos ? "iPhone (Safari)" : "Android (Chrome)"}:
+              </span>
             </div>
 
             {isIos ? (
@@ -170,13 +167,24 @@ export default function PwaInstallPrompt() {
                 <li className="flex items-start gap-2">
                   <span className="font-bold text-indigo-400">1.</span>
                   <span>
-                    Ketuk tombol <strong>Bagikan (Share <Share2 className="w-3.5 h-3.5 inline text-sky-400" />)</strong> di bilah bawah Safari.
+                    Ketuk tombol{" "}
+                    <strong>
+                      Bagikan (Share{" "}
+                      <Share2 className="w-3.5 h-3.5 inline text-sky-400" />)
+                    </strong>{" "}
+                    di bilah bawah Safari.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="font-bold text-indigo-400">2.</span>
                   <span>
-                    Gulir ke bawah dan pilih <strong>'Add to Home Screen' (<PlusSquare className="w-3.5 h-3.5 inline text-slate-300" />)</strong>.
+                    Gulir ke bawah dan pilih{" "}
+                    <strong>
+                      'Add to Home Screen' (
+                      <PlusSquare className="w-3.5 h-3.5 inline text-slate-300" />
+                      )
+                    </strong>
+                    .
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -191,13 +199,20 @@ export default function PwaInstallPrompt() {
                 <li className="flex items-start gap-2">
                   <span className="font-bold text-indigo-400">1.</span>
                   <span>
-                    Ketuk ikon <strong>titik tiga (<MoreVertical className="w-3.5 h-3.5 inline text-slate-300" />)</strong> di pojok kanan atas browser Chrome.
+                    Ketuk ikon{" "}
+                    <strong>
+                      titik tiga (
+                      <MoreVertical className="w-3.5 h-3.5 inline text-slate-300" />
+                      )
+                    </strong>{" "}
+                    di pojok kanan atas browser Chrome.
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="font-bold text-indigo-400">2.</span>
                   <span>
-                    Pilih menu <strong>'Tambahkan ke Layar Utama'</strong> (atau <strong>'Instal aplikasi'</strong>).
+                    Pilih menu <strong>'Tambahkan ke Layar Utama'</strong> (atau{" "}
+                    <strong>'Instal aplikasi'</strong>).
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
@@ -240,7 +255,13 @@ export default function PwaInstallPrompt() {
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>{deferredPrompt ? "Pasang Sekarang" : showGuide ? "Tutup" : "Pasang Sekarang"}</span>
+              <span>
+                {deferredPrompt
+                  ? "Pasang Sekarang"
+                  : showGuide
+                    ? "Tutup"
+                    : "Pasang Sekarang"}
+              </span>
             </button>
           </div>
         </div>
