@@ -57,6 +57,99 @@ def add_siswa():
         return jsonify({"success": False, "message": str(e)}), 400
 
 
+@siswa_bp.route('/api/siswa/batch_import', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def batch_import_siswa():
+    """
+    Endpoint untuk mengimpor data siswa massal dari file Excel / Dapodik.
+    Mendukung penambahan siswa baru dan pembaruan data jika NIS sudah terdaftar.
+    """
+    data = request.json or {}
+    students = data.get('students', [])
+    update_existing = bool(data.get('update_existing', True))
+
+    if not isinstance(students, list) or len(students) == 0:
+        return jsonify({"success": False, "message": "Daftar siswa untuk diimpor tidak boleh kosong."}), 400
+
+    if len(students) > 2000:
+        return jsonify({"success": False, "message": "Batas maksimal import per sesi adalah 2.000 siswa."}), 400
+
+    existing_siswa_map = {s.nis: s for s in Siswa.query.all()}
+    added_count = 0
+    updated_count = 0
+    skipped_count = 0
+    errors = []
+
+    try:
+        for idx, item in enumerate(students):
+            nis = str(item.get('nis', '')).strip()
+            nama = str(item.get('nama', '')).strip()
+            kelas = str(item.get('kelas', '')).strip().upper()
+            jk_raw = str(item.get('jenis_kelamin', '')).strip().lower()
+
+            if not nis or not nama:
+                errors.append(f"Baris {idx + 1}: NIS atau Nama tidak boleh kosong.")
+                continue
+
+            # Validasi format dasar
+            valid, err_msg = validate_siswa_input(nis, nama, kelas if kelas else "UMUM")
+            if not valid:
+                errors.append(f"Baris {idx + 1} (NIS {nis}): {err_msg}")
+                continue
+
+            # Normalisasi gender
+            if jk_raw in ['p', 'perempuan', 'wanita', 'f', 'siswi']:
+                jenis_kelamin = 'Perempuan'
+            else:
+                jenis_kelamin = 'Laki-laki'
+
+            if nis in existing_siswa_map:
+                if update_existing:
+                    target = existing_siswa_map[nis]
+                    target.nama = nama
+                    if kelas:
+                        target.kelas = kelas
+                    target.jenis_kelamin = jenis_kelamin
+                    updated_count += 1
+                else:
+                    skipped_count += 1
+            else:
+                baru = Siswa(
+                    nis=nis,
+                    nama=nama,
+                    kelas=kelas if kelas else "UMUM",
+                    status="Aktif",
+                    jenis_kelamin=jenis_kelamin
+                )
+                db.session.add(baru)
+                existing_siswa_map[nis] = baru
+                added_count += 1
+
+        db.session.commit()
+        invalidate_face_cache()
+
+        msg = f"Import selesai: {added_count} siswa baru ditambahkan, {updated_count} diperbarui."
+        if skipped_count > 0:
+            msg += f" {skipped_count} siswa dilewati."
+
+        return jsonify({
+            "success": True,
+            "message": msg,
+            "stats": {
+                "total": len(students),
+                "added": added_count,
+                "updated": updated_count,
+                "skipped": skipped_count,
+                "failed": len(errors)
+            },
+            "errors": errors[:50]
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Terjadi kesalahan saat menyimpan data: {str(e)}"}), 500
+
+
 @siswa_bp.route('/api/siswa/<int:id>', methods=['PUT'])
 @token_required
 @role_required(['admin'])

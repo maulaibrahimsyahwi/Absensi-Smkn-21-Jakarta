@@ -239,7 +239,9 @@ export default function TabInfoProfil({
               {user?.nama || "Belum diatur"}
             </p>
             <p className="text-[11px] text-slate-400">
-              * Nama lengkap siswa dikunci sesuai data pokok pendidikan (Dapodik). Jika terdapat kekeliruan penulisan nama, silakan lapor ke bagian Tata Usaha / Admin sekolah.
+              * Nama lengkap siswa dikunci sesuai data pokok pendidikan
+              (Dapodik). Jika terdapat kekeliruan penulisan nama, silakan lapor
+              ke bagian Tata Usaha / Admin sekolah.
             </p>
           </div>
         ) : editingName ? (

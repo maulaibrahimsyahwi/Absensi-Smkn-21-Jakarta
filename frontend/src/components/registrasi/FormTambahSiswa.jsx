@@ -132,13 +132,42 @@ export default function FormTambahSiswa({
                 * NIS minimal 4 digit angka
               </p>
             )}
-            {!reRecordingSiswa &&
-              siswaList.some((s) => s.nis === nis) &&
-              nis.length >= 4 && (
-                <p className="text-[11px] text-rose-600 mt-1 font-medium">
-                  * NIS {nis} sudah terdaftar di database
-                </p>
-              )}
+            {!reRecordingSiswa && nis.length >= 3 && (() => {
+              const matched = siswaList.find((s) => s.nis === nis);
+              if (!matched) return null;
+              const hasNoBiometric = !matched.terdaftar;
+              return (
+                <div
+                  className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 animate-in fade-in ${
+                    hasNoBiometric
+                      ? "bg-blue-50/80 border-blue-200 text-blue-800"
+                      : "bg-amber-50/80 border-amber-200 text-amber-800"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <p className="font-bold truncate">{matched.nama}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {matched.kelas} &bull;{" "}
+                      {hasNoBiometric
+                        ? "Terdaftar Dapodik (Belum ada foto wajah)"
+                        : "Sudah terdaftar di sistem"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNama(matched.nama);
+                      setKelas(matched.kelas);
+                      if (setJenisKelamin)
+                        setJenisKelamin(matched.jenis_kelamin || "Laki-laki");
+                    }}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+                  >
+                    Isi Otomatis
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           <div>
@@ -173,7 +202,7 @@ export default function FormTambahSiswa({
                 Jenis Kelamin & Panggilan
               </label>
               <span className="text-[10px] text-slate-400 font-medium">
-                Pilih Siswa (Cowo) / Siswi (Cewe)
+                Pilih Gender
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -187,7 +216,7 @@ export default function FormTambahSiswa({
                     : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <span>👦 Laki-laki (Siswa)</span>
+                <span>Laki-laki (Siswa)</span>
               </button>
               <button
                 type="button"
@@ -199,11 +228,12 @@ export default function FormTambahSiswa({
                     : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                 }`}
               >
-                <span>👧 Perempuan (Siswi)</span>
+                <span>Perempuan (Siswi)</span>
               </button>
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              * Menentukan sapaan resmi di sistem (Siswa untuk laki-laki, Siswi untuk perempuan).
+              * Menentukan sapaan resmi di sistem (Siswa untuk laki-laki, Siswi
+              untuk perempuan).
             </p>
           </div>
 

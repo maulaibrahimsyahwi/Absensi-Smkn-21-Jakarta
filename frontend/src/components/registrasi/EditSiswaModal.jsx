@@ -152,7 +152,7 @@ export default function EditSiswaModal({
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <span>👦 Laki-laki (Siswa)</span>
+                  <span>Laki-laki (Siswa)</span>
                 </button>
                 <button
                   type="button"
@@ -168,7 +168,7 @@ export default function EditSiswaModal({
                       : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <span>👧 Perempuan (Siswi)</span>
+                  <span>Perempuan (Siswi)</span>
                 </button>
               </div>
             </div>

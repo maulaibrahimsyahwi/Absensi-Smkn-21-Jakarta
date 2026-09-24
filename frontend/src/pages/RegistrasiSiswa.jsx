@@ -8,6 +8,8 @@ import {
   AlertCircle,
   Info,
   Camera,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react";
 import api from "../services/api";
 
@@ -17,7 +19,9 @@ import EditSiswaModal from "../components/registrasi/EditSiswaModal";
 import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
 import LuluskanModal from "../components/registrasi/LuluskanModal";
 import ResetSiswaModals from "../components/registrasi/ResetSiswaModals";
+import ModalImportDapodik from "../components/registrasi/ModalImportDapodik";
 import ToastNotification from "../components/common/ToastNotification";
+import { downloadDapodikTemplate } from "../utils/dapodikUtils";
 
 import {
   JURUSAN_SMKN21,
@@ -50,6 +54,7 @@ export default function RegistrasiSiswa() {
 
   // Multi-select & Bulk Action state
   const [selectedIds, setSelectedIds] = useState([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [luluskanModalData, setLuluskanModalData] = useState({
     isOpen: false,
     type: "tingkat_xii",
@@ -207,13 +212,26 @@ export default function RegistrasiSiswa() {
       let targetId = reRecordingSiswa ? reRecordingSiswa.id : null;
 
       if (!targetId) {
-        const createRes = await api.post("/siswa", {
-          nis: cleanNis,
-          nama: cleanNama,
-          kelas: cleanKelas,
-          jenis_kelamin: jenisKelamin || "Laki-laki",
-        });
-        targetId = createRes.data.id;
+        // Cek apakah siswa sudah ada di database (misal: baru diimport dari Dapodik)
+        const existingStudent = siswaList.find((s) => String(s.nis).trim() === cleanNis);
+        if (existingStudent) {
+          targetId = existingStudent.id;
+          // Perbarui data jika terdapat penyesuaian
+          await api.put(`/siswa/${targetId}`, {
+            nis: cleanNis,
+            nama: cleanNama,
+            kelas: cleanKelas,
+            jenis_kelamin: jenisKelamin || "Laki-laki",
+          });
+        } else {
+          const createRes = await api.post("/siswa", {
+            nis: cleanNis,
+            nama: cleanNama,
+            kelas: cleanKelas,
+            jenis_kelamin: jenisKelamin || "Laki-laki",
+          });
+          targetId = createRes.data.id;
+        }
       }
 
       const faceRes = await api.post("/register_face", {
@@ -640,18 +658,40 @@ export default function RegistrasiSiswa() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => fetchSiswa(true)}
-          disabled={loadingList}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs self-start sm:self-auto cursor-pointer disabled:opacity-50"
-          title="Segarkan data siswa"
-        >
-          <RefreshCw
-            className={`w-4 h-4 ${loadingList ? "animate-spin text-blue-600" : ""}`}
-          />
-          <span>{loadingList ? "Menyegarkan..." : "Refresh"}</span>
-        </button>
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={downloadDapodikTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+            title="Unduh template format Excel Dapodik"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Unduh Template</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white shadow-2xs transition-all cursor-pointer"
+            title="Import data siswa dari Excel / CSV Dapodik"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Dapodik</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fetchSiswa(true)}
+            disabled={loadingList}
+            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Segarkan data siswa"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${loadingList ? "animate-spin text-blue-600" : ""}`}
+            />
+            <span>{loadingList ? "Menyegarkan..." : "Refresh"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Grid: Form Left, Student Table Right */}
@@ -833,6 +873,16 @@ export default function RegistrasiSiswa() {
           </div>,
           document.body,
         )}
+
+      {/* Modal Import Data Siswa Dapodik */}
+      <ModalImportDapodik
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          fetchSiswa(true);
+        }}
+        existingSiswaList={siswaList}
+      />
     </div>
   );
 }
