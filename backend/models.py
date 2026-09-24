@@ -42,6 +42,7 @@ class Siswa(db.Model):
     nis = db.Column(db.String(20), unique=True, nullable=False, index=True)
     nama = db.Column(db.String(100), nullable=False)
     kelas = db.Column(db.String(50), nullable=False)
+    jenis_kelamin = db.Column(db.String(20), default="Laki-laki", nullable=False)  # "Laki-laki" (Siswa) atau "Perempuan" (Siswi)
     status = db.Column(db.String(20), default="Aktif", nullable=False, index=True)  # "Aktif" atau "Alumni"
     tanggal_lulus = db.Column(db.DateTime, nullable=True)  # Waktu siswa diluluskan menjadi Alumni
     password = db.Column(db.String(100), nullable=True)  # Password login siswa (default: NIS)
@@ -84,6 +85,7 @@ class Siswa(db.Model):
             "nis": self.nis,
             "nama": self.nama,
             "kelas": self.kelas,
+            "jenis_kelamin": getattr(self, 'jenis_kelamin', 'Laki-laki') or "Laki-laki",
             "status": self.status or "Aktif",
             "tanggal_lulus": self.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if self.tanggal_lulus else None,
             "is_alumni_expired": self.is_alumni_expired(),

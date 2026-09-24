@@ -132,6 +132,47 @@ export default function EditSiswaModal({
               />
             </div>
 
+            {/* Jenis Kelamin & Panggilan */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Jenis Kelamin & Panggilan Sistem
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingSiswa({
+                      ...editingSiswa,
+                      jenis_kelamin: "Laki-laki",
+                    })
+                  }
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    (editingSiswa.jenis_kelamin || "Laki-laki") === "Laki-laki"
+                      ? "bg-blue-50 border-blue-500 text-blue-700 shadow-xs ring-2 ring-blue-500/20"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>👦 Laki-laki (Siswa)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditingSiswa({
+                      ...editingSiswa,
+                      jenis_kelamin: "Perempuan",
+                    })
+                  }
+                  className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    editingSiswa.jenis_kelamin === "Perempuan"
+                      ? "bg-pink-50 border-pink-500 text-pink-700 shadow-xs ring-2 ring-pink-500/20"
+                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  <span>👧 Perempuan (Siswi)</span>
+                </button>
+              </div>
+            </div>
+
             {/* Kelas & Jurusan */}
             <div>
               <div className="flex items-center justify-between mb-1.5">

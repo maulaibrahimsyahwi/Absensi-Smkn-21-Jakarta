@@ -82,6 +82,7 @@ def login():
                 "nama": siswa.nama,
                 "nis": siswa.nis,
                 "kelas": siswa.kelas,
+                "jenis_kelamin": getattr(siswa, 'jenis_kelamin', 'Laki-laki') or 'Laki-laki',
                 "status": siswa.status or "Aktif",
                 "tanggal_lulus": siswa.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if siswa.tanggal_lulus else None,
                 "tanda_tangan": siswa.tanda_tangan,
@@ -287,16 +288,10 @@ def update_profile():
 
     try:
         if current_role == 'siswa':
-            siswa = Siswa.query.get(current_user_id)
-            if not siswa:
-                return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
-            siswa.nama = nama
-            db.session.commit()
             return jsonify({
-                "success": True,
-                "message": f"Nama lengkap berhasil diperbarui menjadi {nama}.",
-                "nama": siswa.nama
-            })
+                "success": False,
+                "message": "Akses ditolak: Siswa tidak diizinkan mengubah nama lengkap atau gelar secara mandiri. Silakan hubungi bagian Tata Usaha / Admin sekolah jika terdapat kekeliruan data."
+            }), 403
         else:
             user = User.query.get(current_user_id)
             if not user:

@@ -32,6 +32,8 @@ def migrate_table_columns(conn):
         conn.execute(db.text("ALTER TABLE siswa ADD COLUMN foto_profil TEXT"))
     if 'tanggal_lulus' not in col_siswa:
         conn.execute(db.text("ALTER TABLE siswa ADD COLUMN tanggal_lulus DATETIME"))
+    if 'jenis_kelamin' not in col_siswa:
+        conn.execute(db.text("ALTER TABLE siswa ADD COLUMN jenis_kelamin VARCHAR(20) DEFAULT 'Laki-laki'"))
     conn.commit()
 
     # Isi tanggal_lulus otomatis untuk alumni lama yang belum memiliki tanggal

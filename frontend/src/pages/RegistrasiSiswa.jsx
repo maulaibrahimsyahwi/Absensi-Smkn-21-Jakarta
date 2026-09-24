@@ -62,6 +62,7 @@ export default function RegistrasiSiswa() {
   const [nis, setNis] = useState("");
   const [nama, setNama] = useState("");
   const [kelas, setKelas] = useState("X PPLG 1");
+  const [jenisKelamin, setJenisKelamin] = useState("Laki-laki");
   const [samples, setSamples] = useState([]); // Array of base64 images (1 to 3)
   const [currentSlot, setCurrentSlot] = useState(0); // 0, 1, or 2
   const [notification, setNotification] = useState(null);
@@ -210,6 +211,7 @@ export default function RegistrasiSiswa() {
           nis: cleanNis,
           nama: cleanNama,
           kelas: cleanKelas,
+          jenis_kelamin: jenisKelamin || "Laki-laki",
         });
         targetId = createRes.data.id;
       }
@@ -219,16 +221,18 @@ export default function RegistrasiSiswa() {
         images: samples,
       });
 
+      const genderLabel = jenisKelamin === "Perempuan" ? "Siswi" : "Siswa";
       setNotification({
         type: "success",
         message:
           faceRes.data.message ||
-          `Berhasil mendaftarkan ${cleanNama} (${cleanKelas}) dengan ${samples.length} sampel wajah!`,
+          `Berhasil mendaftarkan ${genderLabel} ${cleanNama} (${cleanKelas}) dengan ${samples.length} sampel wajah!`,
       });
 
       // Reset form
       setNis("");
       setNama("");
+      setJenisKelamin("Laki-laki");
       setSamples([]);
       setCurrentSlot(0);
       setReRecordingSiswa(null);
@@ -464,6 +468,7 @@ export default function RegistrasiSiswa() {
         nama: cleanNama,
         kelas: cleanKelas,
         status: editingSiswa.status || "Aktif",
+        jenis_kelamin: editingSiswa.jenis_kelamin || "Laki-laki",
       });
       setNotification({
         type: "success",
@@ -627,10 +632,10 @@ export default function RegistrasiSiswa() {
           </button>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Pendaftaran Siswa SMKN 21
+              Pendaftaran Siswa / Siswi SMKN 21
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
-              Mengelola data dan biometrik wajah siswa SMKN 21 Jakarta
+              Mengelola data dan biometrik wajah siswa/siswi SMKN 21 Jakarta
             </p>
           </div>
         </div>
@@ -660,6 +665,8 @@ export default function RegistrasiSiswa() {
             setNama={setNama}
             kelas={kelas}
             setKelas={setKelas}
+            jenisKelamin={jenisKelamin}
+            setJenisKelamin={setJenisKelamin}
             samples={samples}
             currentSlot={currentSlot}
             setCurrentSlot={setCurrentSlot}
@@ -673,6 +680,7 @@ export default function RegistrasiSiswa() {
               setReRecordingSiswa(null);
               setNis("");
               setNama("");
+              setJenisKelamin("Laki-laki");
               setSamples([]);
             }}
             siswaList={siswaList}
@@ -707,6 +715,7 @@ export default function RegistrasiSiswa() {
             setNis(s.nis);
             setNama(s.nama);
             setKelas(s.kelas);
+            setJenisKelamin(s.jenis_kelamin || "Laki-laki");
             setSamples([]);
             setCurrentSlot(0);
             window.scrollTo({ top: 0, behavior: "smooth" });
@@ -811,6 +820,7 @@ export default function RegistrasiSiswa() {
                     setReRecordingSiswa(null);
                     setNis("");
                     setNama("");
+                    setJenisKelamin("Laki-laki");
                     setSamples([]);
                     navigate("/portal-admin");
                   }}

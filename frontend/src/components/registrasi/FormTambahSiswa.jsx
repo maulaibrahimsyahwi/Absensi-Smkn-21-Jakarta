@@ -22,6 +22,8 @@ export default function FormTambahSiswa({
   setNama,
   kelas,
   setKelas,
+  jenisKelamin = "Laki-laki",
+  setJenisKelamin,
   samples,
   currentSlot,
   setCurrentSlot,
@@ -162,6 +164,47 @@ export default function FormTambahSiswa({
                 * Nama minimal 3 karakter huruf
               </p>
             )}
+          </div>
+
+          {/* Pilihan Gender / Jenis Kelamin */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700">
+                Jenis Kelamin & Panggilan
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Pilih Siswa (Cowo) / Siswi (Cewe)
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setJenisKelamin && setJenisKelamin("Laki-laki")}
+                disabled={reRecordingSiswa !== null}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  jenisKelamin === "Laki-laki"
+                    ? "bg-blue-50 border-blue-500 text-blue-700 shadow-xs ring-2 ring-blue-500/20"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>👦 Laki-laki (Siswa)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setJenisKelamin && setJenisKelamin("Perempuan")}
+                disabled={reRecordingSiswa !== null}
+                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                  jenisKelamin === "Perempuan"
+                    ? "bg-pink-50 border-pink-500 text-pink-700 shadow-xs ring-2 ring-pink-500/20"
+                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <span>👧 Perempuan (Siswi)</span>
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              * Menentukan sapaan resmi di sistem (Siswa untuk laki-laki, Siswi untuk perempuan).
+            </p>
           </div>
 
           <div>

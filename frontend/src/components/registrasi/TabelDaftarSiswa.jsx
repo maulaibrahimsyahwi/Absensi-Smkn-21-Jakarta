@@ -267,6 +267,16 @@ export default function TabelDaftarSiswa({
                         {s.nama}
                       </p>
 
+                      <span
+                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          s.jenis_kelamin === "Perempuan"
+                            ? "bg-pink-50 text-pink-700 border border-pink-200"
+                            : "bg-sky-50 text-sky-700 border border-sky-200"
+                        }`}
+                      >
+                        {s.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
+                      </span>
+
                       {isAlumni ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                           <span>Alumni</span>
@@ -491,7 +501,18 @@ export default function TabelDaftarSiswa({
                       />
                     </td>
                     <td className="p-3">
-                      <p className="font-bold text-slate-900">{s.nama}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-slate-900">{s.nama}</p>
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            s.jenis_kelamin === "Perempuan"
+                              ? "bg-pink-50 text-pink-700 border border-pink-200"
+                              : "bg-sky-50 text-sky-700 border border-sky-200"
+                          }`}
+                        >
+                          {s.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-400 font-mono">
                         NIS {s.nis}
                       </p>

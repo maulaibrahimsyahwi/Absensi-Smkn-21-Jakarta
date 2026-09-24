@@ -89,16 +89,19 @@ export default function PortalSiswa() {
         const newRekap = resRekap.value.data;
         const newPengajuan = newRekap.riwayat_pengajuan || [];
 
-        // Sinkronisasi status siswa ke AuthContext & localStorage jika ada perubahan dari admin
+        // Sinkronisasi status & profil siswa ke AuthContext & localStorage jika ada perubahan dari admin
         if (
           newRekap.siswa &&
-          newRekap.siswa.status &&
-          newRekap.siswa.status !== user?.status
+          (newRekap.siswa.status !== user?.status ||
+           newRekap.siswa.jenis_kelamin !== user?.jenis_kelamin ||
+           newRekap.siswa.kelas !== user?.kelas ||
+           newRekap.siswa.nama !== user?.nama)
         ) {
           updateUserProfile({
             status: newRekap.siswa.status,
             kelas: newRekap.siswa.kelas,
             nama: newRekap.siswa.nama,
+            jenis_kelamin: newRekap.siswa.jenis_kelamin,
           });
         }
 
@@ -417,7 +420,7 @@ export default function PortalSiswa() {
             {user?.foto_profil ? (
               <img
                 src={user.foto_profil}
-                alt={user?.nama || "Foto Profil Siswa"}
+                alt={user?.nama || (user?.jenis_kelamin === "Perempuan" ? "Foto Profil Siswi" : "Foto Profil Siswa")}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -432,12 +435,12 @@ export default function PortalSiswa() {
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-[11px] font-bold tracking-wide uppercase text-blue-200">
-                  <span>Siswa Aktif SMKN 21</span>
+                  <span>{user?.jenis_kelamin === "Perempuan" ? "Siswi Aktif SMKN 21" : "Siswa Aktif SMKN 21"}</span>
                 </span>
               )}
             </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-              {user?.nama || "Nama Siswa"}
+              {user?.nama || (user?.jenis_kelamin === "Perempuan" ? "Nama Siswi" : "Nama Siswa")}
             </h1>
             <p className="text-xs sm:text-sm text-blue-200 font-medium">
               NIS {user?.nis} &bull; Kelas {user?.kelas}
@@ -491,7 +494,7 @@ export default function PortalSiswa() {
                 </span>
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
-                Setiap siswa SMKN 21 wajib memiliki tanda tangan digital sebelum
+                Setiap {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"} SMKN 21 wajib memiliki tanda tangan digital sebelum
                 mengajukan surat izin/sakit atau keperluan presensi resmi
               </p>
             </div>
@@ -766,7 +769,7 @@ export default function PortalSiswa() {
                   {item.tanda_tangan_siswa && (
                     <div className="flex-shrink-0 text-right">
                       <span className="text-[10px] text-slate-400 block mb-0.5">
-                        TTD Pengakuan Siswa
+                        TTD Pengakuan {user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
                       </span>
                       <div className="h-10 w-20 border border-slate-200 bg-white rounded-lg p-0.5 flex items-center justify-center shadow-2xs">
                         <img
@@ -794,8 +797,8 @@ export default function PortalSiswa() {
         isOpen={isSignModalOpen}
         onClose={() => setIsSignModalOpen(false)}
         onSave={handleSaveSignature}
-        title="Tanda Tangan Digital Siswa"
-        subtitle={`Goreskan tanda tangan digital ${user?.nama || "Siswa"} untuk verifikasi perizinan.`}
+        title={`Tanda Tangan Digital ${user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}`}
+        subtitle={`Goreskan tanda tangan digital ${user?.nama || (user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa")} untuk verifikasi perizinan.`}
         initialSignature={user?.tanda_tangan}
       />
 

@@ -43,10 +43,15 @@ def add_siswa():
         if status_input not in ["Aktif", "Alumni"]:
             status_input = "Aktif"
 
-        baru = Siswa(nis=nis, nama=nama, kelas=kelas, status=status_input)
+        jenis_kelamin_input = str(data.get('jenis_kelamin', 'Laki-laki')).strip()
+        if jenis_kelamin_input not in ["Laki-laki", "Perempuan"]:
+            jenis_kelamin_input = "Laki-laki"
+
+        baru = Siswa(nis=nis, nama=nama, kelas=kelas, status=status_input, jenis_kelamin=jenis_kelamin_input)
         db.session.add(baru)
         db.session.commit()
-        return jsonify({"success": True, "message": f"Siswa {nama} ({kelas}) berhasil didaftarkan", "id": baru.id})
+        gender_label = "Siswi" if jenis_kelamin_input == "Perempuan" else "Siswa"
+        return jsonify({"success": True, "message": f"{gender_label} {nama} ({kelas}) berhasil didaftarkan", "id": baru.id})
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 400
@@ -64,6 +69,7 @@ def update_siswa(id):
     nama = str(data.get('nama', siswa.nama)).strip()
     kelas = str(data.get('kelas', siswa.kelas)).strip().upper()
     status_input = data.get('status')
+    jenis_kelamin_input = data.get('jenis_kelamin')
 
     valid, err_msg = validate_siswa_input(nis, nama, kelas)
     if not valid:
@@ -77,6 +83,8 @@ def update_siswa(id):
             siswa.nis = nis
         siswa.nama = nama
         siswa.kelas = kelas
+        if jenis_kelamin_input and jenis_kelamin_input in ["Laki-laki", "Perempuan"]:
+            siswa.jenis_kelamin = jenis_kelamin_input
         if status_input and status_input in ["Aktif", "Alumni"]:
             siswa.status = status_input
             if status_input == "Alumni" and not siswa.tanggal_lulus:

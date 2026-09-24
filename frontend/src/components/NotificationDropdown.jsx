@@ -698,7 +698,7 @@ export default function NotificationDropdown({
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Semua
+                Semua{" "}
                 {unreadCount > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
                     {visibleList.length}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Download, X, Smartphone, Share2 } from "lucide-react";
+import { Download, X, Smartphone } from "lucide-react";
 
 /**
  * Komponen PWA Install Prompt Minimalis.
@@ -16,8 +16,7 @@ export default function PwaInstallPrompt() {
       ? window.navigator.userAgent.toLowerCase()
       : "";
   const isIos = /iphone|ipad|ipod/.test(userAgent);
-  const isMobile =
-    isIos || /android|mobile|tablet/i.test(userAgent);
+  const isMobile = isIos || /android|mobile|tablet/i.test(userAgent);
 
   useEffect(() => {
     // 1. Cek apakah aplikasi sudah berjalan dalam mode standalone (sudah terpasang di HP)
@@ -50,10 +49,7 @@ export default function PwaInstallPrompt() {
       setIsVisible(true);
     };
 
-    window.addEventListener(
-      "beforeinstallprompt",
-      handleBeforeInstallPrompt,
-    );
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
 
     // 4. Di perangkat mobile, tampilkan banner pertama kali setelah jeda 1.5 detik
     let timer;
@@ -113,13 +109,10 @@ export default function PwaInstallPrompt() {
                 <h4 className="font-bold text-sm text-slate-100">
                   Pasang Aplikasi SMKN 21
                 </h4>
-                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/20 text-indigo-300 rounded border border-indigo-500/30">
-                  PWA
-                </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5 leading-snug">
                 Pasang ke layar utama HP untuk akses presensi cepat dan layar
-                penuh.
+                penuh
               </p>
             </div>
           </div>
@@ -132,17 +125,6 @@ export default function PwaInstallPrompt() {
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Khusus Safari iOS: Petunjuk singkat satu baris */}
-        {isIos && (
-          <div className="bg-slate-800/80 rounded-xl px-3 py-2 text-[11px] text-slate-300 flex items-center gap-2 border border-slate-700/50">
-            <Share2 className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-            <span>
-              Ketuk tombol <strong>Bagikan ⎋</strong> lalu pilih{" "}
-              <strong>'Add to Home Screen' (+)</strong>.
-            </span>
-          </div>
-        )}
 
         {/* Tombol Aksi */}
         <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">

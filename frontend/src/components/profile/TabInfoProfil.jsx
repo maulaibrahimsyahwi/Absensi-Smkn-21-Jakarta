@@ -12,6 +12,7 @@ import {
   Edit3,
   Check,
   X,
+  Lock,
 } from "lucide-react";
 import { validateAndCompressImage } from "../../utils/imageUtils";
 import { useAuth } from "../../context/AuthContext";
@@ -203,27 +204,45 @@ export default function TabInfoProfil({
         <div className="flex items-center justify-between">
           <div>
             <h5 className="text-xs sm:text-sm font-bold text-slate-800">
-              Nama Lengkap & Gelar
+              {isSiswa ? "Nama Lengkap Siswa" : "Nama Lengkap & Gelar"}
             </h5>
             <p className="text-[11px] text-slate-500">
-              Nama resmi yang ditampilkan di portal dan dokumen sekolah
+              {isSiswa
+                ? "Nama resmi siswa sesuai Dapodik sekolah (Terkunci)"
+                : "Nama resmi yang ditampilkan di portal dan dokumen sekolah"}
             </p>
           </div>
-          {!editingName && (
-            <button
-              type="button"
-              onClick={() => {
-                setNameValue(user?.nama || "");
-                setEditingName(true);
-              }}
-              className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
-            >
-              <span>Ubah Nama</span>
-            </button>
+          {isSiswa ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-xl">
+              <Lock className="w-3 h-3 text-slate-400" />
+              <span>Terkunci</span>
+            </span>
+          ) : (
+            !editingName && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNameValue(user?.nama || "");
+                  setEditingName(true);
+                }}
+                className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1.5 rounded-xl transition cursor-pointer"
+              >
+                <span>Ubah</span>
+              </button>
+            )
           )}
         </div>
 
-        {editingName ? (
+        {isSiswa ? (
+          <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
+            <p className="text-xs sm:text-sm font-semibold text-slate-800">
+              {user?.nama || "Belum diatur"}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              * Nama lengkap siswa dikunci sesuai data pokok pendidikan (Dapodik). Jika terdapat kekeliruan penulisan nama, silakan lapor ke bagian Tata Usaha / Admin sekolah.
+            </p>
+          </div>
+        ) : editingName ? (
           <form onSubmit={handleSaveName} className="space-y-3 pt-1">
             <input
               type="text"
@@ -264,6 +283,33 @@ export default function TabInfoProfil({
           </div>
         )}
       </div>
+
+      {/* Kartu Informasi Gender / Jenis Kelamin Khusus Siswa */}
+      {isSiswa && (
+        <div className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between">
+          <div>
+            <h5 className="text-xs sm:text-sm font-bold text-slate-800">
+              Jenis Kelamin & Panggilan
+            </h5>
+            <p className="text-[11px] text-slate-500">
+              Kategori sapaan resmi di seluruh sistem absensi sekolah
+            </p>
+          </div>
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border ${
+              user?.jenis_kelamin === "Perempuan"
+                ? "bg-pink-50 text-pink-700 border-pink-200"
+                : "bg-sky-50 text-sky-700 border-sky-200"
+            }`}
+          >
+            <span>
+              {user?.jenis_kelamin === "Perempuan"
+                ? "Perempuan (Siswi)"
+                : "Laki-laki (Siswa)"}
+            </span>
+          </span>
+        </div>
+      )}
 
       {/* Konfirmasi Hapus Foto */}
       {showDeleteConfirm && (

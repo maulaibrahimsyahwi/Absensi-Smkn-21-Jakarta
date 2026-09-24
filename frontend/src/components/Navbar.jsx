@@ -92,7 +92,10 @@ export default function Navbar() {
       navItems = [
         {
           to: "/portal-siswa",
-          label: "Portal Siswa",
+          label:
+            user?.jenis_kelamin === "Perempuan"
+              ? "Portal Siswi"
+              : "Portal Siswa",
           shortLabel: "Beranda",
           desc: "Rekap, tanda tangan & riwayat pribadi",
           icon: <GraduationCap className="w-4 h-4" />,
@@ -331,36 +334,6 @@ export default function Navbar() {
           ref={mobileMenuRef}
           className="lg:hidden absolute right-3 sm:right-6 top-16 w-[calc(100vw-1.5rem)] max-w-sm rounded-2xl bg-white border border-slate-200 shadow-2xl p-3 sm:p-4 space-y-2 z-50 animate-in fade-in zoom-in-95 duration-150"
         >
-          {/* Header Info Akun */}
-          <div className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-600">
-            <div className="min-w-0 pr-2">
-              <p className="font-bold text-slate-800 truncate">
-                {isAuthenticated
-                  ? user?.nama || user?.username
-                  : "SMKN 21 Jakarta"}
-              </p>
-            </div>
-            <span
-              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border uppercase flex-shrink-0 ${
-                isAdmin
-                  ? "bg-purple-50 text-purple-700 border-purple-200"
-                  : isPiket
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : user?.status === "Alumni"
-                      ? "bg-amber-50 text-amber-800 border-amber-200"
-                      : "bg-blue-50 text-blue-700 border-blue-200"
-              }`}
-            >
-              {isAdmin
-                ? "Admin"
-                : isPiket
-                  ? "Guru Piket"
-                  : user?.status === "Alumni"
-                    ? "Alumni"
-                    : "Siswa"}
-            </span>
-          </div>
-
           {/* Menu Items List */}
           <div className="max-h-[60vh] overflow-y-auto divide-y divide-slate-100 space-y-1">
             {navItems.map((item) => (
