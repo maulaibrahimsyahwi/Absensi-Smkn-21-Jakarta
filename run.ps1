@@ -44,22 +44,19 @@ if (-not $localIp) {
 }
 
 # 3. Jalankan Backend
-$windowStyle = if ($Visible) { "Normal" } else { "Hidden" }
 Write-Host "[1/2] Menjalankan Backend ($backendScript)..." -ForegroundColor Green
-$backendCommand = "Set-Location '$PSScriptRoot\backend'; .\venv\Scripts\python.exe $backendScript"
 if ($Visible) {
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Backend SMKN 21 ($backendScript)'; $backendCommand"
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Backend SMKN 21 ($backendScript)'; Set-Location '$PSScriptRoot\backend'; .\venv\Scripts\python.exe $backendScript"
 } else {
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden", "-Command", $backendCommand -WindowStyle Hidden
+    Start-Process -FilePath "$PSScriptRoot\backend\venv\Scripts\python.exe" -ArgumentList "$backendScript" -WorkingDirectory "$PSScriptRoot\backend" -WindowStyle Hidden
 }
 
 # 4. Jalankan Frontend
 Write-Host "[2/2] Menjalankan Frontend (Vite)..." -ForegroundColor Green
-$frontendCommand = "Set-Location '$PSScriptRoot\frontend'; npm run dev"
 if ($Visible) {
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Frontend SMKN 21 (Vite)'; $frontendCommand"
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Frontend SMKN 21 (Vite)'; Set-Location '$PSScriptRoot\frontend'; npm run dev"
 } else {
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-WindowStyle Hidden", "-Command", $frontendCommand -WindowStyle Hidden
+    Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev" -WorkingDirectory "$PSScriptRoot\frontend" -WindowStyle Hidden
 }
 
 # 5. Informasi URL Akses

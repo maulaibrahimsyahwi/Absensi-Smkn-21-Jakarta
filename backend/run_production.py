@@ -6,6 +6,14 @@ Mendukung multi-threading, connection pooling, dan anti-freeze.
 import os
 import sys
 
+# Konfigurasi encoding stdout/stderr agar aman dari crash charmap/cp1252 di Windows
+if sys.platform.startswith("win") and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # Tambahkan direktori backend ke sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
@@ -17,12 +25,12 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     threads = int(os.environ.get("THREADS", 16))
 
-    print(f"================================================================")
-    print(f"🚀 MENJALANKAN SERVER PRODUKSI SMKN 21 (Waitress WSGI)")
-    print(f"📍 Host: {host} | Port: {port}")
-    print(f"⚡ Worker Threads: {threads} (Parallel Request Processing)")
-    print(f"🔒 Concurrency Ready: Multi-Core OpenCV + WAL Mode SQLite")
-    print(f"================================================================")
+    print("================================================================")
+    print(f"[START] MENJALANKAN SERVER PRODUKSI SMKN 21 (Waitress WSGI)")
+    print(f"[CONFIG] Host: {host} | Port: {port}")
+    print(f"[WORKER] Threads: {threads} (Parallel Request Processing)")
+    print(f"[READY] Concurrency Ready: Multi-Core OpenCV + WAL Mode SQLite")
+    print("================================================================")
 
     serve(
         app,
@@ -33,4 +41,3 @@ if __name__ == "__main__":
         channel_timeout=30,
         cleanup_interval=30
     )
-
