@@ -199,26 +199,19 @@ export default function TabInfoProfil({
         </div>
       </div>
 
-      {/* Form Ubah Nama Lengkap Pengguna */}
-      <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h5 className="text-xs sm:text-sm font-bold text-slate-800">
-              {isSiswa ? "Nama Lengkap Siswa" : "Nama Lengkap & Gelar"}
-            </h5>
-            <p className="text-[11px] text-slate-500">
-              {isSiswa
-                ? "Nama resmi siswa sesuai Dapodik sekolah (Terkunci)"
-                : "Nama resmi yang ditampilkan di portal dan dokumen sekolah"}
-            </p>
-          </div>
-          {isSiswa ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-xl">
-              <Lock className="w-3 h-3 text-slate-400" />
-              <span>Terkunci</span>
-            </span>
-          ) : (
-            !editingName && (
+      {/* Form Ubah Nama Lengkap Pengguna (Khusus Guru Piket & Admin) */}
+      {!isSiswa && (
+        <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h5 className="text-xs sm:text-sm font-bold text-slate-800">
+                Nama Lengkap & Gelar
+              </h5>
+              <p className="text-[11px] text-slate-500">
+                Nama resmi yang ditampilkan di portal dan dokumen sekolah
+              </p>
+            </div>
+            {!editingName && (
               <button
                 type="button"
                 onClick={() => {
@@ -229,87 +222,49 @@ export default function TabInfoProfil({
               >
                 <span>Ubah</span>
               </button>
-            )
-          )}
-        </div>
-
-        {isSiswa ? (
-          <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-1">
-            <p className="text-xs sm:text-sm font-semibold text-slate-800">
-              {user?.nama || "Belum diatur"}
-            </p>
-            <p className="text-[11px] text-slate-400">
-              * Nama lengkap siswa dikunci sesuai data pokok pendidikan
-              (Dapodik). Jika terdapat kekeliruan penulisan nama, silakan lapor
-              ke bagian Tata Usaha / Admin sekolah.
-            </p>
+            )}
           </div>
-        ) : editingName ? (
-          <form onSubmit={handleSaveName} className="space-y-3 pt-1">
-            <input
-              type="text"
-              value={nameValue}
-              onChange={(e) => setNameValue(e.target.value)}
-              placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd"
-              className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-              required
-            />
-            <div className="flex items-center gap-2">
-              <button
-                type="submit"
-                disabled={nameLoading}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer disabled:opacity-50"
-              >
-                {nameLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <span>Simpan</span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingName(false)}
-                disabled={nameLoading}
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition cursor-pointer"
-              >
-                Batal
-              </button>
+
+          {editingName ? (
+            <form onSubmit={handleSaveName} className="space-y-3 pt-1">
+              <input
+                type="text"
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                placeholder="Contoh: Drs. H. Ahmad Fauzi, M.Pd"
+                className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+                required
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={nameLoading}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition cursor-pointer disabled:opacity-50"
+                >
+                  {nameLoading ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>Simpan</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingName(false)}
+                  disabled={nameLoading}
+                  className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
+              <p className="text-xs sm:text-sm font-semibold text-slate-800">
+                {user?.nama || "Belum diatur"}
+              </p>
             </div>
-          </form>
-        ) : (
-          <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl">
-            <p className="text-xs sm:text-sm font-semibold text-slate-800">
-              {user?.nama || "Belum diatur"}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Kartu Informasi Gender / Jenis Kelamin Khusus Siswa */}
-      {isSiswa && (
-        <div className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between">
-          <div>
-            <h5 className="text-xs sm:text-sm font-bold text-slate-800">
-              Jenis Kelamin & Panggilan
-            </h5>
-            <p className="text-[11px] text-slate-500">
-              Kategori sapaan resmi di seluruh sistem absensi sekolah
-            </p>
-          </div>
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border ${
-              user?.jenis_kelamin === "Perempuan"
-                ? "bg-pink-50 text-pink-700 border-pink-200"
-                : "bg-sky-50 text-sky-700 border-sky-200"
-            }`}
-          >
-            <span>
-              {user?.jenis_kelamin === "Perempuan"
-                ? "Perempuan (Siswi)"
-                : "Laki-laki (Siswa)"}
-            </span>
-          </span>
+          )}
         </div>
       )}
 
@@ -373,7 +328,9 @@ export default function TabInfoProfil({
             <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start gap-2">
               <Lock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <span>
-                Perekaman biometrik wajah siswa dilakukan secara resmi oleh <strong>Administrator / Petugas Tata Usaha SMKN 21</strong> di Ruang Tata Usaha.
+                Perekaman biometrik wajah siswa dilakukan secara resmi oleh{" "}
+                <strong>Administrator / Petugas Tata Usaha SMKN 21</strong> di
+                Ruang Tata Usaha.
               </span>
             </div>
           )}
