@@ -11,7 +11,6 @@ from config import (
     SQLALCHEMY_ENGINE_OPTIONS,
     CORS_ORIGINS,
     JWT_SECRET_KEY,
-    SECRET_KEY,
 )
 from models import db, User
 
@@ -36,8 +35,6 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
-app.config['SECRET_KEY'] = SECRET_KEY
-app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
 
 # Event Listener Concurrency SQLite: Mengaktifkan mode WAL dan 30s busy timeout per koneksi worker
 @event.listens_for(Engine, "connect")

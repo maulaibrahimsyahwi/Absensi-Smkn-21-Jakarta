@@ -71,7 +71,7 @@ export default function PortalSiswa() {
       setNotification({
         type: "error",
         message:
-          "Fitur operasional terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+          "Fitur terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
       });
       window.history.replaceState({}, document.title);
     }
@@ -421,7 +421,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah.",
+                    "Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah",
                 });
               } else if (notif.action_url) {
                 navigate(notif.action_url);
@@ -522,12 +522,13 @@ export default function PortalSiswa() {
                 <h3 className="text-base font-bold text-slate-900">
                   Biometrik Wajah Belum Terdaftar
                 </h3>
-                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 uppercase">
-                  Fitur Terkunci
-                </span>
               </div>
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                Akun {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"} Anda belum memiliki data biometrik wajah resmi. Seluruh fitur operasional aplikasi (Presensi Harian, Presensi Perpustakaan, Pengajuan Izin/Sakit, dan Pelanggaran) terkunci sampai wajah Anda didaftarkan secara resmi oleh <strong>Administrator / Petugas Tata Usaha SMKN 21 Jakarta</strong>.
+                Akun {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"}{" "}
+                Anda belum memiliki data biometrik wajah resmi. Seluruh fitur
+                aplikasi terkunci sampai wajah Anda didaftarkan secara resmi
+                oleh{" "}
+                <strong>Administrator / Petugas Tata Usaha SMKN 21 Jakarta</strong>
               </p>
             </div>
           </div>
@@ -589,7 +590,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Presensi Harian terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                    "Presensi Harian terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -610,9 +611,6 @@ export default function PortalSiswa() {
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
-                Terkunci
-              </span>
             </div>
           )}
 
@@ -638,7 +636,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Pengajuan Izin/Sakit terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                    "Pengajuan Izin/Sakit terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -659,9 +657,6 @@ export default function PortalSiswa() {
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
-                Terkunci
-              </span>
             </div>
           )}
 
@@ -689,7 +684,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Buku Pelanggaran terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                    "Buku Pelanggaran terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -710,9 +705,6 @@ export default function PortalSiswa() {
                   </p>
                 </div>
               </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
-                Terkunci
-              </span>
             </div>
           )}
         </div>
