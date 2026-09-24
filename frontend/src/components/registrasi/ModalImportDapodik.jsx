@@ -11,7 +11,10 @@ import {
   Check,
   Info,
 } from "lucide-react";
-import { downloadDapodikTemplate, parseDapodikFile } from "../../utils/dapodikUtils";
+import {
+  downloadDapodikTemplate,
+  parseDapodikFile,
+} from "../../utils/dapodikUtils";
 import api from "../../services/api";
 
 export default function ModalImportDapodik({
@@ -36,9 +39,13 @@ export default function ModalImportDapodik({
     if (!selectedFile) return;
 
     const validExtensions = [".xlsx", ".xls", ".csv"];
-    const ext = selectedFile.name.substring(selectedFile.name.lastIndexOf(".")).toLowerCase();
+    const ext = selectedFile.name
+      .substring(selectedFile.name.lastIndexOf("."))
+      .toLowerCase();
     if (!validExtensions.includes(ext)) {
-      setParseError("Format file tidak didukung. Mohon gunakan file .xlsx, .xls, atau .csv.");
+      setParseError(
+        "Format file tidak didukung. Mohon gunakan file .xlsx, .xls, atau .csv.",
+      );
       return;
     }
 
@@ -110,7 +117,8 @@ export default function ModalImportDapodik({
       }
     } catch (err) {
       setParseError(
-        err.response?.data?.message || "Terjadi kesalahan jaringan saat proses import.",
+        err.response?.data?.message ||
+          "Terjadi kesalahan jaringan saat proses import.",
       );
     } finally {
       setImporting(false);
@@ -118,9 +126,13 @@ export default function ModalImportDapodik({
   };
 
   // Hitung jumlah siswa yang NIS-nya sudah ada di database saat ini
-  const existingNisSet = new Set(existingSiswaList.map((s) => String(s.nis).trim()));
+  const existingNisSet = new Set(
+    existingSiswaList.map((s) => String(s.nis).trim()),
+  );
   const conflictCount = parsedData
-    ? parsedData.validRows.filter((r) => existingNisSet.has(String(r.nis).trim())).length
+    ? parsedData.validRows.filter((r) =>
+        existingNisSet.has(String(r.nis).trim()),
+      ).length
     : 0;
 
   return (
@@ -137,7 +149,8 @@ export default function ModalImportDapodik({
                 Import Data Siswa Dapodik
               </h3>
               <p className="text-xs text-slate-500">
-                Unggah file Excel atau CSV berstandar Dapodik untuk pendaftaran massal
+                Unggah file Excel atau CSV berstandar Dapodik untuk pendaftaran
+                massal
               </p>
             </div>
           </div>
@@ -157,9 +170,12 @@ export default function ModalImportDapodik({
             <div className="flex items-start sm:items-center gap-2.5">
               <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
               <div className="text-xs">
-                <span className="font-semibold text-slate-800">Belum memiliki format? </span>
+                <span className="font-semibold text-slate-800">
+                  Belum memiliki format?{" "}
+                </span>
                 <span className="text-slate-500">
-                  Gunakan template standar dengan kolom NIS, Nama Lengkap, Kelas, dan Jenis Kelamin.
+                  Gunakan template standar dengan kolom NIS, Nama Lengkap,
+                  Kelas, dan Jenis Kelamin.
                 </span>
               </div>
             </div>
@@ -204,7 +220,8 @@ export default function ModalImportDapodik({
                 Pilih atau Tarik File Spreadsheet ke Sini
               </h4>
               <p className="text-xs text-slate-500 max-w-sm mx-auto mb-3">
-                Mendukung format Microsoft Excel (.xlsx, .xls) dan CSV (.csv) hasil ekspor Dapodik
+                Mendukung format Microsoft Excel (.xlsx, .xls) dan CSV (.csv)
+                hasil ekspor Dapodik
               </p>
               <span className="inline-block px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors">
                 Jelajahi File
@@ -247,7 +264,7 @@ export default function ModalImportDapodik({
                       {file?.name}
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      {(file?.size ? (file.size / 1024).toFixed(1) : 0)} KB &bull;{" "}
+                      {file?.size ? (file.size / 1024).toFixed(1) : 0} KB &bull;{" "}
                       {parsedData.totalDetected} baris terdeteksi
                     </p>
                   </div>
@@ -264,19 +281,25 @@ export default function ModalImportDapodik({
               {/* Status Ringkasan */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                 <div className="p-3 bg-emerald-50/60 border border-emerald-200/80 rounded-xl">
-                  <span className="text-slate-500 text-[11px] block">Siap Diimpor</span>
+                  <span className="text-slate-500 text-[11px] block">
+                    Siap Diimpor
+                  </span>
                   <span className="text-base font-extrabold text-emerald-700">
                     {parsedData.validRows.length} Siswa
                   </span>
                 </div>
                 <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl">
-                  <span className="text-slate-500 text-[11px] block">Sudah Ada di Sistem</span>
+                  <span className="text-slate-500 text-[11px] block">
+                    Sudah Ada di Sistem
+                  </span>
                   <span className="text-base font-extrabold text-amber-700">
                     {conflictCount} Siswa
                   </span>
                 </div>
                 <div className="p-3 bg-slate-100/80 border border-slate-200 rounded-xl col-span-2 sm:col-span-1">
-                  <span className="text-slate-500 text-[11px] block">Baris Dilewati/Error</span>
+                  <span className="text-slate-500 text-[11px] block">
+                    Baris Dilewati/Error
+                  </span>
                   <span className="text-base font-extrabold text-slate-700">
                     {parsedData.invalidRows.length} Baris
                   </span>
@@ -294,10 +317,13 @@ export default function ModalImportDapodik({
                   />
                   <div className="text-xs">
                     <span className="font-bold text-slate-800">
-                      Perbarui data jika NIS sudah terdaftar ({conflictCount} siswa)
+                      Perbarui data jika NIS sudah terdaftar ({conflictCount}{" "}
+                      siswa)
                     </span>
                     <p className="text-slate-500 text-[11px] mt-0.5">
-                      Jika dicentang, nama, kelas, dan jenis kelamin siswa yang sudah ada akan disinkronkan dengan data file terbaru tanpa menghapus riwayat presensi.
+                      Jika dicentang, nama, kelas, dan jenis kelamin siswa yang
+                      sudah ada akan disinkronkan dengan data file terbaru tanpa
+                      menghapus riwayat presensi.
                     </p>
                   </div>
                 </label>
@@ -310,7 +336,8 @@ export default function ModalImportDapodik({
                     Pratinjau Data (Contoh Baris Teratas)
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    Menampilkan {Math.min(parsedData.validRows.length, 6)} dari {parsedData.validRows.length} data
+                    Menampilkan {Math.min(parsedData.validRows.length, 6)} dari{" "}
+                    {parsedData.validRows.length} data
                   </span>
                 </div>
                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
@@ -327,9 +354,15 @@ export default function ModalImportDapodik({
                       <tbody className="divide-y divide-slate-100">
                         {parsedData.validRows.slice(0, 6).map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50/70">
-                            <td className="px-3 py-2 font-mono text-slate-700">{item.nis}</td>
-                            <td className="px-3 py-2 font-medium text-slate-800">{item.nama}</td>
-                            <td className="px-3 py-2 font-bold text-slate-700">{item.kelas}</td>
+                            <td className="px-3 py-2 font-mono text-slate-700">
+                              {item.nis}
+                            </td>
+                            <td className="px-3 py-2 font-medium text-slate-800">
+                              {item.nama}
+                            </td>
+                            <td className="px-3 py-2 font-bold text-slate-700">
+                              {item.kelas}
+                            </td>
                             <td className="px-3 py-2">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -338,7 +371,9 @@ export default function ModalImportDapodik({
                                     : "bg-blue-50 text-blue-700 border border-blue-200"
                                 }`}
                               >
-                                {item.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
+                                {item.jenis_kelamin === "Perempuan"
+                                  ? "Siswi"
+                                  : "Siswa"}
                               </span>
                             </td>
                           </tr>
@@ -369,19 +404,25 @@ export default function ModalImportDapodik({
               {/* Rincian Angka */}
               <div className="grid grid-cols-3 gap-2 pt-2 max-w-sm mx-auto text-xs">
                 <div className="p-2.5 bg-white border border-emerald-200/80 rounded-xl">
-                  <span className="text-slate-400 text-[10px] block">Ditambahkan</span>
+                  <span className="text-slate-400 text-[10px] block">
+                    Ditambahkan
+                  </span>
                   <span className="text-base font-extrabold text-emerald-700">
                     {importResult.stats?.added || 0}
                   </span>
                 </div>
                 <div className="p-2.5 bg-white border border-emerald-200/80 rounded-xl">
-                  <span className="text-slate-400 text-[10px] block">Diperbarui</span>
+                  <span className="text-slate-400 text-[10px] block">
+                    Diperbarui
+                  </span>
                   <span className="text-base font-extrabold text-blue-700">
                     {importResult.stats?.updated || 0}
                   </span>
                 </div>
                 <div className="p-2.5 bg-white border border-emerald-200/80 rounded-xl">
-                  <span className="text-slate-400 text-[10px] block">Dilewati</span>
+                  <span className="text-slate-400 text-[10px] block">
+                    Dilewati
+                  </span>
                   <span className="text-base font-extrabold text-slate-600">
                     {importResult.stats?.skipped || 0}
                   </span>
@@ -414,7 +455,9 @@ export default function ModalImportDapodik({
               <button
                 type="button"
                 onClick={handleImportSubmit}
-                disabled={!parsedData || parsedData.validRows.length === 0 || importing}
+                disabled={
+                  !parsedData || parsedData.validRows.length === 0 || importing
+                }
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
               >
                 {importing ? (
@@ -424,9 +467,11 @@ export default function ModalImportDapodik({
                   </>
                 ) : (
                   <>
-                    <Check className="w-4 h-4" />
                     <span>
-                      Import {parsedData ? `${parsedData.validRows.length} Siswa` : "Data"}
+                      Import{" "}
+                      {parsedData
+                        ? `${parsedData.validRows.length} Siswa`
+                        : "Data"}
                     </span>
                   </>
                 )}

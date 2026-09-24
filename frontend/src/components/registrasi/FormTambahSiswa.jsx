@@ -132,42 +132,44 @@ export default function FormTambahSiswa({
                 * NIS minimal 4 digit angka
               </p>
             )}
-            {!reRecordingSiswa && nis.length >= 3 && (() => {
-              const matched = siswaList.find((s) => s.nis === nis);
-              if (!matched) return null;
-              const hasNoBiometric = !matched.terdaftar;
-              return (
-                <div
-                  className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 animate-in fade-in ${
-                    hasNoBiometric
-                      ? "bg-blue-50/80 border-blue-200 text-blue-800"
-                      : "bg-amber-50/80 border-amber-200 text-amber-800"
-                  }`}
-                >
-                  <div className="overflow-hidden">
-                    <p className="font-bold truncate">{matched.nama}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {matched.kelas} &bull;{" "}
-                      {hasNoBiometric
-                        ? "Terdaftar Dapodik (Belum ada foto wajah)"
-                        : "Sudah terdaftar di sistem"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNama(matched.nama);
-                      setKelas(matched.kelas);
-                      if (setJenisKelamin)
-                        setJenisKelamin(matched.jenis_kelamin || "Laki-laki");
-                    }}
-                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+            {!reRecordingSiswa &&
+              nis.length >= 3 &&
+              (() => {
+                const matched = siswaList.find((s) => s.nis === nis);
+                if (!matched) return null;
+                const hasNoBiometric = !matched.terdaftar;
+                return (
+                  <div
+                    className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 animate-in fade-in ${
+                      hasNoBiometric
+                        ? "bg-blue-50/80 border-blue-200 text-blue-800"
+                        : "bg-amber-50/80 border-amber-200 text-amber-800"
+                    }`}
                   >
-                    Isi Otomatis
-                  </button>
-                </div>
-              );
-            })()}
+                    <div className="overflow-hidden">
+                      <p className="font-bold truncate">{matched.nama}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {matched.kelas} &bull;{" "}
+                        {hasNoBiometric
+                          ? "Terdaftar Dapodik (Belum ada foto wajah)"
+                          : "Sudah terdaftar di sistem"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNama(matched.nama);
+                        setKelas(matched.kelas);
+                        if (setJenisKelamin)
+                          setJenisKelamin(matched.jenis_kelamin || "Laki-laki");
+                      }}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-[11px] font-bold rounded-lg shadow-2xs transition-all cursor-pointer shrink-0"
+                    >
+                      Isi Otomatis
+                    </button>
+                  </div>
+                );
+              })()}
           </div>
 
           <div>
@@ -199,7 +201,7 @@ export default function FormTambahSiswa({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-xs font-bold text-slate-700">
-                Jenis Kelamin & Panggilan
+                Jenis Kelamin
               </label>
               <span className="text-[10px] text-slate-400 font-medium">
                 Pilih Gender

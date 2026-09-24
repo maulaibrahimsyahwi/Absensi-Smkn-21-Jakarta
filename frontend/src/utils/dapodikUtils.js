@@ -63,7 +63,9 @@ export function parseDapodikFile(file) {
         const rawJson = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
         if (!rawJson || rawJson.length === 0) {
-          throw new Error("Lembar kerja kosong atau tidak memiliki baris data.");
+          throw new Error(
+            "Lembar kerja kosong atau tidak memiliki baris data.",
+          );
         }
 
         const validRows = [];
@@ -77,7 +79,10 @@ export function parseDapodikFile(file) {
           let rawJk = "";
 
           for (const key of Object.keys(row)) {
-            const cleanKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            const cleanKey = key
+              .trim()
+              .toLowerCase()
+              .replace(/[^a-z0-9]/g, "");
             const val = String(row[key] ?? "").trim();
 
             if (

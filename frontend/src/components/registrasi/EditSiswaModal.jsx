@@ -135,7 +135,7 @@ export default function EditSiswaModal({
             {/* Jenis Kelamin & Panggilan */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Jenis Kelamin & Panggilan Sistem
+                Jenis Kelamin
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <button

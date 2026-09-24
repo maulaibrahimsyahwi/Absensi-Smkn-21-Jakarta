@@ -37,8 +37,7 @@ else:
 
 
 # Kunci Rahasia Keamanan Aplikasi & JWT Signing
-# Jika tidak ada di .env, generate random token dinamis untuk sesi berjalan
-_DEFAULT_FALLBACK_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+_DEFAULT_FALLBACK_KEY = os.environ.get('SECRET_KEY') or "smkn21_absensi_jwt_secret_key_prod_2026_secured_e8f9b2c3d4a1"
 SECRET_KEY = _DEFAULT_FALLBACK_KEY
 JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
 

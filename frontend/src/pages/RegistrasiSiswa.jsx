@@ -213,7 +213,9 @@ export default function RegistrasiSiswa() {
 
       if (!targetId) {
         // Cek apakah siswa sudah ada di database (misal: baru diimport dari Dapodik)
-        const existingStudent = siswaList.find((s) => String(s.nis).trim() === cleanNis);
+        const existingStudent = siswaList.find(
+          (s) => String(s.nis).trim() === cleanNis,
+        );
         if (existingStudent) {
           targetId = existingStudent.id;
           // Perbarui data jika terdapat penyesuaian
