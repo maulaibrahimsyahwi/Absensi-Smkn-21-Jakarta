@@ -64,7 +64,7 @@ export default function PwaInstallPrompt() {
     return () => {
       window.removeEventListener(
         "beforeinstallprompt",
-        handleBeforeInstallPrompt
+        handleBeforeInstallPrompt,
       );
     };
   }, []);
@@ -86,7 +86,7 @@ export default function PwaInstallPrompt() {
     try {
       localStorage.setItem(
         "smkn21_pwa_prompt_dismissed",
-        Date.now().toString()
+        Date.now().toString(),
       );
     } catch {
       // ignore
