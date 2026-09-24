@@ -22,6 +22,7 @@ export default function TabInfoProfil({
   isSiswa,
   updateFotoProfil,
   deleteFotoProfil,
+  onOpenFaceEnroll,
 }) {
   const { updateName } = useAuth();
   const fileInputRef = useRef(null);
@@ -369,13 +370,11 @@ export default function TabInfoProfil({
           </div>
 
           {!user?.terdaftar && (
-            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-800">
-              <span className="font-bold block text-slate-800 mb-0.5">
-                Perekaman Biometrik Resmi
+            <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-start gap-2">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <span>
+                Perekaman biometrik wajah siswa dilakukan secara resmi oleh <strong>Administrator / Petugas Tata Usaha SMKN 21</strong> di Ruang Tata Usaha.
               </span>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                Perekaman dan pembaruan biometrik wajah siswa dilakukan secara resmi oleh Administrator / Operator Sekolah. Silakan lapor ke bagian Tata Usaha jika data wajah Anda belum terdaftar.
-              </p>
             </div>
           )}
         </div>

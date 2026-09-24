@@ -99,6 +99,34 @@ def verify_harian():
     simulated = data.get('simulated', False)
     expected_siswa_id = data.get('expected_siswa_id')
 
+    current_user = getattr(request, 'current_user', {})
+    user_role = current_user.get('role')
+    user_id = current_user.get('user_id')
+
+    target_siswa = None
+    is_pjj_user = False
+    pjj_label_user = ""
+
+    # Jika pemanggil adalah siswa, kunci expected_siswa_id ke ID miliknya sendiri (mencegah impersonasi)
+    if user_role == 'siswa':
+        expected_siswa_id = user_id
+        target_siswa = Siswa.query.get(expected_siswa_id)
+        if not target_siswa:
+            return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
+        if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
+            return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
+        if not target_siswa.face_encoding:
+            return jsonify({
+                "success": False,
+                "message": f"Presensi ditolak: Akun Anda ({target_siswa.nama}) belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
+            }), 403
+    elif expected_siswa_id:
+        try:
+            expected_siswa_id = int(expected_siswa_id)
+            target_siswa = Siswa.query.get(expected_siswa_id)
+        except (ValueError, TypeError):
+            expected_siswa_id = None
+
     # Validasi Hari Operasional: Presensi hanya aktif pada hari sekolah (Senin s/d Jumat)
     now_dt = datetime.now()
     if not is_school_day(now_dt):
@@ -116,19 +144,6 @@ def verify_harian():
             "message": f"Presensi harian belum dibuka! Presensi kehadiran SMKN 21 dibuka mulai pukul 05:00 WIB (05:00 - 06:30 WIB Tepat Waktu, lewat 06:30 WIB Terlambat). Jam saat ini: {now_dt.strftime('%H:%M:%S')} WIB."
         }), 400
 
-    current_user = getattr(request, 'current_user', {})
-    user_role = current_user.get('role')
-    user_id = current_user.get('user_id')
-
-    # Jika pemanggil adalah siswa, kunci expected_siswa_id ke ID miliknya sendiri (mencegah impersonasi)
-    if user_role == 'siswa':
-        expected_siswa_id = user_id
-    elif expected_siswa_id:
-        try:
-            expected_siswa_id = int(expected_siswa_id)
-        except (ValueError, TypeError):
-            expected_siswa_id = None
-
     # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
     if is_mock:
         return jsonify({
@@ -142,15 +157,7 @@ def verify_harian():
         }), 403
 
     # Periksa target siswa dan status PJJ jika presensi mandiri
-    target_siswa = None
-    is_pjj_user = False
-    pjj_label_user = ""
-    if expected_siswa_id:
-        target_siswa = Siswa.query.get(expected_siswa_id)
-        if not target_siswa:
-            return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
-        if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
-            return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
+    if target_siswa:
         is_pjj_user, pjj_label_user = is_kelas_pjj(target_siswa.kelas, now_dt)
 
         # Validasi Liveness Token (Anti-Tembak API / Celah Foto Statis)
@@ -212,8 +219,8 @@ def verify_harian():
         if not target_siswa.face_encoding:
             return jsonify({
                 "success": False,
-                "message": f"Data biometrik wajah Anda ({target_siswa.nama}) belum terdaftar. Silakan daftarkan sampel wajah Anda terlebih dahulu di Portal Siswa."
-            }), 400
+                "message": f"Presensi ditolak: Akun Anda ({target_siswa.nama}) belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
+            }), 403
 
         try:
             stored_encodings = json.loads(target_siswa.face_encoding)

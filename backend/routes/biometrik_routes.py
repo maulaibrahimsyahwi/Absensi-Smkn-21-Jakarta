@@ -27,6 +27,7 @@ from utils.helpers import invalidate_face_cache
 
 @biometrik_bp.route('/api/register_face', methods=['POST'])
 @token_required
+@role_required(['admin'])
 def register_face():
     data = request.json or {}
     siswa_id = data.get('siswa_id')
@@ -43,16 +44,6 @@ def register_face():
     siswa = Siswa.query.get(siswa_id)
     if not siswa:
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
-
-    current_user = getattr(request, 'current_user', {})
-    is_admin = is_admin_caller() or current_user.get('role') == 'admin'
-
-    # Perekaman biometrik wajah siswa HANYA DAPAT DILAKUKAN OLEH ADMINISTRATOR SEKOLAH
-    if not is_admin:
-        return jsonify({
-            "success": False,
-            "message": "Akses ditolak: Perekaman dan pembaruan biometrik wajah siswa hanya dapat dilakukan secara resmi oleh Administrator Sekolah melalui menu Pendaftaran Siswa."
-        }), 403
         
     try:
         encodings = []

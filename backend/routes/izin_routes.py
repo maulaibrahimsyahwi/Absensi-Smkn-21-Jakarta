@@ -95,6 +95,12 @@ def submit_pengajuan_izin():
             "message": f"Siswa {siswa.nama} ({siswa.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mengajukan perizinan."
         }), 400
 
+    if not siswa.face_encoding:
+        return jsonify({
+            "success": False,
+            "message": "Pengajuan izin ditolak: Akun Anda belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
+        }), 403
+
     if jenis not in ["Sakit", "Izin"]:
         return jsonify({"success": False, "message": "Jenis pengajuan harus 'Sakit' atau 'Izin'."}), 400
 

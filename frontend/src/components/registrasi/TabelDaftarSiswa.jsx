@@ -237,7 +237,7 @@ export default function TabelDaftarSiswa({
               Tidak ada siswa ditemukan
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Coba ubah kata kunci atau filter status/kelas.
+              Coba ubah kata kunci atau filter status/kelas
             </p>
           </div>
         ) : (
@@ -503,15 +503,6 @@ export default function TabelDaftarSiswa({
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-bold text-slate-900">{s.nama}</p>
-                        <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            s.jenis_kelamin === "Perempuan"
-                              ? "bg-pink-50 text-pink-700 border border-pink-200"
-                              : "bg-sky-50 text-sky-700 border border-sky-200"
-                          }`}
-                        >
-                          {s.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
-                        </span>
                       </div>
                       <p className="text-[11px] text-slate-400 font-mono">
                         NIS {s.nis}

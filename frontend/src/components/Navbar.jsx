@@ -87,8 +87,24 @@ export default function Navbar() {
           color: "amber",
         },
       ];
+    } else if (!user?.terdaftar) {
+      // Siswa SMKN 21 Aktif tetapi belum merekam biometrik wajah (fitur operasional dikunci)
+      navItems = [
+        {
+          to: "/portal-siswa",
+          label:
+            user?.jenis_kelamin === "Perempuan"
+              ? "Portal Siswi"
+              : "Portal Siswa",
+          shortLabel: "Beranda",
+          desc: "Rekap & status biometrik wajah",
+          icon: <GraduationCap className="w-4 h-4" />,
+          active: isPortalSiswa,
+          color: "blue",
+        },
+      ];
     } else {
-      // Siswa SMKN 21 Aktif (Portal, Absen Mandiri, Izin, dan Catat Pelanggaran)
+      // Siswa SMKN 21 Aktif yang sudah terdaftar biometrik (Akses Penuh)
       navItems = [
         {
           to: "/portal-siswa",

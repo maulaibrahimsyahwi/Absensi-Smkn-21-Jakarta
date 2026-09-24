@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   GraduationCap,
   Calendar,
@@ -23,6 +23,7 @@ import {
   PlusCircle,
   Bell,
   User,
+  Lock,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -38,6 +39,7 @@ import { playNotificationSound } from "../utils/audioUtils";
 
 export default function PortalSiswa() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isSiswa, logout, saveSignature, updateUserProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -62,6 +64,18 @@ export default function PortalSiswa() {
       navigate("/login");
     }
   }, [user, navigate]);
+
+  // Tangani peringatan saat pengguna dialihkan dari rute operasional yang terkunci
+  useEffect(() => {
+    if (location.state?.biometricLocked) {
+      setNotification({
+        type: "error",
+        message:
+          "Fitur operasional terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+      });
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const prevPengajuanRef = useRef(null);
 
@@ -403,7 +417,13 @@ export default function PortalSiswa() {
               }
             }}
             onActionClick={(notif) => {
-              if (notif.action_url && notif.action_url !== "modal_face") {
+              if (notif.action_url === "modal_face") {
+                setNotification({
+                  type: "error",
+                  message:
+                    "Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah.",
+                });
+              } else if (notif.action_url) {
                 navigate(notif.action_url);
               }
             }}
@@ -490,6 +510,30 @@ export default function PortalSiswa() {
         </div>
       )}
 
+      {/* Banner Peringatan Biometrik Wajah Belum Terdaftar (Khusus Siswa Aktif) */}
+      {!user?.terdaftar && !isAlumni && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-slate-50 border border-rose-500/30 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-3 rounded-2xl bg-rose-600 text-white flex-shrink-0 shadow-md shadow-rose-600/20">
+              <Lock className="w-7 h-7" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h3 className="text-base font-bold text-slate-900">
+                  Biometrik Wajah Belum Terdaftar
+                </h3>
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 uppercase">
+                  Fitur Terkunci
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                Akun {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"} Anda belum memiliki data biometrik wajah resmi. Seluruh fitur operasional aplikasi (Presensi Harian, Presensi Perpustakaan, Pengajuan Izin/Sakit, dan Pelanggaran) terkunci sampai wajah Anda didaftarkan secara resmi oleh <strong>Administrator / Petugas Tata Usaha SMKN 21 Jakarta</strong>.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Banner Wajib Tanda Tangan Digital jika siswa belum memiliki tanda tangan (Khusus Siswa Aktif) */}
       {!user?.tanda_tangan && !isAlumni && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in shadow-xs">
@@ -521,57 +565,156 @@ export default function PortalSiswa() {
       {/* Tombol Aksi Cepat (HANYA MUNCUL UNTUK SISWA AKTIF) */}
       {!isAlumni && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Link
-            to="/harian"
-            className="group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <Camera className="w-6 h-6" />
+          {user?.terdaftar ? (
+            <Link
+              to="/harian"
+              className="group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Presensi Harian</h3>
+                  <p className="text-[11px] text-emerald-100">
+                    Scan wajah mandiri
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base">Presensi Harian</h3>
-                <p className="text-[11px] text-emerald-100">
-                  Scan wajah mandiri
-                </p>
+              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          ) : (
+            <div
+              onClick={() =>
+                setNotification({
+                  type: "error",
+                  message:
+                    "Presensi Harian terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                })
+              }
+              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
+                  <Camera className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-bold text-base text-slate-600">
+                      Presensi Harian
+                    </h3>
+                    <Lock className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Wajib biometrik wajah
+                  </p>
+                </div>
               </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
+                Terkunci
+              </span>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          )}
 
-          <Link
-            to="/izin"
-            className="group bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <FileText className="w-6 h-6" />
+          {user?.terdaftar ? (
+            <Link
+              to="/izin"
+              className="group bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Surat Izin / Sakit</h3>
+                  <p className="text-[11px] text-amber-100">Formulir mandiri</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base">Surat Izin / Sakit</h3>
-                <p className="text-[11px] text-amber-100">Formulir mandiri</p>
+              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          ) : (
+            <div
+              onClick={() =>
+                setNotification({
+                  type: "error",
+                  message:
+                    "Pengajuan Izin/Sakit terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                })
+              }
+              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-bold text-base text-slate-600">
+                      Surat Izin / Sakit
+                    </h3>
+                    <Lock className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Wajib biometrik wajah
+                  </p>
+                </div>
               </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
+                Terkunci
+              </span>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          )}
 
-          <Link
-            to="/pelanggaran"
-            className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <ShieldAlert className="w-6 h-6" />
+          {user?.terdaftar ? (
+            <Link
+              to="/pelanggaran"
+              className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Catat Pelanggaran</h3>
+                  <p className="text-[11px] text-rose-100">
+                    Buku saku kedisiplinan
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base">Catat Pelanggaran</h3>
-                <p className="text-[11px] text-rose-100">
-                  Buku saku kedisiplinan
-                </p>
+              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          ) : (
+            <div
+              onClick={() =>
+                setNotification({
+                  type: "error",
+                  message:
+                    "Buku Pelanggaran terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu.",
+                })
+              }
+              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
+            >
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-bold text-base text-slate-600">
+                      Catat Pelanggaran
+                    </h3>
+                    <Lock className="w-4 h-4 text-rose-500" />
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Wajib biometrik wajah
+                  </p>
+                </div>
               </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
+                Terkunci
+              </span>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-          </Link>
+          )}
         </div>
       )}
 

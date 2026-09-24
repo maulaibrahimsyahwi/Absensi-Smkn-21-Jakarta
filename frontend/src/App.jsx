@@ -58,11 +58,14 @@ function AppLayout() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
 
-            {/* Rute Presensi & Perpustakaan (Wajib Login: Siswa, Piket, Admin) */}
+            {/* Rute Presensi & Perpustakaan (Wajib Login: Siswa, Piket, Admin; Siswa Wajib Biometrik) */}
             <Route
               path="/harian"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  requireBiometric={true}
+                >
                   <AbsensiHarian />
                 </ProtectedRoute>
               }
@@ -70,7 +73,10 @@ function AppLayout() {
             <Route
               path="/perpus"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  requireBiometric={true}
+                >
                   <AbsensiPerpus />
                 </ProtectedRoute>
               }
@@ -86,21 +92,27 @@ function AppLayout() {
               }
             />
 
-            {/* Rute Terproteksi Pengajuan Izin (Siswa, Piket, Admin) */}
+            {/* Rute Terproteksi Pengajuan Izin (Siswa, Piket, Admin; Siswa Wajib Biometrik) */}
             <Route
               path="/izin"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  requireBiometric={true}
+                >
                   <PengajuanIzin />
                 </ProtectedRoute>
               }
             />
 
-            {/* Rute Buku Catatan Pelanggaran Siswa (Siswa, Piket, Admin) */}
+            {/* Rute Buku Catatan Pelanggaran Siswa (Siswa, Piket, Admin; Siswa Wajib Biometrik) */}
             <Route
               path="/pelanggaran"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  requireBiometric={true}
+                >
                   <CatatPelanggaran />
                 </ProtectedRoute>
               }

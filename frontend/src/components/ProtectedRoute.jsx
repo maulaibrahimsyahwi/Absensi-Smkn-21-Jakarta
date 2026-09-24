@@ -9,7 +9,11 @@ import { useAuth } from "../context/AuthContext";
  * @param {Array<string>} allowedRoles - Daftar role yang diperbolehkan (misal ['admin', 'piket'])
  * @param {React.ReactNode} children - Komponen halaman yang dilindungi
  */
-export default function ProtectedRoute({ allowedRoles, children }) {
+export default function ProtectedRoute({
+  allowedRoles,
+  requireBiometric = false,
+  children,
+}) {
   const { user, role, isAuthenticated } = useAuth();
   const location = useLocation();
 
@@ -40,6 +44,20 @@ export default function ProtectedRoute({ allowedRoles, children }) {
     return <Navigate to="/" replace />;
   }
 
-  // 3. Izin akses diberikan
+  // 3. Khusus Siswa: Wajib memiliki data biometrik wajah resmi untuk mengakses fitur operasional
+  if (role === "siswa" && requireBiometric && !user?.terdaftar) {
+    return (
+      <Navigate
+        to="/portal-siswa"
+        state={{
+          biometricLocked: true,
+          from: location.pathname,
+        }}
+        replace
+      />
+    );
+  }
+
+  // 4. Izin akses diberikan
   return children;
 }
