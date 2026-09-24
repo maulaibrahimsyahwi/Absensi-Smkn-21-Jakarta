@@ -25,6 +25,8 @@ const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 import RouteAwareSkeleton from "./components/common/Skeleton";
+import OfflineBanner from "./components/common/OfflineBanner";
+import PwaInstallPrompt from "./components/common/PwaInstallPrompt";
 
 function AppLayout() {
   const location = useLocation();
@@ -40,6 +42,7 @@ function AppLayout() {
           : "bg-slate-50 flex flex-col text-slate-800 w-full max-w-full overflow-x-hidden"
       }`}
     >
+      <OfflineBanner />
       {!isKioskMode && <Navbar />}
 
       <main
@@ -163,6 +166,8 @@ function AppLayout() {
           </div>
         </footer>
       )}
+
+      {!isKioskMode && <PwaInstallPrompt />}
     </div>
   );
 }

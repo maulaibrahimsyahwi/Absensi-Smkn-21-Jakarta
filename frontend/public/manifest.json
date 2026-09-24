@@ -3,18 +3,25 @@
   "short_name": "Presensi SMKN 21",
   "description": "Sistem presensi dan kehadiran siswa berbasis pengenalan wajah biometrik untuk SMKN 21 Jakarta. Mencakup absensi harian, kunjungan perpustakaan, dan rekapitulasi data.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
+  "background_color": "#0f172a",
   "theme_color": "#1e40af",
   "lang": "id",
   "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "/favicon.svg",
-      "sizes": "any",
+      "sizes": "192x192 512x512 any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

@@ -716,7 +716,7 @@ export default function AbsensiHarian() {
                 : !isFaceDetected
                   ? "Posisikan Wajah"
                   : !isLiveVerified
-                    ? "Kedipkan Mata untuk Absen"
+                    ? "Kedipkan Mata"
                     : "Pindai Langsung"}
           </span>
         </button>

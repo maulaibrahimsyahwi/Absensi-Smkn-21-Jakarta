@@ -82,7 +82,11 @@ def run_tests():
         print("[OK] 2FA successfully disabled with password confirmation")
 
         print("\n=== TEST 4: Jam Operasional Presensi Harian (05:00 - 06:30 WIB) ===")
-        res_status = client.get('/api/presensi/status_today?siswa_id=1', headers=admin_headers)
+        with app.app_context():
+            from models import Siswa
+            first_s = Siswa.query.first()
+            s_id = first_s.id if first_s else 1
+        res_status = client.get(f'/api/presensi/status_today?siswa_id={s_id}', headers=admin_headers)
         assert res_status.status_code == 200
         data_status = res_status.get_json()
         print("[OK] Status Presensi check:", data_status.get('jam_buka'), "sampai", data_status.get('jam_batas'))
