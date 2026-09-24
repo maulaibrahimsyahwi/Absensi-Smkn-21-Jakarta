@@ -18,6 +18,7 @@ import {
   Camera,
   User,
   KeyRound,
+  Smartphone,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import ProfileModal from "./ProfileModal";
@@ -277,6 +278,19 @@ export default function Navbar() {
 
         {/* Right Actions: Profile Button, Logout Button, and Menu Toggle */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {/* Tombol Pasang App PWA */}
+          <button
+            type="button"
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("show-pwa-prompt"))
+            }
+            title="Pasang Aplikasi SMKN 21 di Layar Utama HP"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 rounded-xl transition-all cursor-pointer shadow-xs"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-indigo-600" />
+            <span className="hidden sm:inline">Pasang App</span>
+          </button>
+
           {isAuthenticated ? (
             <>
               {/* Tombol Keluar Cepat (Hanya tampil di Laptop & Desktop >= 1024px) */}
@@ -398,6 +412,33 @@ export default function Navbar() {
                 />
               </Link>
             ))}
+          </div>
+
+          {/* Tombol Pasang Aplikasi di Mobile Menu */}
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                window.dispatchEvent(new CustomEvent("show-pwa-prompt"));
+              }}
+              className="w-full flex items-center justify-between p-2.5 rounded-xl transition-all text-indigo-900 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/70 font-medium cursor-pointer"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-indigo-600 text-white">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="text-xs font-bold leading-tight">
+                    Pasang Aplikasi (PWA)
+                  </p>
+                  <p className="text-[10px] text-indigo-600 truncate mt-0.5">
+                    Akses cepat di layar utama tanpa browser bar
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 flex-shrink-0 text-indigo-400" />
+            </button>
           </div>
 
           {/* User Profile & Logout Action Buttons */}
