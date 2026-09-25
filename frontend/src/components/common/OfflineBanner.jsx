@@ -65,9 +65,8 @@ export default function OfflineBanner() {
             <WifiOff className="w-3.5 h-3.5" />
           </div>
           <p className="leading-tight">
-            <strong className="font-semibold">Mode Offline:</strong> Anda sedang
-            tidak terhubung ke internet. Aplikasi tetap dapat dibaca dari memori
-            lokal. Pengiriman presensi memerlukan koneksi stabil.
+            Anda sedang tidak terhubung ke internet. Presensi memerlukan koneksi
+            yang stabil
           </p>
         </div>
         <button

@@ -364,104 +364,107 @@ export default function PortalSiswa() {
       )}
 
       {/* Header Profil Siswa */}
-      <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl shadow-blue-900/20 relative">
+      <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-3xl p-5 sm:p-8 text-white shadow-xl shadow-blue-900/20 relative">
         {/* Dekorasi blur diisolasi dalam wrapper overflow-hidden tersendiri agar tidak memotong dropdown notifikasi */}
         <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
           <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20" />
         </div>
 
-        {/* Pojok Kanan Atas: Tombol Profil Pengguna & Dropdown Notifikasi */}
-        <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-2 z-20">
-          <button
-            type="button"
-            onClick={() => openProfile("profil")}
-            title="Profil Pengguna & Pengaturan Akun"
-            className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-          >
-            {user?.foto_profil ? (
-              <img
-                src={user.foto_profil}
-                alt={user?.nama || "Profil"}
-                className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-              />
-            ) : (
-              <User className="w-4 h-4 text-blue-200" />
-            )}
-            <span>Profil</span>
-          </button>
-
-          <NotificationDropdown
-            notifications={
-              notifikasiList.length > 0
-                ? notifikasiList
-                : personalData?.riwayat_pengajuan || []
-            }
-            variant="header"
-            align="right"
-            role="siswa"
-            userId={user?.id}
-            onNavigate={(target) => {
-              if (typeof target === "string") {
-                navigate(target);
-              }
-            }}
-            onActionClick={(notif) => {
-              if (notif.action_url === "modal_face") {
-                setNotification({
-                  type: "error",
-                  message:
-                    "Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah",
-                });
-              } else if (notif.action_url) {
-                navigate(notif.action_url);
-              }
-            }}
-          />
-        </div>
-
-        {/* Bagian Kiri: Diturunkan & Disejajarkan ke Tengah Vertikal */}
-        <div className="relative z-10 pt-10 sm:pt-4 sm:pb-2 flex items-center gap-4 sm:gap-5">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
-            {user?.foto_profil ? (
-              <img
-                src={user.foto_profil}
-                alt={
-                  user?.nama ||
-                  (user?.jenis_kelamin === "Perempuan"
-                    ? "Foto Profil Siswi"
-                    : "Foto Profil Siswa")
-                }
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <GraduationCap className="w-9 h-9 sm:w-11 sm:h-11 text-blue-200" />
-            )}
-          </div>
-          <div>
-            <div className="mb-1">
-              {isAlumni ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/30 border border-amber-400/40 text-[11px] font-extrabold tracking-wide uppercase text-amber-200 shadow-2xs">
-                  <span>Alumni / Telah Lulus</span>
-                </span>
+        {/* Konten Header: Responsif Mobile & Tablet */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Sisi Kiri: Foto Profil & Info Siswa */}
+          <div className="flex items-center gap-3.5 sm:gap-5 min-w-0">
+            <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
+              {user?.foto_profil ? (
+                <img
+                  src={user.foto_profil}
+                  alt={
+                    user?.nama ||
+                    (user?.jenis_kelamin === "Perempuan"
+                      ? "Foto Profil Siswi"
+                      : "Foto Profil Siswa")
+                  }
+                  className="w-full h-full object-cover"
+                />
               ) : (
-                <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-[11px] font-bold tracking-wide uppercase text-blue-200">
-                  <span>
-                    {user?.jenis_kelamin === "Perempuan"
-                      ? "Siswi Aktif SMKN 21"
-                      : "Siswa Aktif SMKN 21"}
-                  </span>
-                </span>
+                <GraduationCap className="w-8 h-8 sm:w-11 sm:h-11 text-blue-200" />
               )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-              {user?.nama ||
-                (user?.jenis_kelamin === "Perempuan"
-                  ? "Nama Siswi"
-                  : "Nama Siswa")}
-            </h1>
-            <p className="text-xs sm:text-sm text-blue-200 font-medium">
-              {user?.nis} &bull; {user?.kelas}
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1">
+                {isAlumni ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/30 border border-amber-400/40 text-[10px] sm:text-[11px] font-extrabold tracking-wide uppercase text-amber-200 shadow-2xs">
+                    <span>Alumni / Telah Lulus</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-blue-500/30 border border-blue-400/30 text-[10px] sm:text-[11px] font-bold tracking-wide uppercase text-blue-200">
+                    <span>
+                      {user?.jenis_kelamin === "Perempuan"
+                        ? "Siswi Aktif SMKN 21"
+                        : "Siswa Aktif SMKN 21"}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight truncate sm:whitespace-normal">
+                {user?.nama ||
+                  (user?.jenis_kelamin === "Perempuan"
+                    ? "Nama Siswi"
+                    : "Nama Siswa")}
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-200 font-medium truncate">
+                {user?.nis} &bull; {user?.kelas}
+              </p>
+            </div>
+          </div>
+
+          {/* Sisi Kanan / Bawah pada mobile: Tombol Profil Pengguna & Dropdown Notifikasi */}
+          <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => openProfile("profil")}
+              title="Profil Pengguna & Pengaturan Akun"
+              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+            >
+              {user?.foto_profil ? (
+                <img
+                  src={user.foto_profil}
+                  alt={user?.nama || "Profil"}
+                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
+                />
+              ) : (
+                <User className="w-4 h-4 text-blue-200" />
+              )}
+              <span>Profil</span>
+            </button>
+
+            <NotificationDropdown
+              notifications={
+                notifikasiList.length > 0
+                  ? notifikasiList
+                  : personalData?.riwayat_pengajuan || []
+              }
+              variant="header"
+              align="right"
+              role="siswa"
+              userId={user?.id}
+              onNavigate={(target) => {
+                if (typeof target === "string") {
+                  navigate(target);
+                }
+              }}
+              onActionClick={(notif) => {
+                if (notif.action_url === "modal_face") {
+                  setNotification({
+                    type: "error",
+                    message:
+                      "Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah",
+                  });
+                } else if (notif.action_url) {
+                  navigate(notif.action_url);
+                }
+              }}
+            />
           </div>
         </div>
       </div>
@@ -747,12 +750,12 @@ export default function PortalSiswa() {
             {personalData.riwayat_pengajuan.map((item) => (
               <div
                 key={item.id}
-                className="py-3.5 flex items-center justify-between gap-4"
+                className="py-3.5 flex items-start sm:items-center justify-between gap-3"
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase ${
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-bold uppercase flex-shrink-0 ${
                         item.jenis === "Sakit"
                           ? "bg-blue-100 text-blue-800"
                           : "bg-purple-100 text-purple-800"
@@ -764,12 +767,12 @@ export default function PortalSiswa() {
                       {item.tanggal_mulai} s/d {item.tanggal_selesai}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 italic">
+                  <p className="text-xs text-slate-600 italic break-words">
                     "{item.alasan}"
                   </p>
                 </div>
 
-                <div className="text-right">
+                <div className="text-right flex-shrink-0">
                   <span
                     className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
                       item.status_pengajuan === "Disetujui"
@@ -782,7 +785,7 @@ export default function PortalSiswa() {
                     {item.status_pengajuan}
                   </span>
                   {item.catatan_guru && (
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-[11px] text-slate-400 mt-0.5 max-w-[150px] sm:max-w-xs truncate">
                       "{item.catatan_guru}"
                     </p>
                   )}
@@ -811,8 +814,8 @@ export default function PortalSiswa() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="text-right">
+          <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            <div className="text-left sm:text-right">
               <span className="text-xl sm:text-2xl font-black text-rose-600">
                 {totalPoinPelanggaran} Poin
               </span>

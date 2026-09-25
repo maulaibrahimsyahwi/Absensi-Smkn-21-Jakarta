@@ -62,22 +62,22 @@ export default function DashboardPeriodFilter({
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
-          <div className="min-w-0">
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight truncate">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight">
               Rekapitulasi Presensi & Perpustakaan
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 truncate">
+            <p className="text-xs sm:text-sm text-slate-500 leading-snug">
               Laporan akumulasi kehadiran siswa SMKN 21
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
           <Link
             to="/registrasi"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs flex-1 sm:flex-none"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs flex-1 sm:flex-none whitespace-nowrap"
           >
-            <UserPlus className="w-4 h-4" />
+            <UserPlus className="w-4 h-4 flex-shrink-0" />
             <span>Data Siswa</span>
           </Link>
           <button
@@ -100,9 +100,9 @@ export default function DashboardPeriodFilter({
             <button
               type="button"
               onClick={() => setIsExportOpen(!isExportOpen)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 cursor-pointer sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 sm:gap-2 px-3 cursor-pointer sm:px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition-all shadow-xs whitespace-nowrap"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4 flex-shrink-0" />
               <span>Unduh Rekap</span>
               <ChevronDown
                 className={`w-3.5 h-3.5 text-slate-400 transition-transform ${

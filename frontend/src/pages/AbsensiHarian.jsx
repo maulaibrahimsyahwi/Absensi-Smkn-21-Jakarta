@@ -704,14 +704,14 @@ export default function AbsensiHarian() {
             setResult(null);
             captureAndVerify();
           }}
-          disabled={loading || !isGpsValid || !isLiveVerified}
-          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center gap-2 sm:gap-2.5 shadow-2xl shadow-blue-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed"
+          disabled={loading || !effectiveGpsValid || !isLiveVerified}
+          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2 sm:gap-2.5 shadow-2xl shadow-blue-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
         >
-          <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
-          <span>
-            {isGpsWaiting
+          <Camera className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+          <span className="truncate">
+            {isGpsWaiting && !isPjjActive
               ? "Menunggu GPS..."
-              : !isGpsValid
+              : !effectiveGpsValid
                 ? "Di Luar Lingkungan SMKN 21"
                 : !isFaceDetected
                   ? "Posisikan Wajah"

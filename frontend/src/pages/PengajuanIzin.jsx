@@ -515,10 +515,10 @@ export default function PengajuanIzin() {
               </Link>
 
               <div className="min-w-0 flex-1">
-                <h1 className="text-base sm:text-xl font-bold text-slate-900 truncate">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900 leading-tight">
                   Pengajuan Surat Izin / Sakit
                 </h1>
-                <p className="text-xs text-slate-500 truncate">
+                <p className="text-xs text-slate-500 leading-snug">
                   Formulir mandiri untuk siswa dan orang tua murid SMKN 21
                   Jakarta
                 </p>

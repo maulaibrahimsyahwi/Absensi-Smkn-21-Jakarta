@@ -87,7 +87,7 @@ export default function DashboardKpiCards({ stats = {} }) {
       </div>
 
       {/* Kunjungan Perpustakaan */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs col-span-2 sm:col-span-1">
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs col-span-2 sm:col-span-2 lg:col-span-1">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
             Perpustakaan

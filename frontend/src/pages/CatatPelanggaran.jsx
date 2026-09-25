@@ -564,28 +564,28 @@ export default function CatatPelanggaran() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
             <button
               type="button"
               onClick={handlePrintSlip}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm w-full sm:w-auto"
             >
               <Printer className="w-4 h-4" />
               <span>Cetak Bukti Pelanggaran</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer text-center"
               >
                 Catat Pelanggaran Lain
               </button>
               <button
                 type="button"
                 onClick={() => navigate(backTarget)}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                className="flex-1 sm:flex-none px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm text-center"
               >
                 Selesai
               </button>
@@ -896,7 +896,7 @@ export default function CatatPelanggaran() {
               </div>
 
               {/* Selector Opsi 6 Poin Baku dengan Penyesuaian Warna Tingkat */}
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
                 {ALLOWED_POIN.map((p) => {
                   const kat = getKategoriPelanggaran(p);
                   const isSelected = String(poin) === String(p);
