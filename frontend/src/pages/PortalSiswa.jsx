@@ -460,7 +460,7 @@ export default function PortalSiswa() {
                   : "Nama Siswa")}
             </h1>
             <p className="text-xs sm:text-sm text-blue-200 font-medium">
-              NIS {user?.nis} &bull; Kelas {user?.kelas}
+              {user?.nis} &bull; {user?.kelas}
             </p>
           </div>
         </div>
@@ -668,7 +668,6 @@ export default function PortalSiswa() {
               </div>
             </div>
             <div className="flex items-center gap-1.5 font-bold text-xs bg-white/15 px-3 py-1.5 rounded-xl">
-              <span>{totalPoinPelanggaran} Poin</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </Link>
@@ -842,7 +841,7 @@ export default function PortalSiswa() {
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold border border-rose-200 shadow-2xs transition"
           >
             <PlusCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>Formulir Pengakuan Pelanggaran</span>
+            <span>Formulir Pelanggaran</span>
           </Link>
         </div>
 

@@ -21,6 +21,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import api from "../../../services/api";
 import {
@@ -37,7 +39,12 @@ import CustomDatePicker from "../../CustomDatePicker";
 import { Skeleton } from "../../common/Skeleton";
 import ToastNotification from "../../common/ToastNotification";
 
-export default function BukuPelanggaranTab() {
+export default function BukuPelanggaranTab({
+  selectedBulan,
+  selectedTahun,
+  periodeMode,
+  namaBulanTerpilih,
+}) {
   const [activeSubTab, setActiveSubTab] = useState("riwayat"); // "riwayat" atau "rekap_poin"
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState([]);
@@ -101,6 +108,11 @@ export default function BukuPelanggaranTab() {
       if (kelasFilter !== "ALL") params.kelas = kelasFilter;
       if (tanggalFilter) params.tanggal = tanggalFilter;
       if (search.trim()) params.search = search.trim();
+      if (!tanggalFilter) {
+        if (periodeMode === "bulan" && selectedBulan) params.bulan = selectedBulan;
+        if (selectedTahun) params.tahun = selectedTahun;
+      }
+      params.limit = 1000;
 
       const [resList, resRekap] = await Promise.all([
         api.get("/pelanggaran", { params }),
@@ -126,7 +138,45 @@ export default function BukuPelanggaranTab() {
 
   useEffect(() => {
     fetchData();
-  }, [kelasFilter, tanggalFilter]);
+  }, [kelasFilter, tanggalFilter, selectedBulan, selectedTahun, periodeMode]);
+
+  // Handle Export Direct dari Tab Buku Pelanggaran
+  const handleExportDirect = async (format = "pdf") => {
+    try {
+      const { exportPelanggaranDirect } = await import(
+        "../../../utils/exportUtils"
+      );
+      const periodeLabel =
+        periodeMode === "bulan" && namaBulanTerpilih && selectedTahun
+          ? `${namaBulanTerpilih} ${selectedTahun}`
+          : selectedTahun
+          ? `Tahun ${selectedTahun}`
+          : "Semua Periode";
+
+      exportPelanggaranDirect({
+        format,
+        subTab: activeSubTab,
+        records,
+        rekapData,
+        periodeLabel:
+          activeSubTab === "rekap_poin"
+            ? `Akumulasi Poin Siswa (${periodeLabel})`
+            : tanggalFilter
+            ? `Tanggal ${tanggalFilter}`
+            : periodeLabel,
+      });
+      setNotification({
+        type: "success",
+        message: `Laporan catatan pelanggaran (${format.toUpperCase()}) berhasil diunduh!`,
+      });
+    } catch (err) {
+      console.error("Gagal mengekspor catatan pelanggaran:", err);
+      setNotification({
+        type: "error",
+        message: "Gagal mengekspor catatan pelanggaran.",
+      });
+    }
+  };
 
   // Handle Delete
   const handleDelete = async () => {
@@ -318,13 +368,52 @@ export default function BukuPelanggaranTab() {
           </button>
         </div>
 
-        <Link
-          to="/pelanggaran"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer w-full sm:w-auto"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Input Pelanggaran</span>
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* Dropdown Ekspor Laporan Pelanggaran */}
+          <div className="relative group">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors duration-150 border border-slate-200/80 cursor-pointer w-full sm:w-auto shadow-2xs"
+            >
+              <Download className="w-4 h-4 text-slate-600" />
+              <span>Unduh Rekap</span>
+            </button>
+            <div className="hidden group-hover:block absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-20">
+              <button
+                type="button"
+                onClick={() => handleExportDirect("pdf")}
+                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5 text-rose-600" />
+                <span>Format PDF (.pdf)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportDirect("xlsx")}
+                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Format Excel (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportDirect("csv")}
+                className="w-full text-left px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                <span>Format CSV (.csv)</span>
+              </button>
+            </div>
+          </div>
+
+          <Link
+            to="/pelanggaran"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer w-full sm:w-auto"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Input Pelanggaran</span>
+          </Link>
+        </div>
       </div>
 
       {/* Filters (Hanya untuk SubTab Riwayat) */}

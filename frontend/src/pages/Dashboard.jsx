@@ -191,6 +191,8 @@ export default function Dashboard() {
   const [riwayatPerpus, setRiwayatPerpus] = useState([]);
   const [pengajuanList, setPengajuanList] = useState([]);
   const [izinPiketList, setIzinPiketList] = useState([]);
+  const [pelanggaranList, setPelanggaranList] = useState([]);
+  const [stafList, setStafList] = useState([]);
 
   const [notification, setNotification] = useState(null);
 
@@ -214,35 +216,54 @@ export default function Dashboard() {
       const delayPromise = isManual
         ? new Promise((resolve) => setTimeout(resolve, 450))
         : Promise.resolve();
-      const [dataPeriode, dataHarian, dataPerpus, dataPengajuan, dataPiket] =
-        await Promise.all([
-          rekapService.getSiswaPeriode({
-            mode: periodeMode,
-            bulan: selectedBulan,
+      const promises = [
+        rekapService.getSiswaPeriode({
+          mode: periodeMode,
+          bulan: selectedBulan,
+          tahun: selectedTahun,
+        }),
+        rekapService.getHarian({
+          mode: periodeMode,
+          bulan: selectedBulan,
+          tahun: selectedTahun,
+        }),
+        rekapService.getPerpus({
+          mode: periodeMode,
+          bulan: selectedBulan,
+          tahun: selectedTahun,
+        }),
+        izinService.getPengajuanList(),
+        izinService.getIzinPiketList({
+          tanggal: "ALL",
+        }),
+        api.get("/pelanggaran", {
+          params: {
+            limit: 1000,
+            ...(periodeMode === "bulan" ? { bulan: selectedBulan } : {}),
             tahun: selectedTahun,
-          }),
-          rekapService.getHarian({
-            mode: periodeMode,
-            bulan: selectedBulan,
-            tahun: selectedTahun,
-          }),
-          rekapService.getPerpus({
-            mode: periodeMode,
-            bulan: selectedBulan,
-            tahun: selectedTahun,
-          }),
-          izinService.getPengajuanList(),
-          izinService.getIzinPiketList({
-            tanggal: "ALL",
-          }),
-          delayPromise,
-        ]);
+          },
+        }).catch(() => ({ data: { data: [] } })),
+        api.get("/staf").catch(() => ({ data: { data: [] } })),
+        delayPromise,
+      ];
+
+      const [
+        dataPeriode,
+        dataHarian,
+        dataPerpus,
+        dataPengajuan,
+        dataPiket,
+        resPelanggaran,
+        resStaf,
+      ] = await Promise.all(promises);
 
       setSiswaPeriode(dataPeriode || { statistik: {}, daftar: [] });
       setRiwayatHarian(dataHarian || []);
       setRiwayatPerpus(dataPerpus || []);
       setPengajuanList(dataPengajuan || []);
       setIzinPiketList(dataPiket || []);
+      setPelanggaranList(resPelanggaran?.data?.data || []);
+      setStafList(resStaf?.data?.data || []);
 
       if (isManual) {
         setNotification({
@@ -364,6 +385,16 @@ export default function Dashboard() {
   // Filtered Pengajuan Izin
   const filteredPengajuan = useMemo(() => {
     return pengajuanList.filter((item) => {
+      if (item.tanggal_mulai) {
+        const [y, m] = item.tanggal_mulai.split("-").map(Number);
+        if (selectedTahun && y !== Number(selectedTahun)) return false;
+        if (
+          periodeMode === "bulan" &&
+          selectedBulan &&
+          m !== Number(selectedBulan)
+        )
+          return false;
+      }
       const matchSearch =
         item.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -375,7 +406,15 @@ export default function Dashboard() {
         item.status_pengajuan === statusIzinFilter;
       return matchSearch && matchKelas && matchStatus;
     });
-  }, [pengajuanList, searchTerm, kelasFilter, statusIzinFilter]);
+  }, [
+    pengajuanList,
+    searchTerm,
+    kelasFilter,
+    statusIzinFilter,
+    periodeMode,
+    selectedBulan,
+    selectedTahun,
+  ]);
 
   // Filtered Izin Meja Piket
   const filteredIzinPiket = useMemo(() => {
@@ -410,6 +449,38 @@ export default function Dashboard() {
     selectedTahun,
   ]);
 
+  // Filtered Buku Pelanggaran Siswa
+  const filteredPelanggaran = useMemo(() => {
+    return pelanggaranList.filter((item) => {
+      if (item.tanggal_waktu) {
+        const [datePart] = item.tanggal_waktu.split(" ");
+        const [y, m] = datePart.split("-").map(Number);
+        if (selectedTahun && y !== Number(selectedTahun)) return false;
+        if (
+          periodeMode === "bulan" &&
+          selectedBulan &&
+          m !== Number(selectedBulan)
+        )
+          return false;
+      }
+      const matchSearch =
+        item.nama_siswa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.jenis_pelanggaran?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.kelas?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.nama_penanggung_jawab?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchKelas = kelasFilter === "ALL" || item.kelas === kelasFilter;
+      return matchSearch && matchKelas;
+    });
+  }, [
+    pelanggaranList,
+    searchTerm,
+    kelasFilter,
+    periodeMode,
+    selectedBulan,
+    selectedTahun,
+  ]);
+
   const pendingCount = useMemo(() => {
     return pengajuanList.filter((p) => p.status_pengajuan === "Menunggu")
       .length;
@@ -432,6 +503,8 @@ export default function Dashboard() {
     if (activeTab === "riwayat_perpus") return filteredPerpus;
     if (activeTab === "verifikasi_izin") return filteredPengajuan;
     if (activeTab === "izin_piket") return filteredIzinPiket;
+    if (activeTab === "pelanggaran_siswa") return filteredPelanggaran;
+    if (activeTab === "manajemen_piket") return stafList;
     return [];
   }, [
     activeTab,
@@ -440,6 +513,8 @@ export default function Dashboard() {
     filteredPerpus,
     filteredPengajuan,
     filteredIzinPiket,
+    filteredPelanggaran,
+    stafList,
   ]);
 
   const totalItems = currentTotalList.length;
@@ -480,39 +555,26 @@ export default function Dashboard() {
     try {
       const { exportSpreadsheet, exportPdf } =
         await import("../utils/exportUtils");
+      const datasets = {
+        filteredSiswa,
+        filteredHarian,
+        filteredPerpus,
+        filteredPengajuan,
+        filteredIzinPiket,
+        filteredPelanggaran,
+        records: filteredPelanggaran,
+        stafList,
+      };
+      const periodeInfo = {
+        periodeMode,
+        namaBulanTerpilih,
+        selectedTahun,
+      };
+
       if (format === "pdf") {
-        exportPdf(
-          activeTab,
-          {
-            filteredSiswa,
-            filteredHarian,
-            filteredPerpus,
-            filteredPengajuan,
-            filteredIzinPiket,
-          },
-          {
-            periodeMode,
-            namaBulanTerpilih,
-            selectedTahun,
-          },
-        );
+        exportPdf(activeTab, datasets, periodeInfo);
       } else {
-        exportSpreadsheet(
-          format,
-          activeTab,
-          {
-            filteredSiswa,
-            filteredHarian,
-            filteredPerpus,
-            filteredPengajuan,
-            filteredIzinPiket,
-          },
-          {
-            periodeMode,
-            namaBulanTerpilih,
-            selectedTahun,
-          },
-        );
+        exportSpreadsheet(format, activeTab, datasets, periodeInfo);
       }
     } catch (err) {
       console.error("Gagal memuat modul ekspor:", err);
@@ -778,7 +840,12 @@ export default function Dashboard() {
         {/* Tab 6: Buku Catatan Pelanggaran */}
         {activeTab === "pelanggaran_siswa" && (
           <div className="p-3 sm:p-5 md:p-6 min-h-[500px]">
-            <BukuPelanggaranTab />
+            <BukuPelanggaranTab
+              selectedBulan={selectedBulan}
+              selectedTahun={selectedTahun}
+              periodeMode={periodeMode}
+              namaBulanTerpilih={namaBulanTerpilih}
+            />
           </div>
         )}
 
@@ -793,7 +860,7 @@ export default function Dashboard() {
         <div
           className={
             !["pelanggaran_siswa", "manajemen_piket"].includes(activeTab)
-              ? "min-h-[500px] flex flex-col justify-between"
+              ? "min-h-[500px] flex flex-col"
               : "hidden"
           }
         >
@@ -854,66 +921,68 @@ export default function Dashboard() {
             endIndex={endIndex}
           />
 
-          {loading ? (
-            <div className="min-h-[400px] overflow-hidden">
-              <SkeletonTable rows={7} cols={6} />
-            </div>
-          ) : (
-            <>
-              {/* Tab 1: Rekap Akumulasi Siswa */}
-              {activeTab === "rekap_siswa" && (
-                <RekapSiswaTab
-                  filteredSiswa={filteredSiswa}
-                  paginatedSiswa={paginatedSiswa}
-                />
-              )}
+          <div className="flex-1 flex flex-col">
+            {loading ? (
+              <div className="min-h-[400px] overflow-hidden">
+                <SkeletonTable rows={7} cols={6} />
+              </div>
+            ) : (
+              <>
+                {/* Tab 1: Rekap Akumulasi Siswa */}
+                {activeTab === "rekap_siswa" && (
+                  <RekapSiswaTab
+                    filteredSiswa={filteredSiswa}
+                    paginatedSiswa={paginatedSiswa}
+                  />
+                )}
 
-              {/* Tab 2: Log Detail Presensi Harian */}
-              {activeTab === "riwayat_harian" && (
-                <PresensiHarianTab
-                  filteredHarian={filteredHarian}
-                  paginatedHarian={paginatedHarian}
-                  periodeMode={periodeMode}
-                  namaBulanTerpilih={namaBulanTerpilih}
-                  selectedTahun={selectedTahun}
-                />
-              )}
+                {/* Tab 2: Log Detail Presensi Harian */}
+                {activeTab === "riwayat_harian" && (
+                  <PresensiHarianTab
+                    filteredHarian={filteredHarian}
+                    paginatedHarian={paginatedHarian}
+                    periodeMode={periodeMode}
+                    namaBulanTerpilih={namaBulanTerpilih}
+                    selectedTahun={selectedTahun}
+                  />
+                )}
 
-              {/* Tab 3: Log Detail Perpustakaan */}
-              {activeTab === "riwayat_perpus" && (
-                <PerpustakaanTab
-                  filteredPerpus={filteredPerpus}
-                  paginatedPerpus={paginatedPerpus}
-                  periodeMode={periodeMode}
-                  namaBulanTerpilih={namaBulanTerpilih}
-                  selectedTahun={selectedTahun}
-                />
-              )}
+                {/* Tab 3: Log Detail Perpustakaan */}
+                {activeTab === "riwayat_perpus" && (
+                  <PerpustakaanTab
+                    filteredPerpus={filteredPerpus}
+                    paginatedPerpus={paginatedPerpus}
+                    periodeMode={periodeMode}
+                    namaBulanTerpilih={namaBulanTerpilih}
+                    selectedTahun={selectedTahun}
+                  />
+                )}
 
-              {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
-              {activeTab === "verifikasi_izin" && (
-                <VerifikasiIzinTab
-                  filteredPengajuan={filteredPengajuan}
-                  paginatedPengajuan={paginatedPengajuan}
-                  statusIzinFilter={statusIzinFilter}
-                  verifyingId={verifyingId}
-                  onVerifikasi={handleVerifikasi}
-                  onOpenRejectModal={(item) => setRejectModalItem(item)}
-                  onOpenSuratModal={(item) => setSelectedSuratModal(item)}
-                />
-              )}
+                {/* Tab 4: Verifikasi Pengajuan Izin & Sakit */}
+                {activeTab === "verifikasi_izin" && (
+                  <VerifikasiIzinTab
+                    filteredPengajuan={filteredPengajuan}
+                    paginatedPengajuan={paginatedPengajuan}
+                    statusIzinFilter={statusIzinFilter}
+                    verifyingId={verifyingId}
+                    onVerifikasi={handleVerifikasi}
+                    onOpenRejectModal={(item) => setRejectModalItem(item)}
+                    onOpenSuratModal={(item) => setSelectedSuratModal(item)}
+                  />
+                )}
 
-              {/* Tab 5: Izin Meja Piket */}
-              {activeTab === "izin_piket" && (
-                <IzinPiketTab
-                  filteredIzinPiket={filteredIzinPiket}
-                  paginatedIzinPiket={paginatedIzinPiket}
-                  onOpenSlipModal={(item) => setSelectedSlipModal(item)}
-                  onDeleteIzin={handleDeleteIzinPiket}
-                />
-              )}
-            </>
-          )}
+                {/* Tab 5: Izin Meja Piket */}
+                {activeTab === "izin_piket" && (
+                  <IzinPiketTab
+                    filteredIzinPiket={filteredIzinPiket}
+                    paginatedIzinPiket={paginatedIzinPiket}
+                    onOpenSlipModal={(item) => setSelectedSlipModal(item)}
+                    onDeleteIzin={handleDeleteIzinPiket}
+                  />
+                )}
+              </>
+            )}
+          </div>
 
           {/* Footer Navigasi Halaman Bawah */}
           <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">

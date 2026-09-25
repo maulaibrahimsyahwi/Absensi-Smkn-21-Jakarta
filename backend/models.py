@@ -113,6 +113,7 @@ class AbsensiHarian(db.Model):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
+            "nis": self.siswa.nis if self.siswa else "-",
             "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
             "kelas": self.siswa.kelas if self.siswa else "-",
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
@@ -136,6 +137,7 @@ class AbsensiPerpustakaan(db.Model):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
+            "nis": self.siswa.nis if self.siswa else "-",
             "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
             "kelas": self.siswa.kelas if self.siswa else "-",
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),

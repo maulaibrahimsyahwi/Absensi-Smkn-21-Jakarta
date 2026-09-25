@@ -83,11 +83,11 @@ export default function CatatPelanggaran() {
   }, [isSiswa, user]);
 
   // State Form Identitas Siswa
-  const [namaSiswa, setNamaSiswa] = useState(() => (isSiswa && user ? user.nama || "" : ""));
-  const [nis, setNis] = useState(() => (isSiswa && user ? user.nis || "" : ""));
-  const [siswaId, setSiswaId] = useState(() => (isSiswa && user ? user.id || null : null));
-  const [kelas, setKelas] = useState(() => (isSiswa && user ? user.kelas || "" : ""));
-  const [selectedStudent, setSelectedStudent] = useState(() => (isSiswa && user ? user : null));
+  const [namaSiswa, setNamaSiswa] = useState("");
+  const [nis, setNis] = useState("");
+  const [siswaId, setSiswaId] = useState(null);
+  const [kelas, setKelas] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState(null);
 
   // State Tanggal & Waktu Kejadian
   const [tanggal, setTanggal] = useState(getTodayDateStr);
@@ -140,11 +140,15 @@ export default function CatatPelanggaran() {
     ctx.lineJoin = "round";
   };
 
+  // Setup Canvas & Muat otomatis tanda tangan siswa jika ada
   useEffect(() => {
     setupCanvas();
+    if (isSiswa && user?.tanda_tangan) {
+      loadSignatureImage(user.tanda_tangan);
+    }
     window.addEventListener("resize", setupCanvas);
     return () => window.removeEventListener("resize", setupCanvas);
-  }, [successData]);
+  }, [successData, isSiswa, user?.tanda_tangan]);
 
   // Tutup dropdown jika klik di luar
   useEffect(() => {
@@ -166,13 +170,14 @@ export default function CatatPelanggaran() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-
-  // Set default nama penanggung jawab jika Guru Piket login
+  // Inisialisasi awal nama Guru Piket login (hanya sekali, agar pengguna bisa menghapus full jika ingin mengubah)
+  const hasInitPenegurRef = useRef(false);
   useEffect(() => {
-    if (isPiket && user?.nama && !namaPenanggungJawab) {
+    if (isPiket && user?.nama && !hasInitPenegurRef.current) {
       setNamaPenanggungJawab(user.nama);
+      hasInitPenegurRef.current = true;
     }
-  }, [isPiket, user, namaPenanggungJawab]);
+  }, [isPiket, user]);
 
   // Ambil daftar Staf & Siswa untuk autocomplete (jika piket/admin)
   useEffect(() => {
@@ -988,15 +993,6 @@ export default function CatatPelanggaran() {
                 </label>
 
                 <div className="flex items-center gap-2">
-                  {isSiswa && user?.tanda_tangan && (
-                    <button
-                      type="button"
-                      onClick={handleUseSavedSignature}
-                      className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
-                    >
-                      <span>TTD Saya</span>
-                    </button>
-                  )}
                   <button
                     type="button"
                     onClick={clearSignature}

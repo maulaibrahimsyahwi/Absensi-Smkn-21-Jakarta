@@ -109,7 +109,10 @@ function AppLayout() {
             <Route
               path="/pelanggaran"
               element={
-                <ProtectedRoute allowedRoles={["siswa", "piket", "admin"]}>
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  requireBiometric={true}
+                >
                   <CatatPelanggaran />
                 </ProtectedRoute>
               }

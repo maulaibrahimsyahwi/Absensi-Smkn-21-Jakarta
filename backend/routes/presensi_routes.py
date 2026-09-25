@@ -148,7 +148,7 @@ def verify_harian():
     if is_mock:
         return jsonify({
             "success": False,
-            "message": "Presensi ditolak! Terdeteksi aplikasi lokasi palsu (Fake GPS / Mock Location). Gunakan GPS asli perangkat Anda."
+            "message": "Presensi ditolak! Terdeteksi lokasi palsu. Gunakan Lokasi asli Anda"
         }), 403
     if accuracy is not None and (accuracy <= 0 or accuracy < 1.8):
         return jsonify({
@@ -168,7 +168,7 @@ def verify_harian():
             if not is_token_valid:
                 return jsonify({
                     "success": False,
-                    "message": f"Presensi ditolak! {token_msg} Lakukan pemindaian wajah dan kedipan mata langsung di kamera aplikasi."
+                    "message": f"Presensi ditolak! {token_msg} Lakukan pemindaian wajah dan kedipan mata langsung di kamera aplikasi"
                 }), 403
 
     # Validasi Geofence:
@@ -178,7 +178,7 @@ def verify_harian():
         if latitude is None or longitude is None:
             return jsonify({
                 "success": False,
-                "message": "Presensi ditolak! Akses lokasi (GPS) wajib diaktifkan untuk mencatat titik lokasi presensi Anda."
+                "message": "Presensi ditolak! Akses lokasi wajib diaktifkan untuk mencatat titik lokasi presensi Anda"
             }), 403
 
     # Validasi Geofence (Poligon Lahan Pagar SMKN 21 + Toleransi Radius Cadangan 50m)
@@ -191,7 +191,7 @@ def verify_harian():
             if not is_valid_loc:
                 return jsonify({
                     "success": False,
-                    "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar area lingkungan resmi SMKN 21 Jakarta (jarak ~{dist}m dari titik pusat sekolah). Pastikan Anda berada di dalam lingkungan sekolah."
+                    "message": f"Presensi ditolak! Posisi Anda terdeteksi di luar area lingkungan resmi SMKN 21 Jakarta (jarak ~{dist}m dari titik pusat sekolah). Pastikan Anda berada di dalam lingkungan sekolah"
                 }), 403
 
     today_start = datetime.combine(date.today(), time.min)
@@ -212,7 +212,7 @@ def verify_harian():
                 "already_attended": True,
                 "waktu": sudah_absen.waktu.strftime('%H:%M:%S'),
                 "status": sudah_absen.status,
-                "message": f"Presensi ditolak! Anda ({target_siswa.nama}) sudah melakukan presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
+                "message": f"Presensi ditolak! Anda ({target_siswa.nama}) sudah melakukan presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status})"
             }), 400
 
         # Ambil sampel biometrik wajah khusus siswa ini

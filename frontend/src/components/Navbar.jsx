@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  School,
   BarChart3,
   Home,
   UserPlus,
@@ -21,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import ProfileModal from "./ProfileModal";
+import logoSMKN21 from "../assets/Logo SMKN21.png";
 
 export default function Navbar() {
   const location = useLocation();
@@ -277,8 +277,12 @@ export default function Navbar() {
           }
           className="flex items-center gap-2 sm:gap-3 group min-w-0 flex-shrink-0"
         >
-          <div className="w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:scale-105 transition-transform flex-shrink-0">
-            <School className="w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="w-8.5 h-8.5 sm:w-10 sm:h-10 rounded-xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform flex-shrink-0">
+            <img
+              src={logoSMKN21}
+              alt="Logo SMKN 21"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">

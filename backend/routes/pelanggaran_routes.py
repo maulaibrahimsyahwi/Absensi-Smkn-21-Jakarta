@@ -334,8 +334,10 @@ def get_pelanggaran_list():
     nis = request.args.get('nis')
     kelas = request.args.get('kelas')
     tanggal = request.args.get('tanggal')
+    bulan = request.args.get('bulan')
+    tahun = request.args.get('tahun')
     search = request.args.get('search')
-    limit = request.args.get('limit', default=100, type=int)
+    limit = request.args.get('limit', default=1000, type=int)
 
     query = PelanggaranSiswa.query
 
@@ -358,6 +360,16 @@ def get_pelanggaran_list():
             target_date = datetime.strptime(tanggal, "%Y-%m-%d").date()
             query = query.filter(db.func.date(PelanggaranSiswa.tanggal_waktu) == target_date)
         except ValueError:
+            pass
+    if tahun and str(tahun) != 'ALL':
+        try:
+            query = query.filter(db.extract('year', PelanggaranSiswa.tanggal_waktu) == int(tahun))
+        except Exception:
+            pass
+    if bulan and str(bulan) != 'ALL':
+        try:
+            query = query.filter(db.extract('month', PelanggaranSiswa.tanggal_waktu) == int(bulan))
+        except Exception:
             pass
     if search:
         search_term = f"%{search.strip()}%"
