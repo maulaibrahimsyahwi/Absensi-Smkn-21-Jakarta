@@ -109,13 +109,25 @@ class AbsensiHarian(db.Model):
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_harian', lazy=True))
 
+    @property
+    def nis(self):
+        return self.siswa.nis if self.siswa else "-"
+
+    @property
+    def nama(self):
+        return self.siswa.nama if self.siswa else "Siswa Dihapus"
+
+    @property
+    def kelas(self):
+        return self.siswa.kelas if self.siswa else "-"
+
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
-            "nis": self.siswa.nis if self.siswa else "-",
-            "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
-            "kelas": self.siswa.kelas if self.siswa else "-",
+            "nis": self.nis,
+            "nama": self.nama,
+            "kelas": self.kelas,
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
             "status": self.status
         }
@@ -133,13 +145,25 @@ class AbsensiPerpustakaan(db.Model):
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_perpus', lazy=True))
 
+    @property
+    def nis(self):
+        return self.siswa.nis if self.siswa else "-"
+
+    @property
+    def nama(self):
+        return self.siswa.nama if self.siswa else "Siswa Dihapus"
+
+    @property
+    def kelas(self):
+        return self.siswa.kelas if self.siswa else "-"
+
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
-            "nis": self.siswa.nis if self.siswa else "-",
-            "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
-            "kelas": self.siswa.kelas if self.siswa else "-",
+            "nis": self.nis,
+            "nama": self.nama,
+            "kelas": self.kelas,
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
             "keperluan": self.keperluan
         }
@@ -166,6 +190,18 @@ class PengajuanIzin(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('pengajuan_izin', lazy=True))
+
+    @property
+    def nis(self):
+        return self.siswa.nis if self.siswa else "-"
+
+    @property
+    def nama(self):
+        return self.siswa.nama if self.siswa else "Siswa Dihapus"
+
+    @property
+    def kelas(self):
+        return self.siswa.kelas if self.siswa else "-"
 
     def to_dict(self):
         maps_url = None
@@ -213,13 +249,25 @@ class IzinPiket(db.Model):
 
     siswa = db.relationship('Siswa', backref=db.backref('izin_piket', lazy=True))
 
+    @property
+    def nis(self):
+        return self.siswa.nis if self.siswa else "-"
+
+    @property
+    def nama(self):
+        return self.siswa.nama if self.siswa else "Siswa Dihapus"
+
+    @property
+    def kelas(self):
+        return self.siswa.kelas if self.siswa else "-"
+
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
-            "nis": self.siswa.nis if self.siswa else "-",
-            "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
-            "kelas": self.siswa.kelas if self.siswa else "-",
+            "nis": self.nis,
+            "nama": self.nama,
+            "kelas": self.kelas,
             "hari": self.hari,
             "tanggal": self.tanggal.strftime("%Y-%m-%d"),
             "tanggal_formatted": self.tanggal.strftime("%d/%m/%Y"),

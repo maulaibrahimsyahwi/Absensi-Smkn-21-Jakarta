@@ -242,6 +242,8 @@ def verifikasi_pengajuan_izin(id):
 
         # Catat jejak audit aktivitas verifikasi izin
         current_u = getattr(request, 'current_user', {})
+        siswa_nama = getattr(pengajuan.siswa, 'nama', 'Siswa') if pengajuan.siswa else "Siswa"
+        siswa_nis = getattr(pengajuan.siswa, 'nis', '-') if pengajuan.siswa else "-"
         record_audit_log(
             user_id=current_u.get('user_id'),
             role=current_u.get('role', 'piket'),
@@ -249,12 +251,12 @@ def verifikasi_pengajuan_izin(id):
             action='VERIFIKASI_IZIN',
             target_type='PengajuanIzin',
             target_id=pengajuan.id,
-            keterangan=f"{aksi} pengajuan {pengajuan.jenis} siswa {getattr(pengajuan.siswa, 'nama', '-')} ({pengajuan.nis}). Catatan: {catatan or '-'}"
+            keterangan=f"{aksi} pengajuan {pengajuan.jenis} siswa {siswa_nama} ({siswa_nis}). Catatan: {catatan or '-'}"
         )
 
         return jsonify({
             "success": True,
-            "message": f"Pengajuan {pengajuan.jenis} siswa {pengajuan.siswa.nama} berhasil di-{aksi.lower()}.",
+            "message": f"Pengajuan {pengajuan.jenis} siswa {siswa_nama} berhasil di-{aksi.lower()}.",
             "data": pengajuan.to_dict()
         })
     except Exception as e:

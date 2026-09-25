@@ -198,7 +198,13 @@ export function exportSpreadsheet(
   } else if (activeTab === "manajemen_piket") {
     sheetName = "Daftar Staf";
     filename = `daftar_staf_guru_piket_${periodeTag}`;
-    headers = ["No", "Username", "Nama Lengkap", "Role / Wewenang", "Tanda Tangan Digital"];
+    headers = [
+      "No",
+      "Username",
+      "Nama Lengkap",
+      "Role / Wewenang",
+      "Tanda Tangan Digital",
+    ];
     const staf = datasets.stafList || [];
     rows = staf.map((item, index) => [
       index + 1,
@@ -314,7 +320,14 @@ export function exportPdf(activeTab, datasets, periodeInfo) {
     title = "LOG KUNJUNGAN PERPUSTAKAAN SEKOLAH";
     orientation = "portrait";
     filename = `riwayat_perpustakaan_${periodeTag}.pdf`;
-    headers = ["No", "Waktu Kunjungan", "NIS", "Nama Siswa", "Kelas", "Keperluan"];
+    headers = [
+      "No",
+      "Waktu Kunjungan",
+      "NIS",
+      "Nama Siswa",
+      "Kelas",
+      "Keperluan",
+    ];
     rows = filteredPerpus.map((item, index) => [
       index + 1,
       item.waktu,
@@ -397,7 +410,8 @@ export function exportPdf(activeTab, datasets, periodeInfo) {
     const dataList = datasets.filteredPelanggaran || datasets.records || [];
     rows = dataList.map((item, index) => [
       index + 1,
-      item.tanggal_waktu_formatted || (item.tanggal_waktu ? item.tanggal_waktu.substring(0, 16) : "-"),
+      item.tanggal_waktu_formatted ||
+        (item.tanggal_waktu ? item.tanggal_waktu.substring(0, 16) : "-"),
       item.nis,
       item.nama_siswa || item.nama,
       item.kelas,
@@ -410,7 +424,13 @@ export function exportPdf(activeTab, datasets, periodeInfo) {
     title = "DAFTAR STAF & GURU PIKET SMKN 21 JAKARTA";
     orientation = "portrait";
     filename = `daftar_staf_guru_piket_${periodeTag}.pdf`;
-    headers = ["No", "Username", "Nama Lengkap", "Role / Wewenang", "Status TTD"];
+    headers = [
+      "No",
+      "Username",
+      "Nama Lengkap",
+      "Role / Wewenang",
+      "Status TTD",
+    ];
     const staf = datasets.stafList || [];
     rows = staf.map((item, index) => [
       index + 1,
@@ -559,10 +579,14 @@ export function exportPelanggaranDirect({
     const list = rekapData?.daftar_siswa || [];
     rows = list.map((item, index) => {
       let statusLabel = "Baik / Aman (0-15 Poin)";
-      if (item.total_poin >= 100) statusLabel = "Sanksi Keras / Panggilan Orang Tua (100+ Poin)";
-      else if (item.total_poin >= 50) statusLabel = "Peringatan Keras / SP-2 (50-99 Poin)";
-      else if (item.total_poin >= 26) statusLabel = "Peringatan Tertulis / SP-1 (26-49 Poin)";
-      else if (item.total_poin >= 16) statusLabel = "Bimbingan Wali Kelas (16-25 Poin)";
+      if (item.total_poin >= 100)
+        statusLabel = "Sanksi Keras / Panggilan Orang Tua (100+ Poin)";
+      else if (item.total_poin >= 50)
+        statusLabel = "Peringatan Keras / SP-2 (50-99 Poin)";
+      else if (item.total_poin >= 26)
+        statusLabel = "Peringatan Tertulis / SP-1 (26-49 Poin)";
+      else if (item.total_poin >= 16)
+        statusLabel = "Bimbingan Wali Kelas (16-25 Poin)";
       return [
         index + 1,
         item.nis || "-",
@@ -619,7 +643,9 @@ export function exportPelanggaranDirect({
       doc.setFontSize(9.5);
       doc.text("DINAS PENDIDIKAN", pageWidth / 2, 16.5, { align: "center" });
       doc.setFontSize(13);
-      doc.text("SMK NEGERI 21 JAKARTA", pageWidth / 2, 22.5, { align: "center" });
+      doc.text("SMK NEGERI 21 JAKARTA", pageWidth / 2, 22.5, {
+        align: "center",
+      });
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.text(

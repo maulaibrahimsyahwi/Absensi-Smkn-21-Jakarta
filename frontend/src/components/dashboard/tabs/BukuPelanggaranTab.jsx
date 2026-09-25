@@ -109,7 +109,8 @@ export default function BukuPelanggaranTab({
       if (tanggalFilter) params.tanggal = tanggalFilter;
       if (search.trim()) params.search = search.trim();
       if (!tanggalFilter) {
-        if (periodeMode === "bulan" && selectedBulan) params.bulan = selectedBulan;
+        if (periodeMode === "bulan" && selectedBulan)
+          params.bulan = selectedBulan;
         if (selectedTahun) params.tahun = selectedTahun;
       }
       params.limit = 1000;
@@ -143,15 +144,14 @@ export default function BukuPelanggaranTab({
   // Handle Export Direct dari Tab Buku Pelanggaran
   const handleExportDirect = async (format = "pdf") => {
     try {
-      const { exportPelanggaranDirect } = await import(
-        "../../../utils/exportUtils"
-      );
+      const { exportPelanggaranDirect } =
+        await import("../../../utils/exportUtils");
       const periodeLabel =
         periodeMode === "bulan" && namaBulanTerpilih && selectedTahun
           ? `${namaBulanTerpilih} ${selectedTahun}`
           : selectedTahun
-          ? `Tahun ${selectedTahun}`
-          : "Semua Periode";
+            ? `Tahun ${selectedTahun}`
+            : "Semua Periode";
 
       exportPelanggaranDirect({
         format,
@@ -162,8 +162,8 @@ export default function BukuPelanggaranTab({
           activeSubTab === "rekap_poin"
             ? `Akumulasi Poin Siswa (${periodeLabel})`
             : tanggalFilter
-            ? `Tanggal ${tanggalFilter}`
-            : periodeLabel,
+              ? `Tanggal ${tanggalFilter}`
+              : periodeLabel,
       });
       setNotification({
         type: "success",

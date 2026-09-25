@@ -236,13 +236,15 @@ export default function Dashboard() {
         izinService.getIzinPiketList({
           tanggal: "ALL",
         }),
-        api.get("/pelanggaran", {
-          params: {
-            limit: 1000,
-            ...(periodeMode === "bulan" ? { bulan: selectedBulan } : {}),
-            tahun: selectedTahun,
-          },
-        }).catch(() => ({ data: { data: [] } })),
+        api
+          .get("/pelanggaran", {
+            params: {
+              limit: 1000,
+              ...(periodeMode === "bulan" ? { bulan: selectedBulan } : {}),
+              tahun: selectedTahun,
+            },
+          })
+          .catch(() => ({ data: { data: [] } })),
         api.get("/staf").catch(() => ({ data: { data: [] } })),
         delayPromise,
       ];
@@ -466,9 +468,13 @@ export default function Dashboard() {
       const matchSearch =
         item.nama_siswa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.jenis_pelanggaran?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.jenis_pelanggaran
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
         item.kelas?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.nama_penanggung_jawab?.toLowerCase().includes(searchTerm.toLowerCase());
+        item.nama_penanggung_jawab
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase());
       const matchKelas = kelasFilter === "ALL" || item.kelas === kelasFilter;
       return matchSearch && matchKelas;
     });
