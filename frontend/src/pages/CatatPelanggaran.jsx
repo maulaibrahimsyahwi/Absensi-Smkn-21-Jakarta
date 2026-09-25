@@ -83,11 +83,11 @@ export default function CatatPelanggaran() {
   }, [isSiswa, user]);
 
   // State Form Identitas Siswa
-  const [namaSiswa, setNamaSiswa] = useState("");
-  const [nis, setNis] = useState("");
-  const [siswaId, setSiswaId] = useState(null);
-  const [kelas, setKelas] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [namaSiswa, setNamaSiswa] = useState(() => (isSiswa && user ? user.nama || "" : ""));
+  const [nis, setNis] = useState(() => (isSiswa && user ? user.nis || "" : ""));
+  const [siswaId, setSiswaId] = useState(() => (isSiswa && user ? user.id || null : null));
+  const [kelas, setKelas] = useState(() => (isSiswa && user ? user.kelas || "" : ""));
+  const [selectedStudent, setSelectedStudent] = useState(() => (isSiswa && user ? user : null));
 
   // State Tanggal & Waktu Kejadian
   const [tanggal, setTanggal] = useState(getTodayDateStr);
@@ -166,15 +166,6 @@ export default function CatatPelanggaran() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Prefill Data Siswa jika sedang login sebagai Siswa
-  useEffect(() => {
-    if (isSiswa && user) {
-      setNamaSiswa(user.nama || "");
-      setKelas(user.kelas || "");
-      setNis(user.nis || "");
-      setSiswaId(user.id || null);
-    }
-  }, [isSiswa, user]);
 
   // Set default nama penanggung jawab jika Guru Piket login
   useEffect(() => {
