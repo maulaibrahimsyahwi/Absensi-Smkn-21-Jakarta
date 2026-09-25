@@ -151,15 +151,6 @@ export default function Navbar() {
     // Guru Piket
     navItems = [
       {
-        to: "/portal-piket",
-        label: "Beranda Guru Piket",
-        shortLabel: "Beranda",
-        desc: "Ringkasan tugas, profil & status piket",
-        icon: <Home className="w-4 h-4" />,
-        active: isPortalPiket,
-        color: "blue",
-      },
-      {
         to: "/piket",
         label: "Meja Guru Piket",
         shortLabel: "Meja Piket",
@@ -188,7 +179,7 @@ export default function Navbar() {
       },
       {
         to: "/harian",
-        label: "Absensi Backup Kiosk",
+        label: "Absensi Siswa",
         shortLabel: "Absensi Siswa",
         desc: "Scan siswa yang lupa bawa HP",
         icon: <Camera className="w-4 h-4" />,
@@ -248,7 +239,7 @@ export default function Navbar() {
         to: "/dashboard",
         label: "Dashboard Rekap",
         shortLabel: "Dashboard",
-        desc: "Rekapitulasi kehadiran & perpustakaan",
+        desc: "Rekapitulasi presensi & operasional siswa",
         icon: <BarChart3 className="w-4 h-4" />,
         active: isDashboard,
         color: "blue",

@@ -190,7 +190,7 @@ export default function TabUbahPassword({ user, onSuccess, onCancel }) {
           {passLoading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            `Simpan Kata Sandi Baru`
+            `Simpan Kata Sandi `
           )}
         </button>
       </div>

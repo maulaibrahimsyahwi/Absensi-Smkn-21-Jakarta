@@ -461,10 +461,10 @@ def get_pelanggaran_rekap():
 
 @pelanggaran_bp.route('/api/pelanggaran/<int:id>', methods=['DELETE'])
 @token_required
-@role_required(['piket', 'admin'])
+@role_required(['admin'])
 def delete_pelanggaran(id):
     """
-    Menghapus catatan pelanggaran (hanya dapat dilakukan oleh Guru Piket / Admin).
+    Menghapus catatan pelanggaran (hanya dapat dilakukan oleh Superadmin).
     """
     record = PelanggaranSiswa.query.get(id)
     if not record:

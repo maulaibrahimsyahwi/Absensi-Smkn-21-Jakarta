@@ -14,8 +14,8 @@ export function downloadDapodikTemplate() {
   // Data header dan contoh baris siswa SMKN 21
   const wsData = [
     ["NIS", "Nama Lengkap", "Kelas", "Jenis Kelamin"],
-    ["10241", "Ahmad Rizky Pratama", "X TJKT 1", "L"],
-    ["10242", "Annisa Fitria", "X TJKT 1", "P"],
+    ["10241", "Ahmad Rizky Pratama", "X PPLG 1", "L"],
+    ["10242", "Annisa Fitria", "X PPLG 1", "P"],
     ["10243", "Bagus Tri Saputra", "X PPLG 1", "L"],
     ["10244", "Dewi Lestari", "X PPLG 1", "P"],
     ["10245", "Fajar Hidayat", "XI MPLB 2", "L"],

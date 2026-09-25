@@ -409,7 +409,9 @@ export default function PortalPiket() {
               <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base truncate">Meja Guru Piket</h3>
+              <h3 className="font-bold text-sm sm:text-base truncate">
+                Meja Guru Piket
+              </h3>
               <p className="text-[11px] text-blue-100 truncate">
                 Terbitkan izin masuk/keluar
               </p>
@@ -427,7 +429,9 @@ export default function PortalPiket() {
               <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base truncate">Catat Pelanggaran</h3>
+              <h3 className="font-bold text-sm sm:text-base truncate">
+                Catat Pelanggaran
+              </h3>
               <p className="text-[11px] text-rose-100 truncate">
                 Buku saku kedisiplinan siswa
               </p>
@@ -445,7 +449,9 @@ export default function PortalPiket() {
               <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base truncate">Dashboard Piket</h3>
+              <h3 className="font-bold text-sm sm:text-base truncate">
+                Dashboard Piket
+              </h3>
               <p className="text-[11px] text-purple-100 truncate">
                 Verifikasi izin & rekapitulasi
               </p>
@@ -463,8 +469,12 @@ export default function PortalPiket() {
               <Camera className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base truncate">Presensi Siswa</h3>
-              <p className="text-[11px] text-emerald-100 truncate">Scan wajah siswa</p>
+              <h3 className="font-bold text-sm sm:text-base truncate">
+                Presensi Siswa
+              </h3>
+              <p className="text-[11px] text-emerald-100 truncate">
+                Scan wajah siswa
+              </p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 shrink-0 group-hover:translate-x-1 transition-transform" />
@@ -508,7 +518,9 @@ export default function PortalPiket() {
                       <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <span>NIS {item.nis}</span>
                         <span>•</span>
-                        <span className="font-semibold text-slate-700">{item.kelas}</span>
+                        <span className="font-semibold text-slate-700">
+                          {item.kelas}
+                        </span>
                       </div>
                     </div>
                     <span
@@ -525,10 +537,14 @@ export default function PortalPiket() {
                   <div className="bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600 space-y-1">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-slate-400">Jam Pelajaran:</span>
-                      <span className="font-semibold text-slate-700">{item.jam_ke || "-"}</span>
+                      <span className="font-semibold text-slate-700">
+                        {item.jam_ke || "-"}
+                      </span>
                     </div>
                     <div className="text-slate-700 text-xs">
-                      <span className="text-slate-400 text-[11px]">Alasan: </span>
+                      <span className="text-slate-400 text-[11px]">
+                        Alasan:{" "}
+                      </span>
                       <span className="break-words">{item.alasan || "-"}</span>
                     </div>
                   </div>

@@ -1036,7 +1036,7 @@ export default function GuruPiket() {
                         </span>
                         <span className="text-slate-300">•</span>
                         <span className="text-slate-400">
-                          Piket: {item.petugas_piket}
+                          {item.petugas_piket}
                         </span>
                       </div>
 
@@ -1057,14 +1057,16 @@ export default function GuruPiket() {
                         <span>E-Slip</span>
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setDeletingIzin(item)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                        title="Hapus Surat Izin"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setDeletingIzin(item)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          title="Hapus Surat Izin (Khusus Admin)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

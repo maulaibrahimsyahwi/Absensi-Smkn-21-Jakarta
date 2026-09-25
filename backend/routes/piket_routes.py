@@ -149,7 +149,7 @@ def get_izin_piket():
 
 @piket_bp.route('/api/piket/izin/<int:id>', methods=['DELETE'])
 @token_required
-@role_required(['piket', 'admin'])
+@role_required(['admin'])
 def delete_izin_piket(id):
     izin = IzinPiket.query.get(id)
     if not izin:

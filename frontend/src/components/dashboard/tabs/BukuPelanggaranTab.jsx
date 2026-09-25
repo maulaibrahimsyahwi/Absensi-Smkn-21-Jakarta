@@ -38,6 +38,7 @@ import CustomDropdown from "../../CustomDropdown";
 import CustomDatePicker from "../../CustomDatePicker";
 import { Skeleton } from "../../common/Skeleton";
 import ToastNotification from "../../common/ToastNotification";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function BukuPelanggaranTab({
   selectedBulan,
@@ -45,6 +46,7 @@ export default function BukuPelanggaranTab({
   periodeMode,
   namaBulanTerpilih,
 }) {
+  const { isAdmin } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState("riwayat"); // "riwayat" atau "rekap_poin"
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState([]);
@@ -568,7 +570,7 @@ export default function BukuPelanggaranTab({
                   <span
                     className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${kat.badge}`}
                   >
-                    +{r.poin} Poin
+                    {r.poin} Poin
                   </span>
                 </div>
 
@@ -579,7 +581,7 @@ export default function BukuPelanggaranTab({
                       {r.nama_siswa}
                     </p>
                     <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      NIS: {r.nis}
+                      {r.nis}
                     </p>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 flex-shrink-0">
@@ -600,7 +602,7 @@ export default function BukuPelanggaranTab({
                 {/* Footer Kartu: Guru Penegur & Tombol Aksi */}
                 <div className="flex items-center justify-between pt-1 gap-2 border-t border-slate-100">
                   <div className="text-[11px] text-slate-500 truncate min-w-0">
-                    Penegur:{" "}
+                    Penegur{" "}
                     <strong className="text-slate-700 font-semibold">
                       {r.nama_penanggung_jawab}
                     </strong>
@@ -615,14 +617,16 @@ export default function BukuPelanggaranTab({
                       <Eye className="w-3.5 h-3.5" />
                       <span>Slip</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmItem(r)}
-                      title="Hapus Catatan"
-                      className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmItem(r)}
+                        title="Hapus Catatan (Khusus Admin)"
+                        className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -842,14 +846,16 @@ export default function BukuPelanggaranTab({
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmItem(r)}
-                          title="Hapus Catatan"
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteConfirmItem(r)}
+                            title="Hapus Catatan (Khusus Admin)"
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

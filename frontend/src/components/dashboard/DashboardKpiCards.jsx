@@ -7,9 +7,15 @@ import {
   BookOpen,
 } from "lucide-react";
 
-export default function DashboardKpiCards({ stats = {} }) {
+export default function DashboardKpiCards({ stats = {}, isPiket = false }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
+    <div
+      className={`grid gap-3 sm:gap-4 mb-6 sm:mb-8 ${
+        isPiket
+          ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4"
+          : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+      }`}
+    >
       {/* Total Siswa Terdaftar */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs">
         <div className="flex items-center justify-between mb-2">
@@ -86,20 +92,22 @@ export default function DashboardKpiCards({ stats = {} }) {
         </div>
       </div>
 
-      {/* Kunjungan Perpustakaan */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs col-span-2 sm:col-span-2 lg:col-span-1">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
-            Perpustakaan
-          </span>
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+      {/* Kunjungan Perpustakaan (Khusus Admin / Bukan Guru Piket) */}
+      {!isPiket && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-3.5 sm:p-5 shadow-xs col-span-2 sm:col-span-2 lg:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider truncate">
+              Perpustakaan
+            </span>
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </div>
+          </div>
+          <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-indigo-600 truncate">
+            {stats.total_perpus || 0}
           </div>
         </div>
-        <div className="text-xl sm:text-2xl md:text-3xl font-extrabold text-indigo-600 truncate">
-          {stats.total_perpus || 0}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

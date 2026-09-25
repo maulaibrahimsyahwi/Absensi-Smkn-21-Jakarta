@@ -96,11 +96,6 @@ export default function VerifikasiIzinTab({
                       <span className="text-[11px] font-bold text-slate-700">
                         {item.kelas}
                       </span>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                      >
-                        {jurInfo.kode}
-                      </span>
                     </div>
                   </div>
 
@@ -151,7 +146,7 @@ export default function VerifikasiIzinTab({
                     <span className="text-slate-500 font-medium block mb-0.5">
                       Alasan
                     </span>
-                    <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs">
+                    <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs ">
                       "{item.alasan}"
                     </p>
                   </div>
@@ -166,64 +161,61 @@ export default function VerifikasiIzinTab({
                   {item.latitude && item.longitude && (
                     <div className="pt-1.5 border-t border-slate-200/40 flex items-center justify-between">
                       <span className="text-slate-500 font-medium flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Lokasi </span>
+                        <a
+                          href={
+                            item.maps_url ||
+                            `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200/70 transition-colors"
+                        >
+                          <MapPin className="w-3 h-3 text-blue-600" />
+                          <span> Maps</span>
+                        </a>
                       </span>
-                      <a
-                        href={
-                          item.maps_url ||
-                          `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200/70 transition-colors"
-                      >
-                        <MapPin className="w-3 h-3 text-blue-600" />
-                        <span> Maps</span>
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                {/* Surat & Actions */}
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  {item.surat_bukti ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenSuratModal(item)}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Lihat Bukti</span>
-                    </button>
-                  ) : (
-                    <span className="text-[11px] text-slate-400 italic">
-                      Tanpa lampiran foto
-                    </span>
-                  )}
-
-                  {isMenunggu && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        disabled={verifyingId === item.id}
-                        onClick={() => onVerifikasi(item.id, "Disetujui")}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                      >
-                        {verifyingId === item.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {/* Surat & Actions */}
+                      <div className="flex items-center justify-between gap-2 pt-1">
+                        {item.surat_bukti ? (
+                          <button
+                            type="button"
+                            onClick={() => onOpenSuratModal(item)}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Lihat Bukti</span>
+                          </button>
                         ) : (
-                          <span>Setujui</span>
+                          <span className="text-[11px] text-slate-400 italic">
+                            Tanpa lampiran foto
+                          </span>
                         )}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={verifyingId === item.id}
-                        onClick={() => onOpenRejectModal(item)}
-                        className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                      >
-                        <span>Tolak</span>
-                      </button>
+
+                        {isMenunggu && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={verifyingId === item.id}
+                              onClick={() => onVerifikasi(item.id, "Disetujui")}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              {verifyingId === item.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <span>Setujui</span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={verifyingId === item.id}
+                              onClick={() => onOpenRejectModal(item)}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                            >
+                              <span>Tolak</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

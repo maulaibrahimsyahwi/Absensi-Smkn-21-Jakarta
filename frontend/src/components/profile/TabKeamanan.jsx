@@ -53,19 +53,7 @@ export default function TabKeamanan({ user, updateUserProfile }) {
             />
           </div>
         ) : (
-          <div className="flex items-center justify-between text-xs text-slate-500 py-1">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" />
-              <span>Kata sandi Anda saat ini aktif & terlindungi</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowChangePassword(true)}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer hover:underline"
-            >
-              Ubah Sandi &rarr;
-            </button>
-          </div>
+          <></>
         )}
       </div>
 

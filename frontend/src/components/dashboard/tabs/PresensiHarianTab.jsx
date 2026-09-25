@@ -101,11 +101,6 @@ export default function PresensiHarianTab({
                       <span className="text-[11px] font-bold text-slate-700">
                         {item.kelas}
                       </span>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                      >
-                        {jurInfo.kode}
-                      </span>
                     </div>
                   </div>
                   <span

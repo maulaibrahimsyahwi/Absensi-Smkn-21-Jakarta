@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   FileText,
   Calendar,
+  ClipboardCheck,
 } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
 
@@ -25,6 +26,9 @@ export default function DashboardPeriodFilter({
   loading,
   onRefresh,
   onExport,
+  isPiket = false,
+  isAdmin = false,
+  backTarget,
 }) {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportDropdownRef = useRef(null);
@@ -57,29 +61,44 @@ export default function DashboardPeriodFilter({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-6">
         <div className="flex items-center gap-3 min-w-0">
           <Link
-            to="/portal-admin"
+            to={backTarget || (isPiket ? "/portal-piket" : "/portal-admin")}
             className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
+            title="Kembali ke Beranda Portal"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div className="min-w-0 flex-1">
             <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight leading-tight">
-              Rekapitulasi Presensi & Perpustakaan
+              {isPiket
+                ? "Dashboard & Rekapitulasi Piket"
+                : "Rekapitulasi Presensi Siswa"}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 leading-snug">
-              Laporan akumulasi kehadiran siswa SMKN 21
+              {isPiket
+                ? "Laporan presensi harian, verifikasi izin, dan catatan kedisiplinan siswa SMKN 21"
+                : "Laporan akumulasi kehadiran, perpustakaan, dan ketertiban siswa SMKN 21"}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap w-full sm:w-auto">
-          <Link
-            to="/registrasi"
-            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs flex-1 sm:flex-none whitespace-nowrap"
-          >
-            <UserPlus className="w-4 h-4 flex-shrink-0" />
-            <span>Data Siswa</span>
-          </Link>
+          {isPiket ? (
+            <Link
+              to="/piket"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition-all shadow-2xs flex-1 sm:flex-none whitespace-nowrap"
+            >
+              <ClipboardCheck className="w-4 h-4 flex-shrink-0" />
+              <span>Meja Piket</span>
+            </Link>
+          ) : (
+            <Link
+              to="/registrasi"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all shadow-2xs flex-1 sm:flex-none whitespace-nowrap"
+            >
+              <UserPlus className="w-4 h-4 flex-shrink-0" />
+              <span>Data Siswa</span>
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => onRefresh && onRefresh(true)}

@@ -609,10 +609,13 @@ export default function Dashboard() {
         loading={loading}
         onRefresh={fetchData}
         onExport={handleExport}
+        isPiket={isPiket}
+        isAdmin={isAdmin}
+        backTarget={backTarget}
       />
 
       {/* 2. KPI Metric Summary Cards */}
-      <DashboardKpiCards stats={stats} />
+      <DashboardKpiCards stats={stats} isPiket={isPiket} />
 
       {/* 3 Kategori Utama Pengelompokan Dashboard (Solusi Opsi 1) */}
       <div className="bg-slate-100/90 p-1.5 rounded-2xl flex flex-col sm:flex-row gap-1.5 border border-slate-200 shadow-2xs">
@@ -983,7 +986,7 @@ export default function Dashboard() {
                     filteredIzinPiket={filteredIzinPiket}
                     paginatedIzinPiket={paginatedIzinPiket}
                     onOpenSlipModal={(item) => setSelectedSlipModal(item)}
-                    onDeleteIzin={handleDeleteIzinPiket}
+                    onDeleteIzin={isAdmin ? handleDeleteIzinPiket : null}
                   />
                 )}
               </>

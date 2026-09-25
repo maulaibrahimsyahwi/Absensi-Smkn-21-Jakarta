@@ -103,6 +103,15 @@ def run_security_audit_tests():
         assert res_admin_rekap.status_code == 200
         print("[OK] Admin berhasil mengakses rekap harian (HTTP 200)")
 
+        # TEST 5.1: Guru Piket dilarang menghapus izin atau pelanggaran (Khusus Admin HTTP 403)
+        res_piket_del_izin = client.delete('/api/piket/izin/1', headers=piket_headers)
+        assert res_piket_del_izin.status_code == 403, f"FAIL: Piket hapus izin harus 403 tapi dapat {res_piket_del_izin.status_code}"
+        print("[OK] Guru Piket dilarang menghapus surat izin piket (HTTP 403)")
+
+        res_piket_del_viol = client.delete('/api/pelanggaran/1', headers=piket_headers)
+        assert res_piket_del_viol.status_code == 403, f"FAIL: Piket hapus pelanggaran harus 403 tapi dapat {res_piket_del_viol.status_code}"
+        print("[OK] Guru Piket dilarang menghapus catatan pelanggaran (HTTP 403)")
+
         # TEST 6: Proteksi Audit Logs & Protected Document Storage
         print("\n--- TEST 6: Proteksi Audit Trail & Protected File Storage ---")
         res_siswa_audit = client.get('/api/audit_logs', headers=siswa_headers)

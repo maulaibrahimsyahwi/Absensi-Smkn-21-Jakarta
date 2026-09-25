@@ -13,6 +13,7 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function IzinPiketTab({
   filteredIzinPiket = [],
@@ -20,6 +21,7 @@ export default function IzinPiketTab({
   onOpenSlipModal,
   onDeleteIzin,
 }) {
+  const { isAdmin } = useAuth();
   const [sortKey, setSortKey] = useState("id");
   const [sortDirection, setSortDirection] = useState("desc");
 
@@ -83,16 +85,11 @@ export default function IzinPiketTab({
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-slate-400 font-mono">
-                        NIS {item.nis}
+                        {item.nis}
                       </span>
                       <span className="text-slate-300">•</span>
                       <span className="text-[11px] font-bold text-slate-700">
                         {item.kelas}
-                      </span>
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
-                      >
-                        {jurInfo.kode}
                       </span>
                     </div>
                   </div>
@@ -118,7 +115,7 @@ export default function IzinPiketTab({
                 <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 font-medium">
-                      Jam Pelajaran:
+                      Jam Pelajaran
                     </span>
                     <span className="font-bold text-slate-800">
                       {item.jam_ke}
@@ -126,7 +123,7 @@ export default function IzinPiketTab({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 font-medium">
-                      Hari / Tanggal:
+                      Hari / Tanggal
                     </span>
                     <span className="font-semibold text-slate-700">
                       {item.hari}, {item.tanggal_formatted || item.tanggal}
@@ -134,16 +131,15 @@ export default function IzinPiketTab({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 font-medium">
-                      Petugas Piket:
+                      Petugas Piket
                     </span>
                     <span className="font-semibold text-slate-800 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3 text-indigo-600" />
                       {item.petugas_piket}
                     </span>
                   </div>
                   <div className="pt-1 border-t border-slate-200/60">
                     <span className="text-slate-500 font-medium block mb-0.5">
-                      Alasan:
+                      Alasan
                     </span>
                     <p className="italic text-slate-700 bg-white p-2 rounded-lg border border-slate-200/50">
                       "{item.alasan}"
@@ -161,12 +157,12 @@ export default function IzinPiketTab({
                     <Printer className="w-3.5 h-3.5" />
                     <span>Cetak E-Slip</span>
                   </button>
-                  {onDeleteIzin && (
+                  {isAdmin && onDeleteIzin && (
                     <button
                       type="button"
                       onClick={() => onDeleteIzin(item.id, item.nama)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                      title="Hapus Izin"
+                      title="Hapus Izin (Khusus Admin)"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -391,12 +387,12 @@ export default function IzinPiketTab({
                         >
                           <Printer className="w-3.5 h-3.5" />
                         </button>
-                        {onDeleteIzin && (
+                        {isAdmin && onDeleteIzin && (
                           <button
                             type="button"
                             onClick={() => onDeleteIzin(item.id, item.nama)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Hapus Surat Izin"
+                            title="Hapus Surat Izin (Khusus Admin)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
