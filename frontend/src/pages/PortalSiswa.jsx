@@ -343,7 +343,7 @@ export default function PortalSiswa() {
   }, [isAlumni, user?.tanggal_lulus, personalData?.siswa?.tanggal_lulus]);
 
   return (
-    <div className="min-h-screen py-8 px-4 sm:px-6 max-w-6xl mx-auto space-y-3">
+    <div className="min-h-screen py-5 sm:py-8 px-3.5 sm:px-6 max-w-6xl mx-auto space-y-3 sm:space-y-4">
       {/* Toast Notification */}
       {notification && (
         <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center gap-3 animate-in fade-in">
@@ -373,7 +373,7 @@ export default function PortalSiswa() {
         {/* Konten Header: Responsif Mobile & Tablet */}
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Sisi Kiri: Foto Profil & Info Siswa */}
-          <div className="flex items-center gap-3.5 sm:gap-5 min-w-0">
+          <div className="flex items-center gap-3.5 sm:gap-5 min-w-0 flex-1">
             <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white backdrop-blur-md shadow-inner flex-shrink-0 overflow-hidden">
               {user?.foto_profil ? (
                 <img
