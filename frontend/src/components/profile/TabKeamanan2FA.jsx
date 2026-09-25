@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Loader2,
   Lock,
+  ShieldLock,
 } from "lucide-react";
 import api from "../../services/api";
 
@@ -100,17 +101,17 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
         totp_code: twoFactorCode.trim(),
       });
       if (res.data?.success) {
-        setTwoFactorSuccess("2FA berhasil dinonaktifkan.");
+        setTwoFactorSuccess("2FA berhasil dinonaktifkan");
         setTwoFactorStep("idle");
         setTwoFactorDisablePass("");
         setTwoFactorCode("");
         updateUserProfile({ two_factor_enabled: false });
       } else {
-        setTwoFactorError(res.data?.message || "Gagal menonaktifkan 2FA.");
+        setTwoFactorError(res.data?.message || "Gagal menonaktifkan 2FA");
       }
     } catch (err) {
       setTwoFactorError(
-        err.response?.data?.message || "Kata sandi atau kode verifikasi salah.",
+        err.response?.data?.message || "Kata sandi atau kode verifikasi salah",
       );
     } finally {
       setTwoFactorLoading(false);
@@ -150,16 +151,19 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
                 : "bg-slate-200 text-slate-500"
             }`}
           >
-            <ShieldCheck className="w-5 h-5" />
+            <ShieldLock className="w-5 h-5" />
           </div>
           <div>
             <h5 className="font-bold text-slate-800 text-xs sm:text-sm">
-              Status 2FA: {user?.two_factor_enabled ? "Aktif" : "Nonaktif"}
+              Status 2FA
+              <span className="ml-1 text-[10px] font-normal text-slate-500">
+                {user?.two_factor_enabled ? "Aktif" : "Nonaktif"}
+              </span>
             </h5>
             <p className="text-[11px] text-slate-500">
               {user?.two_factor_enabled
                 ? "Akun Anda terlindungi dengan kode OTP 6 digit"
-                : "Tingkatkan keamanan akun dari pembobolan & bot"}
+                : "Tingkatkan keamanan akun"}
             </p>
           </div>
         </div>
@@ -293,14 +297,13 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
           className="p-4 rounded-2xl border border-rose-200 bg-rose-50/40 space-y-3 animate-in zoom-in-95"
         >
           <div className="flex items-center gap-2 text-rose-700">
-            <Lock className="w-4 h-4" />
             <h5 className="font-bold text-xs sm:text-sm">
               Konfirmasi Nonaktifkan 2FA
             </h5>
           </div>
           <p className="text-xs text-slate-600">
             Masukkan kata sandi akun Anda untuk memverifikasi penonaktifan
-            proteksi 2FA:
+            proteksi 2FA
           </p>
 
           <input
@@ -327,9 +330,8 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
               {twoFactorLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
-                <ShieldCheck className="w-4 h-4" />
+                <span>Konfirmasi</span>
               )}
-              Konfirmasi Nonaktifkan
             </button>
           </div>
         </form>

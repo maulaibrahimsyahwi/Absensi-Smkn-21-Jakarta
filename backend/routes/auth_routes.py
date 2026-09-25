@@ -752,7 +752,7 @@ def disable_2fa():
         authenticated = True
 
     if not authenticated:
-        return jsonify({"success": False, "message": "Konfirmasi gagal! Masukkan kata sandi akun atau kode 2FA yang valid untuk menonaktifkan."}), 401
+        return jsonify({"success": False, "message": "Konfirmasi gagal! Masukkan kata sandi akun atau kode 2FA yang valid untuk menonaktifkan"}), 401
 
     account.two_factor_enabled = False
     account.two_factor_secret = None

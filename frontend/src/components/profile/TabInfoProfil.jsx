@@ -168,7 +168,7 @@ export default function TabInfoProfil({
             <p className="text-xs text-slate-500">
               {isSiswa
                 ? `NIS ${user?.nis} • Kelas ${user?.kelas}`
-                : `NIP / Akun: ${user?.username} • ${user?.role === "piket" ? "Petugas Guru Piket" : "Administrator"}`}
+                : `${user?.username} • ${user?.role === "piket" ? "Petugas Guru Piket" : "Administrator"}`}
             </p>
           </div>
 

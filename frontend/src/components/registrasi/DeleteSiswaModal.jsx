@@ -73,11 +73,10 @@ export default function DeleteSiswaModal({
         <p className="text-xs text-slate-600 mb-5 leading-relaxed">
           {isBulk ? (
             <>
-              Apakah Anda yakin ingin menghapus{" "}
-              <strong>{selectedCount} siswa terpilih</strong>? Jika Anda hanya
-              ingin siswa yang sudah lulus tidak bisa absen lagi, disarankan
-              memilih <strong>"Luluskan ke Alumni"</strong> agar riwayat
-              presensinya tetap aman tersimpan.
+              Apakah Anda yakin ingin menghapus ? Jika Anda hanya ingin siswa
+              yang sudah lulus tidak bisa absen lagi, disarankan memilih{" "}
+              <strong>"Luluskan ke Alumni"</strong> agar riwayat presensinya
+              tetap aman tersimpan.
             </>
           ) : (
             <>
@@ -110,9 +109,7 @@ export default function DeleteSiswaModal({
               <span>Menghapus...</span>
             ) : (
               <>
-                <span>
-                  {isBulk ? `Hapus (${selectedCount})` : "Ya, Hapus "}
-                </span>
+                <span>{isBulk ? `Hapus` : "Ya, Hapus "}</span>
               </>
             )}
           </button>

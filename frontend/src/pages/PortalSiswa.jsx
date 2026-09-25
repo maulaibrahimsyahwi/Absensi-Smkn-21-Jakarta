@@ -651,13 +651,9 @@ export default function PortalSiswa() {
             </div>
           )}
 
-          {/* Buku Saku Kedisiplinan (Read-Only untuk Siswa) */}
-          <button
-            type="button"
-            onClick={() => {
-              const el = document.getElementById("buku-kedisiplinan");
-              if (el) el.scrollIntoView({ behavior: "smooth" });
-            }}
+          {/* Catat / Pengakuan Pelanggaran Mandiri Siswa */}
+          <Link
+            to="/pelanggaran"
             className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
           >
             <div className="flex items-center gap-3.5">
@@ -665,9 +661,9 @@ export default function PortalSiswa() {
                 <ShieldAlert className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="font-bold text-base">Buku Saku Kedisiplinan</h3>
+                <h3 className="font-bold text-base">Catat Pelanggaran</h3>
                 <p className="text-[11px] text-rose-100">
-                  Riwayat & poin pelanggaran saya
+                  Formulir pengakuan mandiri
                 </p>
               </div>
             </div>
@@ -675,7 +671,7 @@ export default function PortalSiswa() {
               <span>{totalPoinPelanggaran} Poin</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
-          </button>
+          </Link>
         </div>
       )}
 
@@ -803,7 +799,10 @@ export default function PortalSiswa() {
       </div>
 
       {/* Buku Saku Kedisiplinan & Poin Pelanggaran Saya */}
-      <div id="buku-kedisiplinan" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6 scroll-mt-6">
+      <div
+        id="buku-kedisiplinan"
+        className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6 scroll-mt-6"
+      >
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -838,10 +837,13 @@ export default function PortalSiswa() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{statusKedisiplinan.desc}</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/80 text-slate-600 rounded-xl text-[11px] font-semibold border border-slate-200/60 shadow-2xs">
-            <Lock className="w-3.5 h-3.5 text-slate-400" />
-            <span>Pencatatan pelanggaran dikelola resmi oleh Guru Piket & BK</span>
-          </div>
+          <Link
+            to="/pelanggaran"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-bold border border-rose-200 shadow-2xs transition"
+          >
+            <PlusCircle className="w-3.5 h-3.5 text-rose-600" />
+            <span>Formulir Pengakuan Pelanggaran</span>
+          </Link>
         </div>
 
         {/* Tabel / List Riwayat Pelanggaran Siswa */}

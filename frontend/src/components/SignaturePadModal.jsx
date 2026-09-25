@@ -168,10 +168,6 @@ export default function SignaturePadModal({
               <span>SMKN 21 Jakarta</span>
             </div>
           </div>
-
-          <p className="text-[11px] text-slate-400 mt-2 text-center">
-            Goreskan tanda tangan Anda dengan rapi di atas garis dasar
-          </p>
         </div>
 
         {/* Footer Actions */}

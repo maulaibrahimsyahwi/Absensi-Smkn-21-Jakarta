@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 
-export default function TabUbahPassword({ user }) {
+export default function TabUbahPassword({ user, onSuccess, onCancel }) {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -56,6 +56,11 @@ export default function TabUbahPassword({ user }) {
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess();
+          }, 1500);
+        }
       }
     } catch (err) {
       const errMsg =
@@ -166,17 +171,29 @@ export default function TabUbahPassword({ user }) {
         </div>
       </div>
 
-      <button
-        type="submit"
-        disabled={passLoading}
-        className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 mt-2"
-      >
-        {passLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          `Simpan Kata Sandi Baru`
+      <div className="flex items-center gap-2 mt-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={passLoading}
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs sm:text-sm transition cursor-pointer disabled:opacity-50"
+          >
+            Batal
+          </button>
         )}
-      </button>
+        <button
+          type="submit"
+          disabled={passLoading}
+          className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs sm:text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+        >
+          {passLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            `Simpan Kata Sandi Baru`
+          )}
+        </button>
+      </div>
     </form>
   );
 }

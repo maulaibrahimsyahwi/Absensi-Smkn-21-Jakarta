@@ -236,13 +236,8 @@ export default function PortalAdmin() {
             )}
           </div>
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-purple-500/30 border border-purple-400/30 text-[11px] font-bold tracking-wide uppercase text-purple-200">
-                <span>Admin Sekolah</span>
-              </span>
-            </div>
             <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-              {user?.nama || "Administrator SMKN 21"}
+              {user?.nama || "Administrator SMKN 21 "}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 mt-1 flex items-center gap-2">
               <span>{todayIndoStr}</span>

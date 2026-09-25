@@ -63,18 +63,24 @@ export default function CatatPelanggaran() {
   const { user, isSiswa, isPiket, isAdmin } = useAuth();
   const navigate = useNavigate();
 
-  // Proteksi ganda: Siswa dilarang mencatat pelanggaran
-  useEffect(() => {
-    if (isSiswa) {
-      navigate("/portal-siswa", { replace: true });
-    }
-  }, [isSiswa, navigate]);
+  const backTarget = isSiswa
+    ? "/portal-siswa"
+    : isPiket
+      ? "/portal-piket"
+      : isAdmin
+        ? "/portal-admin"
+        : "/";
 
-  const backTarget = isPiket
-    ? "/portal-piket"
-    : isAdmin
-      ? "/portal-admin"
-      : "/";
+  // Inisialisasi otomatis jika siswa mencatat mandiri
+  useEffect(() => {
+    if (isSiswa && user) {
+      setNamaSiswa(user.nama || "");
+      setNis(user.nis || "");
+      setKelas(user.kelas || "");
+      setSiswaId(user.id || null);
+      setSelectedStudent(user);
+    }
+  }, [isSiswa, user]);
 
   // State Form Identitas Siswa
   const [namaSiswa, setNamaSiswa] = useState("");
@@ -600,7 +606,7 @@ export default function CatatPelanggaran() {
             <div className="flex items-center gap-3">
               <div className="flex items-center justify-between gap-3">
                 <Link
-                  to="/portal-admin"
+                  to={backTarget}
                   className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
                 >
                   <ArrowLeft className="w-5 h-5" />

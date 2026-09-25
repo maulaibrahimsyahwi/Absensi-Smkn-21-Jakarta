@@ -168,13 +168,18 @@ def get_master_pelanggaran():
 
 @pelanggaran_bp.route('/api/pelanggaran', methods=['POST'])
 @token_required
-@role_required(['piket', 'admin'])
+@role_required(['piket', 'admin', 'siswa'])
 def create_pelanggaran():
     """
     Mencatat pelanggaran siswa baru.
-    Menerima data identitas siswa, jenis pelanggaran, poin, nama guru penegur, dan tanda tangan digital.
+    Mendukung pencatatan resmi oleh Guru Piket/Admin dan pencatatan mandiri (self-reporting) oleh Siswa.
+    Jika diakses oleh Siswa, identitas siswa otomatis dikunci ke akun yang sedang login.
     """
     data = request.json or {}
+
+    current_u = getattr(request, 'current_user', {})
+    user_role = str(current_u.get('role', '')).lower()
+    user_id = current_u.get('user_id')
 
     nis = str(data.get('nis', '')).strip()
     nama_siswa = str(data.get('nama_siswa', '')).strip()
@@ -198,6 +203,41 @@ def create_pelanggaran():
     tanda_tangan_siswa = data.get('tanda_tangan_siswa', '')
     keterangan = str(data.get('keterangan', '')).strip()
     tanggal_waktu_str = data.get('tanggal_waktu')
+
+    # Jika pemohon adalah Siswa (pencatatan mandiri antrean piket), kunci identitas ke akun siswa yang login
+    siswa_obj = None
+    if user_role == 'siswa':
+        siswa_obj = Siswa.query.get(user_id)
+        if not siswa_obj:
+            return jsonify({"success": False, "message": "Akun siswa Anda tidak ditemukan dalam database."}), 404
+        if getattr(siswa_obj, 'status', 'Aktif') == 'Alumni':
+            return jsonify({
+                "success": False,
+                "message": "Akun alumni tidak dapat mencatat pelanggaran sekolah."
+            }), 400
+        siswa_id = siswa_obj.id
+        nis = siswa_obj.nis
+        nama_siswa = siswa_obj.nama
+        kelas = siswa_obj.kelas
+    else:
+        # Hubungkan dengan siswa_id jika ada di database (petugas piket / admin)
+        siswa_id = data.get('siswa_id')
+        if siswa_id:
+            siswa_obj = Siswa.query.get(siswa_id)
+        elif nis:
+            siswa_obj = Siswa.query.filter_by(nis=nis).first()
+
+        if siswa_obj:
+            if getattr(siswa_obj, 'status', 'Aktif') == 'Alumni':
+                return jsonify({
+                    "success": False,
+                    "message": f"Siswa {siswa_obj.nama} ({siswa_obj.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mencatat pelanggaran sekolah."
+                }), 400
+            siswa_id = siswa_obj.id
+            if not nama_siswa:
+                nama_siswa = siswa_obj.nama
+            if not kelas:
+                kelas = siswa_obj.kelas
 
     # Validasi input wajib
     if not nama_siswa:
@@ -240,26 +280,6 @@ def create_pelanggaran():
             except ValueError:
                 pass
 
-    # Hubungkan dengan siswa_id jika ada di database
-    siswa_id = data.get('siswa_id')
-    siswa_obj = None
-    if siswa_id:
-        siswa_obj = Siswa.query.get(siswa_id)
-    elif nis:
-        siswa_obj = Siswa.query.filter_by(nis=nis).first()
-
-    if siswa_obj:
-        if getattr(siswa_obj, 'status', 'Aktif') == 'Alumni':
-            return jsonify({
-                "success": False,
-                "message": f"Siswa {siswa_obj.nama} ({siswa_obj.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mencatat pelanggaran sekolah."
-            }), 400
-        siswa_id = siswa_obj.id
-        if not nama_siswa:
-            nama_siswa = siswa_obj.nama
-        if not kelas:
-            kelas = siswa_obj.kelas
-
     try:
         record = PelanggaranSiswa(
             siswa_id=siswa_id,
@@ -277,15 +297,16 @@ def create_pelanggaran():
         db.session.commit()
 
         # Catat jejak audit penambahan pelanggaran
-        current_u = getattr(request, 'current_user', {})
+        action_name = 'PENGAKUAN_PELANGGARAN_MANDIRI' if user_role == 'siswa' else 'CATAT_PELANGGARAN'
+        actor_name = f"Siswa: {nama_siswa} ({nis})" if user_role == 'siswa' else current_u.get('identifier', nama_penanggung_jawab)
         record_audit_log(
             user_id=current_u.get('user_id'),
-            role=current_u.get('role', 'piket'),
-            user_name=current_u.get('identifier', nama_penanggung_jawab),
-            action='CATAT_PELANGGARAN',
+            role=user_role,
+            user_name=actor_name,
+            action=action_name,
             target_type='PelanggaranSiswa',
             target_id=record.id,
-            keterangan=f"Mencatat pelanggaran '{jenis_pelanggaran}' (+{poin} poin) untuk {nama_siswa} ({kelas}). Petugas: {nama_penanggung_jawab}"
+            keterangan=f"Pencatatan pelanggaran '{jenis_pelanggaran}' (+{poin} poin) untuk {nama_siswa} ({kelas}). Guru Penegur: {nama_penanggung_jawab}"
         )
 
         return jsonify({
