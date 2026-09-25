@@ -475,10 +475,7 @@ export default function AbsensiPerpus() {
               disabled={geoState.loading}
               className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-500/25 cursor-pointer"
             >
-              <RefreshCw
-                className={`w-4 h-4 ${geoState.loading ? "animate-spin" : ""}`}
-              />
-              <span>Cek Ulang GPS</span>
+              <span>Cek Ulang Lokasi</span>
             </button>
 
             <Link

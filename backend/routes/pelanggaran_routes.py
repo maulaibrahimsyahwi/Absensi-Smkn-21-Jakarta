@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime
 from models import db, PelanggaranSiswa, Siswa
 from utils.auth_middleware import token_required, role_required
+from utils.audit_trail import record_audit_log
 
 pelanggaran_bp = Blueprint('pelanggaran_bp', __name__)
 
@@ -275,6 +276,18 @@ def create_pelanggaran():
         db.session.add(record)
         db.session.commit()
 
+        # Catat jejak audit penambahan pelanggaran
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=current_u.get('identifier', nama_penanggung_jawab),
+            action='CATAT_PELANGGARAN',
+            target_type='PelanggaranSiswa',
+            target_id=record.id,
+            keterangan=f"Mencatat pelanggaran '{jenis_pelanggaran}' (+{poin} poin) untuk {nama_siswa} ({kelas}). Petugas: {nama_penanggung_jawab}"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Catatan pelanggaran siswa {nama_siswa} (+{poin} poin) berhasil disimpan.",
@@ -427,8 +440,25 @@ def delete_pelanggaran(id):
     try:
         nama = record.nama_siswa
         poin = record.poin
+        jenis = record.jenis_pelanggaran
+        kelas = record.kelas
+        record_id = record.id
+
         db.session.delete(record)
         db.session.commit()
+
+        # Catat jejak audit penghapusan pelanggaran
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=current_u.get('identifier', 'Guru Piket'),
+            action='HAPUS_PELANGGARAN',
+            target_type='PelanggaranSiswa',
+            target_id=record_id,
+            keterangan=f"Menghapus catatan pelanggaran '{jenis}' ({poin} poin) milik {nama} ({kelas})"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Catatan pelanggaran untuk {nama} ({poin} poin) berhasil dihapus."

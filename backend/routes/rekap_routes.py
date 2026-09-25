@@ -2,7 +2,7 @@ from datetime import datetime, date, time
 from flask import Blueprint, request, jsonify
 from sqlalchemy import extract
 from sqlalchemy.orm import joinedload
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa, AuditLog
 from utils.auth_middleware import token_required, role_required
 
 rekap_bp = Blueprint('rekap', __name__)
@@ -357,5 +357,31 @@ def generate_alpa_today():
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@rekap_bp.route('/api/audit_logs', methods=['GET'])
+@token_required
+@role_required(['admin'])
+def get_audit_logs():
+    """
+    Mengambil jejak audit trail seluruh aktivitas operasional admin dan guru piket.
+    Filter yang didukung:
+    - action: Jenis aksi (e.g. 'VERIFIKASI_IZIN', 'HAPUS_PELANGGARAN', 'RESET_PASSWORD_SISWA')
+    - limit: Jumlah catatan maksimal (default 100)
+    """
+    action = request.args.get('action')
+    limit = request.args.get('limit', 100, type=int)
+
+    query = AuditLog.query
+    if action and action != 'ALL':
+        query = query.filter_by(action=action)
+
+    logs = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+    return jsonify({
+        "success": True,
+        "total": len(logs),
+        "data": [l.to_dict() for l in logs]
+    })
+
 
 

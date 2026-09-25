@@ -131,6 +131,14 @@ def not_found(e):
 def method_not_allowed(e):
     return jsonify({"success": False, "message": "Metode HTTP tidak diizinkan"}), 405
 
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({
+        "success": False,
+        "error_code": "RATE_LIMIT_EXCEEDED",
+        "message": f"Terlalu banyak permintaan ke server. Silakan tunggu beberapa saat ({e.description})."
+    }), 429
+
 @app.errorhandler(500)
 def internal_error(e):
     return jsonify({"success": False, "message": "Terjadi kesalahan internal server"}), 500

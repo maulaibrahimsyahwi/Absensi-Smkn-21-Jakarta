@@ -318,3 +318,37 @@ class PengaturanPJJ(db.Model):
         }
 
 
+class AuditLog(db.Model):
+    """
+    Model pencatatan log audit rekam jejak aktivitas operasional staf/admin.
+    Mencatat siapa yang mengubah data penting (misal verifikasi izin, hapus pelanggaran, presensi manual).
+    """
+    __tablename__ = 'audit_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, nullable=True)
+    role = db.Column(db.String(30), nullable=False)
+    user_name = db.Column(db.String(100), nullable=False)
+    action = db.Column(db.String(50), nullable=False, index=True)  # e.g., 'VERIFIKASI_IZIN', 'HAPUS_PELANGGARAN', 'UBAH_PRESENSI'
+    target_type = db.Column(db.String(50), nullable=True)          # e.g., 'PengajuanIzin', 'PelanggaranSiswa', 'AbsensiHarian'
+    target_id = db.Column(db.String(50), nullable=True)
+    keterangan = db.Column(db.Text, nullable=True)
+    ip_address = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "role": self.role,
+            "user_name": self.user_name,
+            "action": self.action,
+            "target_type": self.target_type,
+            "target_id": self.target_id,
+            "keterangan": self.keterangan,
+            "ip_address": self.ip_address,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
+            "created_at_formatted": self.created_at.strftime("%d-%b-%Y %H:%M") if self.created_at else None,
+        }
+
+
+

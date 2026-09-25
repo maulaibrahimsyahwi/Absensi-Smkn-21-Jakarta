@@ -105,14 +105,11 @@ function AppLayout() {
               }
             />
 
-            {/* Rute Buku Catatan Pelanggaran Siswa (Siswa, Piket, Admin; Siswa Wajib Biometrik) */}
+            {/* Rute Pencatatan Pelanggaran Siswa (Khusus Guru Piket & Admin) */}
             <Route
               path="/pelanggaran"
               element={
-                <ProtectedRoute
-                  allowedRoles={["siswa", "piket", "admin"]}
-                  requireBiometric={true}
-                >
+                <ProtectedRoute allowedRoles={["piket", "admin"]}>
                   <CatatPelanggaran />
                 </ProtectedRoute>
               }

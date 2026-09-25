@@ -15,6 +15,7 @@ from utils.auth_security import (
     clear_login_attempts as _clear_attempts,
     verify_and_upgrade_password
 )
+from utils.audit_trail import record_audit_log
 
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
@@ -553,6 +554,18 @@ def reset_siswa_password(id):
 
         siswa.password = None  # Reset ke None agar login menggunakan NIS sebagai default
         db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_PASSWORD_SISWA',
+            target_type='Siswa',
+            target_id=siswa.id,
+            keterangan=f"Mereset kata sandi siswa {siswa.nama} ({siswa.kelas}) kembali ke default NIS: {siswa.nis}"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Kata sandi {siswa.nama} ({siswa.kelas}) berhasil direset ke default (NIS: {siswa.nis}).",
@@ -577,6 +590,18 @@ def reset_siswa_signature(id):
         
         siswa.tanda_tangan = None
         db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_SIGNATURE_SISWA',
+            target_type='Siswa',
+            target_id=siswa.id,
+            keterangan=f"Mereset tanda tangan digital siswa {siswa.nama} ({siswa.kelas})"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Tanda tangan digital {siswa.nama} ({siswa.kelas}) berhasil direset. Siswa dapat membuat tanda tangan baru."

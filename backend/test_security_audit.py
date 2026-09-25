@@ -18,9 +18,13 @@ def run_security_audit_tests():
 
     with app.test_client() as client:
         with app.app_context():
+            from models import Siswa
+            first_siswa = Siswa.query.filter_by(status='Aktif').first()
+            siswa_id = first_siswa.id if first_siswa else 4
+            siswa_nis = first_siswa.nis if first_siswa else '21312'
             admin_token = generate_token(1, 'admin', 'admin')
             piket_token = generate_token(2, 'piket', 'piket')
-            siswa_token = generate_token(3, 'siswa', '21312')
+            siswa_token = generate_token(siswa_id, 'siswa', siswa_nis)
 
         admin_headers = {'Authorization': f'Bearer {admin_token}'}
         piket_headers = {'Authorization': f'Bearer {piket_token}'}
@@ -98,6 +102,20 @@ def run_security_audit_tests():
         res_admin_rekap = client.get('/api/rekap/harian', headers=admin_headers)
         assert res_admin_rekap.status_code == 200
         print("[OK] Admin berhasil mengakses rekap harian (HTTP 200)")
+
+        # TEST 6: Proteksi Audit Logs & Protected Document Storage
+        print("\n--- TEST 6: Proteksi Audit Trail & Protected File Storage ---")
+        res_siswa_audit = client.get('/api/audit_logs', headers=siswa_headers)
+        assert res_siswa_audit.status_code == 403, f"FAIL: Siswa audit log harus 403 tapi dapat {res_siswa_audit.status_code}"
+        print("[OK] Siswa dilarang mengakses log audit (HTTP 403)")
+
+        res_admin_audit = client.get('/api/audit_logs', headers=admin_headers)
+        assert res_admin_audit.status_code == 200
+        print("[OK] Admin berhasil mengakses log audit (HTTP 200)")
+
+        res_anon_doc = client.get('/api/pengajuan_izin/dokumen/secret_doctor_note.jpg')
+        assert res_anon_doc.status_code == 401
+        print("[OK] Akses dokumen izin tanpa token ditolak (HTTP 401)")
 
     print("\n=========================================================")
     print("[PASSED] ALL SECURITY AUDIT ASSERTIONS PASSED PERFECTLY!")

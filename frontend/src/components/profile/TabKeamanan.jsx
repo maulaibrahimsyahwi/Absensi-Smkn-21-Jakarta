@@ -17,7 +17,8 @@ export default function TabKeamanan({ user, updateUserProfile }) {
               Ubah Kata Sandi
             </h5>
             <p className="text-[11px] text-slate-500">
-              Perbarui kata sandi akun Anda secara berkala untuk menjaga keamanan akun
+              Perbarui kata sandi akun Anda secara berkala untuk menjaga
+              keamanan akun
             </p>
           </div>
         </div>

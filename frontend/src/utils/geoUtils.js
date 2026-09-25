@@ -158,7 +158,7 @@ export function detectMockGps(currentPos, prevPos = lastGpsSample) {
         return {
           isMock: true,
           reason:
-            "Koordinat GPS membeku secara tidak wajar (Zero-Drift). Terindikasi aplikasi Fake GPS.",
+            "Koordinat Lokasi tidak wajar. Terindikasi aplikasi Fake GPS.",
         };
       }
     }

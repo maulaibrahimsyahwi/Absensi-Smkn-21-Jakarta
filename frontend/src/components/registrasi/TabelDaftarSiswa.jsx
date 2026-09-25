@@ -190,9 +190,7 @@ export default function TabelDaftarSiswa({
             <span className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
               {selectedIds.length}
             </span>
-            <span className="text-xs font-bold text-blue-900">
-              Siswa Terpilih
-            </span>
+            <span className="text-xs font-bold text-blue-900">Siswa</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -200,16 +198,14 @@ export default function TabelDaftarSiswa({
               onClick={onLuluskanSelected}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs cursor-pointer"
             >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Luluskan Terpilih</span>
+              <span>Luluskan </span>
             </button>
             <button
               type="button"
               onClick={onBulkDelete}
               className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs cursor-pointer"
             >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Hapus Terpilih</span>
+              <span>Hapus</span>
             </button>
           </div>
         </div>

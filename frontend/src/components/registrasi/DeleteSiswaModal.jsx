@@ -54,7 +54,7 @@ export default function DeleteSiswaModal({
                 : `Hapus  ${deletingSiswa?.nama}?`}
             </h3>
             <p className="text-xs text-rose-600 font-semibold mt-0.5">
-              Penghapusan Permanen dari Database
+              Penghapusan Permanen dari data Siswa/i
             </p>
           </div>
         </div>

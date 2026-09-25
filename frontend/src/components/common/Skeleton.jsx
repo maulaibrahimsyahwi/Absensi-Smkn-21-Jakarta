@@ -258,7 +258,7 @@ export function PageSkeleton() {
       </div>
 
       {/* Grid 3 Stats Card Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />

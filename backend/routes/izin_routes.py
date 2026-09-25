@@ -2,10 +2,11 @@ import os
 import uuid
 import base64
 from datetime import datetime, time, timedelta
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 from config import BASE_DIR
 from models import db, Siswa, AbsensiHarian, PengajuanIzin
 from utils.auth_middleware import token_required, role_required
+from utils.audit_trail import record_audit_log
 
 izin_bp = Blueprint('izin', __name__)
 
@@ -238,6 +239,19 @@ def verifikasi_pengajuan_izin(id):
                 curr += timedelta(days=1)
 
         db.session.commit()
+
+        # Catat jejak audit aktivitas verifikasi izin
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=current_u.get('identifier', 'Guru Piket'),
+            action='VERIFIKASI_IZIN',
+            target_type='PengajuanIzin',
+            target_id=pengajuan.id,
+            keterangan=f"{aksi} pengajuan {pengajuan.jenis} siswa {getattr(pengajuan.siswa, 'nama', '-')} ({pengajuan.nis}). Catatan: {catatan or '-'}"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Pengajuan {pengajuan.jenis} siswa {pengajuan.siswa.nama} berhasil di-{aksi.lower()}.",
@@ -246,4 +260,34 @@ def verifikasi_pengajuan_izin(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@izin_bp.route('/api/pengajuan_izin/dokumen/<path:filename>', methods=['GET'])
+@token_required
+def get_dokumen_surat(filename):
+    """
+    Endpoint terproteksi untuk mengambil dan melihat berkas surat izin dokter/orang tua.
+    Hanya dapat diakses oleh:
+    1. Admin / Guru Piket
+    2. Siswa yang bersangkutan (pemilik surat izin)
+    Mencegah akses publik tak terotorisasi terhadap rekam medis/surat izin siswa.
+    """
+    current_u = getattr(request, 'current_user', {})
+    role = str(current_u.get('role', '')).lower()
+
+    if role in ['admin', 'piket', 'staf']:
+        return send_from_directory(UPLOAD_SURAT_DIR, filename)
+
+    if role == 'siswa':
+        siswa_id = current_u.get('user_id')
+        owned = PengajuanIzin.query.filter(
+            PengajuanIzin.siswa_id == siswa_id,
+            PengajuanIzin.surat_bukti.like(f"%{filename}%")
+        ).first()
+        if owned:
+            return send_from_directory(UPLOAD_SURAT_DIR, filename)
+        return jsonify({"success": False, "message": "Akses ditolak: Anda tidak memiliki wewenang melihat dokumen ini."}), 403
+
+    return jsonify({"success": False, "message": "Akses ditolak."}), 403
+
 

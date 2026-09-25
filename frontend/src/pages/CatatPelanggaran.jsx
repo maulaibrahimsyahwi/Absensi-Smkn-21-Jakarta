@@ -61,14 +61,20 @@ const getCurrentTimeStr = () => {
 
 export default function CatatPelanggaran() {
   const { user, isSiswa, isPiket, isAdmin } = useAuth();
-  const backTarget = isSiswa
-    ? "/portal-siswa"
-    : isPiket
-      ? "/portal-piket"
-      : isAdmin
-        ? "/portal-admin"
-        : "/";
   const navigate = useNavigate();
+
+  // Proteksi ganda: Siswa dilarang mencatat pelanggaran
+  useEffect(() => {
+    if (isSiswa) {
+      navigate("/portal-siswa", { replace: true });
+    }
+  }, [isSiswa, navigate]);
+
+  const backTarget = isPiket
+    ? "/portal-piket"
+    : isAdmin
+      ? "/portal-admin"
+      : "/";
 
   // State Form Identitas Siswa
   const [namaSiswa, setNamaSiswa] = useState("");
@@ -651,10 +657,7 @@ export default function CatatPelanggaran() {
                         {user?.nama}
                       </p>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        NIS {user?.nis || "-"} • Kelas{" "}
-                        <span className="font-bold text-blue-700">
-                          {user?.kelas || "-"}
-                        </span>
+                        {user?.nis || "-"}{" "}
                       </p>
                     </div>
                   </div>
@@ -671,10 +674,7 @@ export default function CatatPelanggaran() {
                         {selectedStudent.nama}
                       </p>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        NIS {selectedStudent.nis || "-"} • Kelas:{" "}
-                        <span className="font-bold text-blue-700">
-                          {selectedStudent.kelas}
-                        </span>
+                        {selectedStudent.nis || "-"}
                       </p>
                     </div>
                   </div>

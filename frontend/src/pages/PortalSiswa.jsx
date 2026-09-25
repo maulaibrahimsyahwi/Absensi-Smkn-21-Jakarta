@@ -2,26 +2,14 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   GraduationCap,
-  Calendar,
-  Clock,
   CheckCircle2,
   AlertCircle,
   Camera,
   FileText,
-  PenLine,
-  UserCheck,
-  Building2,
   RefreshCw,
-  LogOut,
   ChevronRight,
-  ShieldCheck,
-  AlertTriangle,
-  Loader2,
-  Eye,
-  KeyRound,
   ShieldAlert,
   PlusCircle,
-  Bell,
   User,
   Lock,
   X,
@@ -72,7 +60,7 @@ export default function PortalSiswa() {
       setNotification({
         type: "error",
         message:
-          "Fitur terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
+          "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
       });
       window.history.replaceState({}, document.title);
     }
@@ -355,7 +343,7 @@ export default function PortalSiswa() {
   }, [isAlumni, user?.tanggal_lulus, personalData?.siswa?.tanggal_lulus]);
 
   return (
-    <div className="min-h-screen py-8 px-4 sm:px-6 max-w-6xl mx-auto space-y-6">
+    <div className="min-h-screen py-8 px-4 sm:px-6 max-w-6xl mx-auto space-y-3">
       {/* Toast Notification */}
       {notification && (
         <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center gap-3 animate-in fade-in">
@@ -568,7 +556,7 @@ export default function PortalSiswa() {
 
       {/* Tombol Aksi Cepat (HANYA MUNCUL UNTUK SISWA AKTIF) */}
       {!isAlumni && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
           {user?.terdaftar ? (
             <Link
               to="/harian"
@@ -593,7 +581,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Presensi Harian terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
+                    "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -607,7 +595,7 @@ export default function PortalSiswa() {
                     <h3 className="font-bold text-base text-slate-600">
                       Presensi Harian
                     </h3>
-                    <Lock className="w-4 h-4 text-rose-500" />
+                    <Lock className="w-4 h-4 text-slate-500" />
                   </div>
                   <p className="text-[11px] text-slate-400">
                     Wajib biometrik wajah
@@ -639,7 +627,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Pengajuan Izin/Sakit terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
+                    "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -653,7 +641,7 @@ export default function PortalSiswa() {
                     <h3 className="font-bold text-base text-slate-600">
                       Surat Izin / Sakit
                     </h3>
-                    <Lock className="w-4 h-4 text-rose-500" />
+                    <Lock className="w-4 h-4 text-slate-500" />
                   </div>
                   <p className="text-[11px] text-slate-400">
                     Wajib biometrik wajah
@@ -663,53 +651,31 @@ export default function PortalSiswa() {
             </div>
           )}
 
-          {user?.terdaftar ? (
-            <Link
-              to="/pelanggaran"
-              className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                  <ShieldAlert className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base">Catat Pelanggaran</h3>
-                  <p className="text-[11px] text-rose-100">
-                    Buku saku kedisiplinan
-                  </p>
-                </div>
+          {/* Buku Saku Kedisiplinan (Read-Only untuk Siswa) */}
+          <button
+            type="button"
+            onClick={() => {
+              const el = document.getElementById("buku-kedisiplinan");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
+                <ShieldAlert className="w-6 h-6" />
               </div>
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          ) : (
-            <div
-              onClick={() =>
-                setNotification({
-                  type: "error",
-                  message:
-                    "Buku Pelanggaran terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
-                })
-              }
-              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
-            >
-              <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
-                  <ShieldAlert className="w-6 h-6" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <h3 className="font-bold text-base text-slate-600">
-                      Catat Pelanggaran
-                    </h3>
-                    <Lock className="w-4 h-4 text-rose-500" />
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Wajib biometrik wajah
-                  </p>
-                </div>
+              <div>
+                <h3 className="font-bold text-base">Buku Saku Kedisiplinan</h3>
+                <p className="text-[11px] text-rose-100">
+                  Riwayat & poin pelanggaran saya
+                </p>
               </div>
             </div>
-          )}
+            <div className="flex items-center gap-1.5 font-bold text-xs bg-white/15 px-3 py-1.5 rounded-xl">
+              <span>{totalPoinPelanggaran} Poin</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
         </div>
       )}
 
@@ -837,7 +803,7 @@ export default function PortalSiswa() {
       </div>
 
       {/* Buku Saku Kedisiplinan & Poin Pelanggaran Saya */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+      <div id="buku-kedisiplinan" className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6 scroll-mt-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -872,13 +838,10 @@ export default function PortalSiswa() {
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{statusKedisiplinan.desc}</span>
           </div>
-          <Link
-            to="/pelanggaran"
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-white text-slate-800 hover:bg-slate-50 rounded-xl font-bold shadow-xs transition-colors whitespace-nowrap text-xs cursor-pointer border border-slate-200/70"
-          >
-            <PlusCircle className="w-3.5 h-3.5 text-rose-600" />
-            <span>Formulir Pelanggaran</span>
-          </Link>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/80 text-slate-600 rounded-xl text-[11px] font-semibold border border-slate-200/60 shadow-2xs">
+            <Lock className="w-3.5 h-3.5 text-slate-400" />
+            <span>Pencatatan pelanggaran dikelola resmi oleh Guru Piket & BK</span>
+          </div>
         </div>
 
         {/* Tabel / List Riwayat Pelanggaran Siswa */}
