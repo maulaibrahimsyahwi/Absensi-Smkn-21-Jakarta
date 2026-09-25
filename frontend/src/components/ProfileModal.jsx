@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, User, KeyRound, PenLine, ShieldCheck } from "lucide-react";
+import { X, User, ShieldCheck } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import TabInfoProfil from "./profile/TabInfoProfil";
-import TabUbahPassword from "./profile/TabUbahPassword";
-import TabKeamanan2FA from "./profile/TabKeamanan2FA";
-import TabTandaTangan from "./profile/TabTandaTangan";
+import TabKeamanan from "./profile/TabKeamanan";
 
 export default function ProfileModal({
   isOpen,
@@ -21,11 +19,18 @@ export default function ProfileModal({
     saveSignature,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState(initialTab);
+  const resolveTab = (tab) => {
+    if (tab === "password" || tab === "2fa" || tab === "keamanan") {
+      return "keamanan";
+    }
+    return "profil";
+  };
+
+  const [activeTab, setActiveTab] = useState(resolveTab(initialTab));
 
   useEffect(() => {
     if (isOpen) {
-      setActiveTab(initialTab);
+      setActiveTab(resolveTab(initialTab));
     }
   }, [isOpen, initialTab]);
 
@@ -44,9 +49,7 @@ export default function ProfileModal({
 
   const tabs = [
     { id: "profil", label: "Profil", icon: User },
-    { id: "password", label: "Kata Sandi", icon: KeyRound },
-    { id: "2fa", label: "Keamanan (2FA)", icon: ShieldCheck },
-    { id: "ttd", label: "Tanda Tangan", icon: PenLine },
+    { id: "keamanan", label: "Keamanan", icon: ShieldCheck },
   ];
 
   const modalContent = (
@@ -66,7 +69,7 @@ export default function ProfileModal({
               Pengaturan Akun & Profil
             </h3>
             <p className="text-xs text-slate-500">
-              Kelola informasi akun, keamanan, dan identitas digital Anda
+              Kelola informasi akun, biometrik, tanda tangan, dan keamanan Anda
             </p>
           </div>
           <button
@@ -89,13 +92,13 @@ export default function ProfileModal({
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-t-xl border-b-2 transition cursor-pointer whitespace-nowrap ${
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 transition cursor-pointer whitespace-nowrap ${
                   isActive
                     ? "border-blue-600 text-blue-600 bg-blue-50/50"
                     : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
               </button>
             );
@@ -110,21 +113,12 @@ export default function ProfileModal({
               isSiswa={isSiswa}
               updateFotoProfil={updateFotoProfil}
               deleteFotoProfil={deleteFotoProfil}
-            />
-          )}
-
-          {activeTab === "password" && <TabUbahPassword user={user} />}
-
-          {activeTab === "2fa" && (
-            <TabKeamanan2FA user={user} updateUserProfile={updateUserProfile} />
-          )}
-
-          {activeTab === "ttd" && (
-            <TabTandaTangan
-              user={user}
-              isSiswa={isSiswa}
               saveSignature={saveSignature}
             />
+          )}
+
+          {activeTab === "keamanan" && (
+            <TabKeamanan user={user} updateUserProfile={updateUserProfile} />
           )}
         </div>
       </div>

@@ -24,6 +24,7 @@ import {
   Bell,
   User,
   Lock,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -369,7 +370,7 @@ export default function PortalSiswa() {
             onClick={() => setNotification(null)}
             className="text-slate-400 hover:text-white text-xs ml-2"
           >
-            Tutup
+            <X className="w-4 h-4 cursor-pointer" />
           </button>
         </div>
       )}
@@ -515,7 +516,7 @@ export default function PortalSiswa() {
         <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-r from-rose-500/10 via-rose-500/5 to-slate-50 border border-rose-500/30 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="p-3 rounded-2xl bg-rose-600 text-white flex-shrink-0 shadow-md shadow-rose-600/20">
-              <Lock className="w-7 h-7" />
+              <Lock className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -528,7 +529,9 @@ export default function PortalSiswa() {
                 Anda belum memiliki data biometrik wajah resmi. Seluruh fitur
                 aplikasi terkunci sampai wajah Anda didaftarkan secara resmi
                 oleh{" "}
-                <strong>Administrator / Petugas Tata Usaha SMKN 21 Jakarta</strong>
+                <strong>
+                  Administrator / Petugas Tata Usaha SMKN 21 Jakarta
+                </strong>
               </p>
             </div>
           </div>
@@ -590,7 +593,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Presensi Harian terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
+                    "Presensi Harian terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -636,7 +639,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Pengajuan Izin/Sakit terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
+                    "Pengajuan Izin/Sakit terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
@@ -684,7 +687,7 @@ export default function PortalSiswa() {
                 setNotification({
                   type: "error",
                   message:
-                    "Buku Pelanggaran terkunci. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha terlebih dahulu",
+                    "Buku Pelanggaran terkunci. Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
               className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"

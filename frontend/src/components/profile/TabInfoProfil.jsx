@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { validateAndCompressImage } from "../../utils/imageUtils";
 import { useAuth } from "../../context/AuthContext";
+import TabTandaTangan from "./TabTandaTangan";
 
 export default function TabInfoProfil({
   user,
@@ -23,6 +24,7 @@ export default function TabInfoProfil({
   updateFotoProfil,
   deleteFotoProfil,
   onOpenFaceEnroll,
+  saveSignature,
 }) {
   const { updateName } = useAuth();
   const fileInputRef = useRef(null);
@@ -329,13 +331,19 @@ export default function TabInfoProfil({
               <Lock className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <span>
                 Perekaman biometrik wajah siswa dilakukan secara resmi oleh{" "}
-                <strong>Administrator / Petugas Tata Usaha SMKN 21</strong> di
-                Ruang Tata Usaha.
+                <strong>Admin / Petugas Tata Usaha SMKN 21</strong> di Ruang TU
               </span>
             </div>
           )}
         </div>
       )}
+
+      {/* 5. Tanda Tangan Digital */}
+      <TabTandaTangan
+        user={user}
+        isSiswa={isSiswa}
+        saveSignature={saveSignature}
+      />
     </div>
   );
 }

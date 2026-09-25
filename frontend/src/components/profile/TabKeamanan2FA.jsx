@@ -141,7 +141,7 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
       )}
 
       {/* Status Card */}
-      <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
+      <div className="p-4 rounded-2xl border border-slate-200 bg-white flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center ${
