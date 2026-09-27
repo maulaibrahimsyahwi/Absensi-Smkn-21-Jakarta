@@ -120,9 +120,61 @@ def test_libur_system():
         assert data_acad["success"] == True
         print(f"[OK] 1-Click Sync Libur Semester 2026 berhasil: {data_acad['added']} agenda libur diimpor.")
 
-        # Bersihkan data test libur manual
+        # 10. Test Quick Surat Edaran (Aksi Cepat SE Dadakan)
+        res_se = client.post('/api/hari_libur/quick_se', json={
+            'target': 'besok',
+            'tipe_hari': 'libur',
+            'judul': 'PJJ Cuaca Ekstrem',
+            'nomor_se': 'SE Disdik No. 99/2026',
+            'keterangan': 'Instruksi PJJ dari Kepala Dinas Pendidikan DKI Jakarta'
+        }, headers=admin_headers)
+        assert res_se.status_code == 200
+        data_se = res_se.get_json()
+        assert data_se['success'] == True
+        print("[OK] Aksi Cepat Surat Edaran (quick_se) berhasil diterapkan.")
+
+        # 11. Test Template File Download
+        res_tpl = client.get('/api/hari_libur/template_file', headers=admin_headers)
+        assert res_tpl.status_code == 200
+        assert len(res_tpl.data) > 0
+        print(f"[OK] Download Template Kalender Excel berhasil ({len(res_tpl.data)} bytes).")
+
+        # 12. Test Import File Excel
+        import io
+        import openpyxl
+        wb_test = openpyxl.Workbook()
+        ws_test = wb_test.active
+        ws_test.append(["Nama Agenda", "Tanggal Mulai", "Tanggal Selesai", "Kategori", "Presensi", "Keterangan"])
+        ws_test.append(["Uji Coba Import Excel Disdik", "2026-11-25", "2026-11-25", "khusus", "masuk_khusus", "Hari Guru Nasional"])
+        test_buf = io.BytesIO()
+        wb_test.save(test_buf)
+        test_buf.seek(0)
+
+        # Cleanup import test record if already exists from previous runs
+        test_imp_old = HariLibur.query.filter_by(nama="Uji Coba Import Excel Disdik").first()
+        if test_imp_old:
+            db.session.delete(test_imp_old)
+            db.session.commit()
+
+        res_import = client.post(
+            '/api/hari_libur/import_file',
+            data={'file': (test_buf, 'test_kaldik.xlsx')},
+            content_type='multipart/form-data',
+            headers=admin_headers
+        )
+        assert res_import.status_code == 200
+        data_imp = res_import.get_json()
+        assert data_imp['success'] == True
+        assert data_imp['added'] == 1
+        print(f"[OK] Import file Excel kalender berhasil: {data_imp['added']} ditambahkan.")
+
+        # Bersihkan data test libur manual & import
         client.delete(f'/api/hari_libur/{created_id}', headers=admin_headers)
         client.delete(f'/api/hari_libur/{special_id}', headers=admin_headers)
+        test_imp_end = HariLibur.query.filter_by(nama="Uji Coba Import Excel Disdik").first()
+        if test_imp_end:
+            db.session.delete(test_imp_end)
+            db.session.commit()
         print("[OK] Cleanup data pengujian kalender libur selesai")
 
         print("\n=======================================================")

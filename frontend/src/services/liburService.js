@@ -40,4 +40,35 @@ export const liburService = {
     const res = await api.post("/hari_libur/sync_academic", { tahun });
     return res.data;
   },
+
+  quickSuratEdaran: async (payload) => {
+    const res = await api.post("/hari_libur/quick_se", payload);
+    return res.data;
+  },
+
+  importFile: async (formData) => {
+    const res = await api.post("/hari_libur/import_file", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return res.data;
+  },
+
+  downloadTemplate: async () => {
+    const res = await api.get("/hari_libur/template_file", {
+      responseType: "blob",
+    });
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `Template_Impor_Kalender_Libur_SMKN21_${new Date().getFullYear()}.xlsx`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };

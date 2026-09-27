@@ -1,10 +1,36 @@
-from flask import Blueprint, request, jsonify
-from datetime import datetime, date
-from models import db, HariLibur
+import io
+import csv
+import openpyxl
+from datetime import datetime, date, timedelta
+from flask import Blueprint, request, jsonify, send_file
+from models import db, HariLibur, AuditLog
 from utils.auth_middleware import token_required, role_required
 from utils.helpers import get_holiday_status, is_school_day
 
 libur_bp = Blueprint('libur', __name__)
+
+def parse_date_flexible(val):
+    if not val:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    val_str = str(val).strip()
+    formats = [
+        "%Y-%m-%d",
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%Y/%m/%d",
+        "%d.%m.%Y",
+        "%Y.%m.%d"
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(val_str, fmt).date()
+        except ValueError:
+            pass
+    return None
 
 @libur_bp.route('/api/hari_libur', methods=['GET'])
 @token_required
@@ -489,3 +515,331 @@ def sync_academic_calendar():
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"Gagal menambahkan libur semester: {str(e)}"}), 500
+
+
+@libur_bp.route('/api/hari_libur/quick_se', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def quick_surat_edaran():
+    """
+    Aksi Cepat Surat Edaran Dadakan:
+    Menerapkan libur/kegiatan khusus langsung berdasarkan Surat Edaran (Disdik/Kemenag/Kepsek).
+    Mendukung opsi target:
+    - 'hari_ini': Libur / Masuk khusus hari ini
+    - 'besok': Libur / Masuk khusus besok
+    - 'rentang': Rentang tanggal sesuai isi surat edaran
+    """
+    data = request.get_json() or {}
+    target = data.get('target', 'hari_ini')
+    tipe_hari = data.get('tipe_hari', 'libur')
+    kategori = data.get('kategori', 'khusus')
+    judul = str(data.get('judul', '')).strip()
+    nomor_se = str(data.get('nomor_se', '')).strip()
+    keterangan = str(data.get('keterangan', '')).strip()
+
+    today = date.today()
+    if target == 'hari_ini':
+        tgl_mulai = today
+        tgl_selesai = today
+        default_judul = "Diliburkan Khusus Hari Ini" if tipe_hari == 'libur' else "Kegiatan Wajib Masuk Hari Ini"
+    elif target == 'besok':
+        tgl_mulai = today + timedelta(days=1)
+        tgl_selesai = tgl_mulai
+        default_judul = "Diliburkan Khusus Besok" if tipe_hari == 'libur' else "Kegiatan Wajib Masuk Besok"
+    elif target == 'rentang':
+        tgl_m_str = data.get('tanggal_mulai')
+        tgl_s_str = data.get('tanggal_selesai') or tgl_m_str
+        if not tgl_m_str:
+            return jsonify({"success": False, "message": "Tanggal mulai wajib ditentukan untuk rentang tanggal."}), 400
+        try:
+            tgl_mulai = datetime.strptime(tgl_m_str, "%Y-%m-%d").date()
+            tgl_selesai = datetime.strptime(tgl_s_str, "%Y-%m-%d").date()
+        except ValueError:
+            return jsonify({"success": False, "message": "Format tanggal harus YYYY-MM-DD."}), 400
+        if tgl_selesai < tgl_mulai:
+            return jsonify({"success": False, "message": "Tanggal selesai tidak boleh sebelum tanggal mulai."}), 400
+        default_judul = "Surat Edaran Disdik / Sekolah"
+    else:
+        return jsonify({"success": False, "message": "Target tidak valid. Pilih 'hari_ini', 'besok', atau 'rentang'."}), 400
+
+    nama_bersih = judul or default_judul
+    if nomor_se:
+        final_nama = f"[SE] {nama_bersih} ({nomor_se})"
+    else:
+        final_nama = f"[SE] {nama_bersih}"
+
+    current_u = getattr(request, 'current_user', {})
+    admin_name = current_u.get('nama', 'Administrator')
+    full_keterangan = keterangan
+    if nomor_se and nomor_se not in full_keterangan:
+        full_keterangan = f"Dasar: {nomor_se}. {keterangan}".strip()
+
+    try:
+        existing = HariLibur.query.filter(
+            HariLibur.tanggal_mulai == tgl_mulai,
+            HariLibur.tanggal_selesai == tgl_selesai
+        ).first()
+
+        if existing:
+            existing.nama = final_nama
+            existing.kategori = kategori
+            existing.tipe_hari = tipe_hari
+            existing.keterangan = full_keterangan
+            existing.is_active = True
+            existing.created_by = f"Surat Edaran ({admin_name})"
+        else:
+            new_libur = HariLibur(
+                nama=final_nama,
+                kategori=kategori,
+                tanggal_mulai=tgl_mulai,
+                tanggal_selesai=tgl_selesai,
+                tipe_hari=tipe_hari,
+                keterangan=full_keterangan,
+                is_active=True,
+                created_by=f"Surat Edaran ({admin_name})"
+            )
+            db.session.add(new_libur)
+
+        # Audit log
+        audit = AuditLog(
+            user_id=current_u.get('id'),
+            role=current_u.get('role', 'admin'),
+            user_name=admin_name,
+            action='AKSI_CEPAT_SE',
+            target_type='HariLibur',
+            target_id=str(final_nama),
+            keterangan=f"Aksi cepat SE: {final_nama} ({tgl_mulai} s/d {tgl_selesai}, presensi={tipe_hari})",
+            ip_address=request.remote_addr
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        action_label = "Diliburkan (Presensi Ditutup)" if tipe_hari == 'libur' else "Wajib Masuk (Presensi Dibuka)"
+        return jsonify({
+            "success": True,
+            "message": f"Berhasil menerapkan '{final_nama}' untuk tanggal {tgl_mulai} s/d {tgl_selesai}. Status: {action_label}.",
+            "data": {
+                "nama": final_nama,
+                "tanggal_mulai": tgl_mulai.strftime("%Y-%m-%d"),
+                "tanggal_selesai": tgl_selesai.strftime("%Y-%m-%d"),
+                "tipe_hari": tipe_hari
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal menerapkan Surat Edaran: {str(e)}"}), 500
+
+
+@libur_bp.route('/api/hari_libur/import_file', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def import_file_libur():
+    """
+    Mengimpor jadwal kalender libur/akademik dari file Excel (.xlsx) atau CSV (.csv).
+    """
+    if 'file' not in request.files:
+        return jsonify({"success": False, "message": "File kalender tidak ditemukan dalam permintaan."}), 400
+
+    file = request.files['file']
+    filename = (file.filename or '').lower()
+
+    if not (filename.endswith('.xlsx') or filename.endswith('.csv')):
+        return jsonify({"success": False, "message": "Format file tidak didukung. Harap unggah file Excel (.xlsx) atau CSV (.csv)."}), 400
+
+    rows_data = []
+
+    try:
+        if filename.endswith('.xlsx'):
+            wb = openpyxl.load_workbook(file, data_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                if any(row):
+                    rows_data.append([str(c).strip() if c is not None else '' for c in row])
+        else:
+            stream = io.StringIO(file.stream.read().decode("utf-8-sig", errors="ignore"))
+            sample = stream.read(2048)
+            stream.seek(0)
+            delim = ';' if sample.count(';') > sample.count(',') else ','
+            reader = csv.reader(stream, delimiter=delim)
+            for row in reader:
+                if any(row):
+                    rows_data.append([c.strip() for c in row])
+
+        if len(rows_data) < 2:
+            return jsonify({"success": False, "message": "File kosong atau tidak memiliki baris data kalender."}), 400
+
+        headers = [h.lower() for h in rows_data[0]]
+        col_nama = -1
+        col_mulai = -1
+        col_selesai = -1
+        col_kategori = -1
+        col_tipe = -1
+        col_ket = -1
+
+        for idx, h in enumerate(headers):
+            if any(k in h for k in ['nama', 'agenda', 'kegiatan', 'libur', 'judul']):
+                if col_nama == -1: col_nama = idx
+            elif any(k in h for k in ['mulai', 'start', 'dari']):
+                if col_mulai == -1: col_mulai = idx
+            elif any(k in h for k in ['selesai', 'end', 'sampai', 'akhir']):
+                if col_selesai == -1: col_selesai = idx
+            elif any(k in h for k in ['tanggal', 'tgl', 'date']):
+                if col_mulai == -1: col_mulai = idx
+            elif any(k in h for k in ['kategori', 'jenis']):
+                if col_kategori == -1: col_kategori = idx
+            elif any(k in h for k in ['tipe', 'presensi', 'dampak', 'status']):
+                if col_tipe == -1: col_tipe = idx
+            elif any(k in h for k in ['keterangan', 'catatan', 'edaran', 'nomor', 'ket']):
+                if col_ket == -1: col_ket = idx
+
+        if col_nama == -1 or col_mulai == -1:
+            return jsonify({
+                "success": False,
+                "message": "Format kolom file tidak sesuai. Minimal harus memiliki kolom 'Nama Agenda/Kegiatan' dan 'Tanggal Mulai'."
+            }), 400
+
+        current_u = getattr(request, 'current_user', {})
+        admin_name = current_u.get('nama', 'Administrator')
+
+        added_count = 0
+        skipped_count = 0
+        errors = []
+
+        for row_idx, r in enumerate(rows_data[1:], start=2):
+            if len(r) <= max(col_nama, col_mulai):
+                continue
+            nama = r[col_nama]
+            if not nama:
+                continue
+
+            raw_mulai = r[col_mulai]
+            raw_selesai = r[col_selesai] if (col_selesai != -1 and len(r) > col_selesai) else raw_mulai
+            if not raw_selesai: raw_selesai = raw_mulai
+
+            tgl_m = parse_date_flexible(raw_mulai)
+            tgl_s = parse_date_flexible(raw_selesai)
+
+            if not tgl_m:
+                errors.append(f"Baris {row_idx}: Tanggal mulai '{raw_mulai}' tidak valid.")
+                continue
+            if not tgl_s:
+                tgl_s = tgl_m
+            if tgl_s < tgl_m:
+                errors.append(f"Baris {row_idx}: Tanggal selesai ({tgl_s}) lebih awal dari tanggal mulai ({tgl_m}).")
+                continue
+
+            kat = "libur_semester"
+            if col_kategori != -1 and len(r) > col_kategori and r[col_kategori]:
+                val_k = r[col_kategori].lower()
+                if "nasional" in val_k: kat = "libur_nasional"
+                elif "cuti" in val_k: kat = "cuti_bersama"
+                elif "khusus" in val_k or "kegiatan" in val_k: kat = "khusus"
+                elif "semester" in val_k: kat = "libur_semester"
+
+            tipe_h = "libur"
+            if col_tipe != -1 and len(r) > col_tipe and r[col_tipe]:
+                val_t = r[col_tipe].lower()
+                if "masuk" in val_t or "hadir" in val_t or "upacara" in val_t or "buka" in val_t:
+                    tipe_h = "masuk_khusus"
+
+            ket = "Impor File Kalender"
+            if col_ket != -1 and len(r) > col_ket and r[col_ket]:
+                ket = r[col_ket]
+
+            exists = HariLibur.query.filter(
+                HariLibur.tanggal_mulai == tgl_m,
+                HariLibur.tanggal_selesai == tgl_s,
+                HariLibur.nama == nama
+            ).first()
+
+            if exists:
+                skipped_count += 1
+                continue
+
+            new_libur = HariLibur(
+                nama=nama,
+                kategori=kat,
+                tanggal_mulai=tgl_m,
+                tanggal_selesai=tgl_s,
+                tipe_hari=tipe_h,
+                keterangan=ket,
+                is_active=True,
+                created_by=f"Import File ({admin_name})"
+            )
+            db.session.add(new_libur)
+            added_count += 1
+
+        db.session.commit()
+
+        audit = AuditLog(
+            user_id=current_u.get('id'),
+            role=current_u.get('role', 'admin'),
+            user_name=admin_name,
+            action='IMPORT_FILE_LIBUR',
+            target_type='HariLibur',
+            target_id=filename,
+            keterangan=f"Impor file kalender '{filename}': {added_count} ditambahkan, {skipped_count} dilewati.",
+            ip_address=request.remote_addr
+        )
+        db.session.add(audit)
+        db.session.commit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Berhasil mengimpor {added_count} agenda ke kalender sekolah. {skipped_count} data sudah ada/dilewati.",
+            "added": added_count,
+            "skipped": skipped_count,
+            "errors": errors[:5]
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal membaca file kalender: {str(e)}"}), 500
+
+
+@libur_bp.route('/api/hari_libur/template_file', methods=['GET'])
+@token_required
+def download_template_libur():
+    """
+    Mengunduh template file Excel (.xlsx) resmi untuk pengisian dan impor kalender libur sekolah.
+    """
+    try:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Template Kalender SMKN 21"
+
+        headers = [
+            "Nama Agenda / Kegiatan",
+            "Tanggal Mulai (YYYY-MM-DD)",
+            "Tanggal Selesai (YYYY-MM-DD)",
+            "Kategori (libur_semester / libur_nasional / cuti_bersama / khusus)",
+            "Dampak Presensi (libur / masuk_khusus)",
+            "Keterangan / Nomor SE"
+        ]
+        ws.append(headers)
+
+        current_year = datetime.now().year
+        samples = [
+            ["Libur Semester Ganjil TA 2026/2027", f"{current_year}-12-21", f"{current_year+1}-01-02", "libur_semester", "libur", "Kalender Pendidikan Disdik DKI Jakarta"],
+            ["Libur Awal Bulan Ramadhan 1447 H", f"{current_year}-03-02", f"{current_year}-03-04", "khusus", "libur", "Surat Edaran Disdik No. 12/2026"],
+            ["Upacara Hari Kemerdekaan RI", f"{current_year}-08-17", f"{current_year}-08-17", "khusus", "masuk_khusus", "Wajib hadir upacara bendera di sekolah"],
+            ["Libur Kenaikan Kelas (Genap)", f"{current_year}-06-22", f"{current_year}-07-06", "libur_semester", "libur", "Akhir Tahun Ajaran SMKN 21"]
+        ]
+        for s in samples:
+            ws.append(s)
+
+        for col_letter in ['A', 'B', 'C', 'D', 'E', 'F']:
+            ws.column_dimensions[col_letter].width = 32
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        return send_file(
+            buf,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=f"Template_Impor_Kalender_Libur_SMKN21_{current_year}.xlsx"
+        )
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Gagal membuat template: {str(e)}"}), 500

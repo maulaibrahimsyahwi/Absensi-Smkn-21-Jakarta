@@ -19,6 +19,11 @@ import {
   Filter,
   Zap,
   BookOpen,
+  Upload,
+  FileSpreadsheet,
+  FileText,
+  Send,
+  Check,
 } from "lucide-react";
 import { liburService } from "../../services/liburService";
 
@@ -49,8 +54,9 @@ export default function ModalKalenderLibur({
   isOpen,
   onClose,
   onRefreshStatus,
+  initialTab = "daftar",
 }) {
-  const [activeTab, setActiveTab] = useState("daftar"); // "daftar" | "tambah"
+  const [activeTab, setActiveTab] = useState(initialTab); // "daftar" | "quick_se" | "import_file" | "tambah"
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -62,6 +68,27 @@ export default function ModalKalenderLibur({
     String(new Date().getFullYear()),
   );
 
+  // Quick Surat Edaran State
+  const [seTarget, setSeTarget] = useState("hari_ini"); // "hari_ini" | "besok" | "rentang"
+  const [seTipeHari, setSeTipeHari] = useState("libur"); // "libur" | "masuk_khusus"
+  const [seJudul, setSeJudul] = useState("");
+  const [seNomor, setSeNomor] = useState("");
+  const [seTglMulai, setSeTglMulai] = useState("");
+  const [seTglSelesai, setSeTglSelesai] = useState("");
+  const [seKeterangan, setSeKeterangan] = useState("");
+  const [seSubmitting, setSeSubmitting] = useState(false);
+
+  // Import File State
+  const [importFileObj, setImportFileObj] = useState(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importStats, setImportStats] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
   // Form State
   const [editingId, setEditingId] = useState(null);
   const [formNama, setFormNama] = useState("");
@@ -71,7 +98,8 @@ export default function ModalKalenderLibur({
   const [formTipeHari, setFormTipeHari] = useState("libur");
   const [formKeterangan, setFormKeterangan] = useState("");
 
-  const currentYearNum = parseInt(selectedTahun, 10) || new Date().getFullYear();
+  const currentYearNum =
+    parseInt(selectedTahun, 10) || new Date().getFullYear();
 
   const presetTemplates = useMemo(
     () => [
@@ -306,7 +334,8 @@ export default function ModalKalenderLibur({
       } else {
         setNotification({
           type: "error",
-          message: res?.message || "Gagal menyinkronkan kalender libur nasional.",
+          message:
+            res?.message || "Gagal menyinkronkan kalender libur nasional.",
         });
       }
     } catch (err) {
@@ -349,6 +378,109 @@ export default function ModalKalenderLibur({
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleQuickSE = async (e) => {
+    e.preventDefault();
+    if (seTarget === "rentang" && !seTglMulai) {
+      setNotification({
+        type: "error",
+        message: "Tanggal mulai wajib ditentukan jika memilih rentang tanggal.",
+      });
+      return;
+    }
+    setSeSubmitting(true);
+    try {
+      const payload = {
+        target: seTarget,
+        tipe_hari: seTipeHari,
+        judul: seJudul.trim(),
+        nomor_se: seNomor.trim(),
+        tanggal_mulai: seTglMulai,
+        tanggal_selesai: seTglSelesai || seTglMulai,
+        keterangan: seKeterangan.trim(),
+      };
+      const res = await liburService.quickSuratEdaran(payload);
+      if (res?.success) {
+        setNotification({
+          type: "success",
+          message: res.message || "Surat Edaran berhasil diterapkan!",
+        });
+        setSeJudul("");
+        setSeNomor("");
+        setSeKeterangan("");
+        setActiveTab("daftar");
+        await fetchAllData();
+        if (onRefreshStatus) onRefreshStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: res?.message || "Gagal menerapkan Surat Edaran.",
+        });
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Terjadi kesalahan saat memproses Surat Edaran.",
+      });
+    } finally {
+      setSeSubmitting(false);
+    }
+  };
+
+  const handleUploadFile = async (e) => {
+    e.preventDefault();
+    if (!importFileObj) {
+      setNotification({
+        type: "error",
+        message:
+          "Silakan pilih file Excel (.xlsx) atau CSV (.csv) terlebih dahulu.",
+      });
+      return;
+    }
+    setImportLoading(true);
+    setImportStats(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", importFileObj);
+      const res = await liburService.importFile(formData);
+      if (res?.success) {
+        setImportStats(res);
+        setNotification({
+          type: "success",
+          message: res.message || "File kalender berhasil diimpor!",
+        });
+        setImportFileObj(null);
+        await fetchAllData();
+        if (onRefreshStatus) onRefreshStatus();
+      } else {
+        setNotification({
+          type: "error",
+          message: res?.message || "Gagal mengimpor file kalender.",
+        });
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal mengunggah file kalender.",
+      });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      await liburService.downloadTemplate();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: "Gagal mengunduh template Excel.",
+      });
     }
   };
 
@@ -500,25 +632,54 @@ export default function ModalKalenderLibur({
         </div>
 
         {/* Tab Selector Nav */}
-        <div className="px-4 sm:px-6 pt-3 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2">
+        <div className="px-4 sm:px-6 pt-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => {
                 setActiveTab("daftar");
                 resetForm();
               }}
-              className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === "daftar"
                   ? "border-purple-600 text-purple-700"
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
               <CalendarDays className="w-4 h-4" />
-              <span>Daftar Libur Terjadwal</span>
+              <span>Daftar Libur</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600">
                 {liburList.length}
               </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("quick_se")}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "quick_se"
+                  ? "border-rose-600 text-rose-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Zap className="w-4 h-4 text-rose-600 fill-rose-600" />
+              <span>⚡ Aksi Surat Edaran</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 text-rose-700 font-bold hidden sm:inline">
+                SE Dadakan
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("import_file")}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "import_file"
+                  ? "border-indigo-600 text-indigo-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+              <span>📥 Import Excel/CSV</span>
             </button>
 
             <button
@@ -527,7 +688,7 @@ export default function ModalKalenderLibur({
                 setActiveTab("tambah");
                 if (!editingId) resetForm();
               }}
-              className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === "tambah"
                   ? "border-purple-600 text-purple-700"
                   : "border-transparent text-slate-500 hover:text-slate-800"
@@ -535,7 +696,7 @@ export default function ModalKalenderLibur({
             >
               <Plus className="w-4 h-4" />
               <span>
-                {editingId ? "Edit Jadwal Libur" : "Tambah Jadwal Libur"}
+                {editingId ? "Edit Jadwal Libur" : "Tambah Manual"}
               </span>
             </button>
           </div>
@@ -562,7 +723,7 @@ export default function ModalKalenderLibur({
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-          {activeTab === "daftar" ? (
+          {activeTab === "daftar" && (
             <>
               {/* Automation Quick Actions Banner */}
               <div className="bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 border border-purple-200/80 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
@@ -576,11 +737,33 @@ export default function ModalKalenderLibur({
                       </h4>
                     </div>
                     <p className="text-[11px] text-purple-800/80 leading-relaxed max-w-xl">
-                      Tidak perlu input manual satu per satu! Klik tombol di bawah untuk langsung mengimpor seluruh tanggal merah SKB 3 Menteri atau libur semester resmi Disdik DKI.
+                      Tidak perlu input manual satu per satu! Klik tombol di
+                      bawah untuk langsung mengimpor seluruh tanggal merah SKB 3
+                      Menteri atau libur semester resmi Disdik DKI.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("quick_se")}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                      title="Buka form kilat penanganan Surat Edaran dadakan"
+                    >
+                      <Zap className="w-3.5 h-3.5 fill-current" />
+                      <span>⚡ SE Dadakan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("import_file")}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+                      title="Upload file spreadsheet jadwal libur dari TU"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>📥 Upload Excel</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={handleSyncNational}
@@ -593,7 +776,7 @@ export default function ModalKalenderLibur({
                       ) : (
                         <Zap className="w-3.5 h-3.5 fill-current" />
                       )}
-                      <span>⚡ Sinkron Libur Nasional</span>
+                      <span>⚡ Sinkron Nasional</span>
                     </button>
 
                     <button
@@ -608,7 +791,7 @@ export default function ModalKalenderLibur({
                       ) : (
                         <BookOpen className="w-3.5 h-3.5" />
                       )}
-                      <span>📚 Impor Libur Semester</span>
+                      <span>📚 Impor Semester</span>
                     </button>
                   </div>
                 </div>
@@ -640,10 +823,13 @@ export default function ModalKalenderLibur({
                   </div>
                   <div className="space-y-1">
                     <div className="text-sm font-bold text-slate-800">
-                      Belum Ada Agenda Libur Terjadwal untuk Tahun {selectedTahun}
+                      Belum Ada Agenda Libur Terjadwal untuk Tahun{" "}
+                      {selectedTahun}
                     </div>
                     <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      Gunakan fitur 1-klik di bawah untuk langsung mengimpor seluruh tanggal merah nasional atau jadwal libur semester secara otomatis tanpa perlu input manual.
+                      Gunakan fitur 1-klik di bawah untuk langsung mengimpor
+                      seluruh tanggal merah nasional atau jadwal libur semester
+                      secara otomatis tanpa perlu input manual.
                     </p>
                   </div>
 
@@ -655,7 +841,9 @@ export default function ModalKalenderLibur({
                       className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
                     >
                       <Zap className="w-4 h-4 fill-current" />
-                      <span>⚡ Sinkronkan Libur Nasional ({selectedTahun})</span>
+                      <span>
+                        ⚡ Sinkronkan Libur Nasional ({selectedTahun})
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -760,8 +948,410 @@ export default function ModalKalenderLibur({
                 </div>
               )}
             </>
-          ) : (
-            /* Tab Form Tambah / Edit */
+          )}
+
+          {/* TAB 2: Aksi Cepat Surat Edaran Dadakan */}
+          {activeTab === "quick_se" && (
+            <form onSubmit={handleQuickSE} className="max-w-2xl mx-auto space-y-4">
+              <div className="bg-rose-50/70 border border-rose-200/80 p-4 rounded-2xl flex items-start gap-3">
+                <Zap className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 fill-rose-600" />
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-rose-950 uppercase tracking-wider">
+                    Penanganan Cepat Surat Edaran (SE) Dadakan
+                  </h4>
+                  <p className="text-xs text-rose-900/80 leading-relaxed">
+                    Menerima Surat Edaran dari Disdik, Kemenag, atau Kepala Sekolah? Terapkan status libur atau kegiatan wajib masuk secara instan dalam hitungan detik tanpa perlu utak-atik kalender tahunan.
+                  </p>
+                </div>
+              </div>
+
+              {/* 1. Kapan Diberlakukan? */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  1. Kapan Surat Edaran Ini Berlaku? <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setSeTarget("hari_ini")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      seTarget === "hari_ini"
+                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-800">Hari Ini</span>
+                      {seTarget === "hari_ini" && <Check className="w-4 h-4 text-rose-600" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Langsung aktif hari ini ({new Date().toLocaleDateString("id-ID", { day: "numeric", month: "short" })})
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSeTarget("besok")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      seTarget === "besok"
+                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-800">Besok</span>
+                      {seTarget === "besok" && <Check className="w-4 h-4 text-rose-600" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Berlaku untuk besok hari
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSeTarget("rentang")}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                      seTarget === "rentang"
+                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-slate-800">Rentang Tanggal</span>
+                      {seTarget === "rentang" && <Check className="w-4 h-4 text-rose-600" />}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Berlaku lebih dari 1 hari
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Jika Target = Rentang, Tampilkan Input Tanggal */}
+              {seTarget === "rentang" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 animate-in fade-in">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tanggal Mulai <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={seTglMulai}
+                      onChange={(e) => {
+                        setSeTglMulai(e.target.value);
+                        if (!seTglSelesai || seTglSelesai < e.target.value) {
+                          setSeTglSelesai(e.target.value);
+                        }
+                      }}
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tanggal Selesai <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={seTglSelesai}
+                      min={seTglMulai}
+                      onChange={(e) => setSeTglSelesai(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Dampak Operasional Presensi */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  2. Dampak Operasional Presensi
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label
+                    className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
+                      seTipeHari === "libur"
+                        ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="seTipeHari"
+                      value="libur"
+                      checked={seTipeHari === "libur"}
+                      onChange={() => setSeTipeHari("libur")}
+                      className="text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">
+                        🔴 Liburkan Sekolah (Tutup Presensi)
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Scanner tertutup, auto-alpa dibekukan otomatis
+                      </p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
+                      seTipeHari === "masuk_khusus"
+                        ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200"
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="seTipeHari"
+                      value="masuk_khusus"
+                      checked={seTipeHari === "masuk_khusus"}
+                      onChange={() => setSeTipeHari("masuk_khusus")}
+                      className="text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">
+                        🔵 Wajib Masuk Khusus (Presensi Dibuka)
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        Upacara / kegiatan hari besar (tetap wajib hadir)
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* 3. Dasar Surat Edaran & Perihal */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    3. Nomor Surat Edaran (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={seNomor}
+                    onChange={(e) => setSeNomor(e.target.value)}
+                    placeholder="Contoh: SE Disdik DKI No. 12/2026"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    4. Perihal / Alasan <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={seJudul}
+                    onChange={(e) => setSeJudul(e.target.value)}
+                    placeholder="Contoh: PJJ Mandiri Cuaca Ekstrem"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Quick Pills for Perihal */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                  Pilih Cepat:
+                </span>
+                {[
+                  "Cuaca Ekstrem / Banjir",
+                  "PJJ Belajar Mandiri di Rumah",
+                  "Pergeseran Sidang Isbat Libur",
+                  "Rapat Dinas & KKG Guru",
+                  "Upacara Hari Peringatan Nasional",
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => setSeJudul(chip)}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer"
+                  >
+                    + {chip}
+                  </button>
+                ))}
+              </div>
+
+              {/* 5. Keterangan / Instruksi untuk Siswa & Guru */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  5. Instruksi / Pesan untuk Guru & Siswa
+                </label>
+                <textarea
+                  value={seKeterangan}
+                  onChange={(e) => setSeKeterangan(e.target.value)}
+                  placeholder="Contoh: Seluruh siswa kelas X, XI, XII SMKN 21 melaksanakan kegiatan PJJ mandiri di rumah sesuai arahan Disdik DKI..."
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("daftar")}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={seSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {seSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Zap className="w-4 h-4 fill-current" />
+                  )}
+                  <span>⚡ Terapkan Surat Edaran Sekarang</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* TAB 3: Impor File Excel / CSV Kaldik */}
+          {activeTab === "import_file" && (
+            <div className="max-w-2xl mx-auto space-y-4">
+              <div className="bg-indigo-50/70 border border-indigo-200/80 p-4 rounded-2xl flex items-start gap-3">
+                <FileSpreadsheet className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
+                    Impor File Kalender Akademik SMKN 21
+                  </h4>
+                  <p className="text-xs text-indigo-900/80 leading-relaxed">
+                    Punya rekap jadwal libur tahunan dari Tata Usaha (TU) atau Waka Kurikulum? Unggah file Excel (.xlsx) atau CSV (.csv) untuk memasukkan seluruh agenda libur 1 tahun ajaran secara otomatis tanpa input satu per satu.
+                  </p>
+                </div>
+              </div>
+
+              {/* Download Template Bar */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="text-xs font-bold text-slate-800">
+                    Belum punya format tabel yang sesuai?
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    Unduh template resmi SMKN 21 yang sudah dilengkapi contoh pengisian.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 text-xs font-bold shadow-2xs transition-all cursor-pointer shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Unduh Template (.xlsx)</span>
+                </button>
+              </div>
+
+              {/* Upload Drop Zone Form */}
+              <form onSubmit={handleUploadFile} className="space-y-4">
+                <div className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 rounded-3xl p-6 sm:p-8 text-center transition-all">
+                  <input
+                    type="file"
+                    id="excelFileInput"
+                    accept=".xlsx,.csv,.xls"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) {
+                        setImportFileObj(e.target.files[0]);
+                        setImportStats(null);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  {importFileObj ? (
+                    <div className="space-y-2">
+                      <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                        <Check className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">
+                          {importFileObj.name}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {(importFileObj.size / 1024).toFixed(1)} KB • Siap diimpor
+                        </p>
+                      </div>
+                      <label
+                        htmlFor="excelFileInput"
+                        className="inline-block text-xs font-semibold text-indigo-600 hover:underline cursor-pointer pt-1"
+                      >
+                        Ganti File Lain
+                      </label>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="excelFileInput"
+                      className="cursor-pointer space-y-2 block"
+                    >
+                      <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">
+                          Klik untuk Memilih File Excel atau CSV
+                        </p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Mendukung format .xlsx, .csv, atau .xls
+                        </p>
+                      </div>
+                      <span className="inline-block px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-xs font-semibold text-indigo-700 shadow-2xs">
+                        Pilih File dari Komputer
+                      </span>
+                    </label>
+                  )}
+                </div>
+
+                {/* Import Result Stats if any */}
+                {importStats && (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2 animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <p className="text-xs font-bold">{importStats.message}</p>
+                    </div>
+                    <div className="text-[11px] text-emerald-800 flex gap-4 pl-7">
+                      <span>✅ Ditambahkan: <strong>{importStats.added}</strong></span>
+                      <span>ℹ️ Dilewati (Sudah Ada): <strong>{importStats.skipped}</strong></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Button */}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFileObj(null);
+                      setImportStats(null);
+                      setActiveTab("daftar");
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!importFileObj || importLoading}
+                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {importLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    <span>Unggah & Impor Kalender</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* TAB 4: Form Tambah / Edit Manual */}
+          {activeTab === "tambah" && (
             <form
               onSubmit={handleSubmitForm}
               className="max-w-2xl mx-auto space-y-4"
