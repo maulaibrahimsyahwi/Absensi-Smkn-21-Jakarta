@@ -118,6 +118,8 @@ def create_hari_libur():
 
     current_u = getattr(request, 'current_user', {})
     admin_name = current_u.get('nama', 'Administrator')
+    lampiran_surat = data.get('lampiran_surat')
+    nama_file_surat = data.get('nama_file_surat')
 
     try:
         new_libur = HariLibur(
@@ -127,6 +129,8 @@ def create_hari_libur():
             tanggal_selesai=tgl_selesai,
             tipe_hari=tipe_hari,
             keterangan=keterangan,
+            lampiran_surat=lampiran_surat,
+            nama_file_surat=nama_file_surat,
             is_active=bool(is_active),
             created_by=admin_name
         )
@@ -180,6 +184,12 @@ def update_hari_libur(id):
 
     if is_active is not None:
         record.is_active = bool(is_active)
+
+    if 'lampiran_surat' in data:
+        record.lampiran_surat = data.get('lampiran_surat')
+
+    if 'nama_file_surat' in data:
+        record.nama_file_surat = data.get('nama_file_surat')
 
     try:
         if tgl_mulai_str:
@@ -574,6 +584,9 @@ def quick_surat_edaran():
     if nomor_se and nomor_se not in full_keterangan:
         full_keterangan = f"Dasar: {nomor_se}. {keterangan}".strip()
 
+    lampiran_surat = data.get('lampiran_surat')
+    nama_file_surat = data.get('nama_file_surat')
+
     try:
         existing = HariLibur.query.filter(
             HariLibur.tanggal_mulai == tgl_mulai,
@@ -585,6 +598,10 @@ def quick_surat_edaran():
             existing.kategori = kategori
             existing.tipe_hari = tipe_hari
             existing.keterangan = full_keterangan
+            if lampiran_surat is not None:
+                existing.lampiran_surat = lampiran_surat
+            if nama_file_surat is not None:
+                existing.nama_file_surat = nama_file_surat
             existing.is_active = True
             existing.created_by = f"Surat Edaran ({admin_name})"
         else:
@@ -595,6 +612,8 @@ def quick_surat_edaran():
                 tanggal_selesai=tgl_selesai,
                 tipe_hari=tipe_hari,
                 keterangan=full_keterangan,
+                lampiran_surat=lampiran_surat,
+                nama_file_surat=nama_file_surat,
                 is_active=True,
                 created_by=f"Surat Edaran ({admin_name})"
             )

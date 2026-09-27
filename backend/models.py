@@ -419,6 +419,8 @@ class HariLibur(db.Model):
     tipe_hari = db.Column(db.String(20), default="libur", nullable=False)  # "libur" atau "masuk_khusus"
     keterangan = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    lampiran_surat = db.Column(db.Text, nullable=True)  # Base64 Data URL (PDF / JPG / PNG Surat Edaran)
+    nama_file_surat = db.Column(db.String(255), nullable=True)
     created_by = db.Column(db.String(100), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
@@ -432,6 +434,8 @@ class HariLibur(db.Model):
             "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d") if self.tanggal_selesai else None,
             "tipe_hari": self.tipe_hari,
             "keterangan": self.keterangan or "",
+            "lampiran_surat": self.lampiran_surat,
+            "nama_file_surat": self.nama_file_surat,
             "is_active": bool(self.is_active),
             "created_by": self.created_by or "-",
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,

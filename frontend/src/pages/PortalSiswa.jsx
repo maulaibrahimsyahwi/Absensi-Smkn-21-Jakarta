@@ -28,6 +28,7 @@ import ChangePasswordModal from "../components/ChangePasswordModal";
 import ProfileModal from "../components/ProfileModal";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { playNotificationSound } from "../utils/audioUtils";
+import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
 
 export default function PortalSiswa() {
   const navigate = useNavigate();
@@ -43,6 +44,7 @@ export default function PortalSiswa() {
   const [notification, setNotification] = useState(null);
   const [pelanggaranList, setPelanggaranList] = useState([]);
   const [notifikasiList, setNotifikasiList] = useState([]);
+  const [previewSuratData, setPreviewSuratData] = useState(null);
   const prevNotifIdsRef = useRef(null);
 
   const openProfile = (tab = "profil") => {
@@ -562,7 +564,7 @@ export default function PortalSiswa() {
 
       {/* Banner Informasi Hari Libur Sekolah / Libur Semester */}
       {personalData?.status_hari_ini?.is_holiday && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-amber-500/5 border border-purple-500/30 text-slate-800 flex items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-amber-500/5 border border-purple-500/30 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-md shadow-purple-600/20">
               <Sun className="w-5 h-5" />
@@ -586,12 +588,25 @@ export default function PortalSiswa() {
               </p>
             </div>
           </div>
+
+          {personalData?.status_hari_ini?.holiday_event?.lampiran_surat && (
+            <button
+              type="button"
+              onClick={() =>
+                setPreviewSuratData(personalData.status_hari_ini.holiday_event)
+              }
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+            >
+              <FileText className="w-4 h-4 text-purple-200" />
+              <span>Lihat Surat Edaran Resmi</span>
+            </button>
+          )}
         </div>
       )}
 
       {/* Banner Kegiatan Masuk Khusus (Upacara / Event Sekolah di Luar Hari Normal) */}
       {personalData?.status_hari_ini?.is_special_school_day && (
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/5 border border-amber-500/40 text-slate-800 flex items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/5 border border-amber-500/40 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">
             <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
               <Flag className="w-5 h-5" />
@@ -613,6 +628,19 @@ export default function PortalSiswa() {
               </p>
             </div>
           </div>
+
+          {personalData?.status_hari_ini?.holiday_event?.lampiran_surat && (
+            <button
+              type="button"
+              onClick={() =>
+                setPreviewSuratData(personalData.status_hari_ini.holiday_event)
+              }
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+            >
+              <FileText className="w-4 h-4 text-amber-200" />
+              <span>Lihat Surat Edaran Resmi</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -1000,6 +1028,13 @@ export default function PortalSiswa() {
           fetchPersonalData();
         }}
         initialTab={profileModalTab}
+      />
+
+      {/* Modal Preview Surat Edaran Resmi */}
+      <ModalPreviewSuratEdaran
+        isOpen={!!previewSuratData}
+        onClose={() => setPreviewSuratData(null)}
+        suratData={previewSuratData}
       />
     </div>
   );

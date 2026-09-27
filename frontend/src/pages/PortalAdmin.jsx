@@ -521,72 +521,44 @@ export default function PortalAdmin() {
           </Link>
         </div>
 
-        {/* Panel Kontrol Operasional Khusus: Surat Edaran, Kalender Libur & Mode Daring */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-          {/* Card 1: Aksi Cepat Surat Edaran Dadakan */}
-          <button
-            type="button"
-            onClick={() => {
-              setLiburModalTab("quick_se");
-              setIsLiburModalOpen(true);
-            }}
-            className="group bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-700 hover:to-red-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
-          >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
-                <Zap className="w-6 h-6 fill-white text-white" />
-              </div>
-              <div className="min-w-0">
-                <h3 className="font-bold text-base truncate flex items-center gap-1.5">
-                  <span>Surat Edaran Cepat</span>
-                </h3>
-                <p className="text-[11px] text-rose-100 mt-0.5 truncate">
-                  Terapkan libur / wajib masuk dadakan dalam 5 detik
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-200 group-hover:text-white transition-colors shrink-0 ml-2">
-              <span className="hidden sm:inline">Input SE</span>
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-          </button>
-
-          {/* Card 2: Pengaturan Kalender & Hari Libur Sekolah */}
+        {/* Panel Kontrol Operasional Khusus: Kalender Libur & Mode Daring */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Card: Pengaturan Kalender & Hari Libur Sekolah */}
           <button
             type="button"
             onClick={() => {
               setLiburModalTab("daftar");
               setIsLiburModalOpen(true);
             }}
-            className="group bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+            className="group bg-gradient-to-r from-rose-600 via-rose-700 to-pink-700 hover:from-rose-700 hover:to-pink-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
           >
             <div className="flex items-center gap-3.5 min-w-0">
               <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
                 <CalendarDays className="w-6 h-6" />
                 {liburStatusToday?.is_holiday && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-300 rounded-full border-2 border-purple-700 animate-ping"></span>
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-300 rounded-full border-2 border-rose-700 animate-ping"></span>
                 )}
               </div>
               <div className="min-w-0">
                 <h3 className="font-bold text-base truncate">
                   Kalender & Libur Sekolah
                 </h3>
-                <p className="text-[11px] text-purple-100 mt-0.5 truncate">
+                <p className="text-[11px] text-rose-100 mt-0.5 truncate">
                   {liburStatusToday?.is_holiday
                     ? `🏖️ ${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
                     : liburStatusToday?.is_special_school_day
                       ? `🇮🇩 Masuk Khusus: ${liburStatusToday.holiday_event?.nama || "Kegiatan"}`
-                      : "Libur semester, nasional & import Excel"}
+                      : "Libur semester, libur nasional & override harian"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-200 group-hover:text-white transition-colors shrink-0 ml-2">
               <span className="hidden sm:inline">Kelola Libur</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
 
-          {/* Card 3: Pengaturan Mode Daring (PJJ) */}
+          {/* Card: Pengaturan Mode Daring (PJJ) */}
           <button
             type="button"
             onClick={() => setIsPjjModalOpen(true)}
@@ -606,7 +578,7 @@ export default function PortalAdmin() {
                 <p className="text-[11px] text-violet-100 mt-0.5 truncate">
                   {pjjActiveInfo?.is_active_today
                     ? `${pjjActiveInfo.keterangan || "Mode Daring"} • ${pjjActiveInfo.tipe_lingkup === "semua" ? "Semua Kelas" : pjjActiveInfo.tipe_lingkup === "tingkat" ? `Tingkat ${pjjActiveInfo.tingkat_aktif?.join(", ")}` : `${pjjActiveInfo.kelas_aktif?.length || 0} Kelas Terpilih`}`
-                    : "Atur jadwal PJJ tingkat dan kelas"}
+                    : "Atur jadwal dan kelas yang melaksanakan Pembelajaran Jarak Jauh"}
                 </p>
               </div>
             </div>
