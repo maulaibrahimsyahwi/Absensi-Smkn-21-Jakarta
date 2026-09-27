@@ -49,7 +49,7 @@ export default function AbsensiHarian() {
   const [attendanceToday, setAttendanceToday] = useState(null);
   const [isPjjActive, setIsPjjActive] = useState(false);
   const [pjjKeterangan, setPjjKeterangan] = useState("");
-  const [previewSuratData, setPreviewSuratData] = useState(null);
+  const [showSuratPreview, setShowSuratPreview] = useState(false);
 
   const { playSound } = useAudioFeedback();
 
@@ -377,32 +377,33 @@ export default function AbsensiHarian() {
                 ? "Siswa tidak perlu melakukan scan presensi kehadiran hari ini."
                 : "Presensi kehadiran akan dibuka kembali pada hari Senin pukul 05:00 WIB."}
             </p>
-          </div>
-          <div className="pt-3 space-y-2.5">
             {attendanceToday?.holiday_info?.lampiran_surat && (
-              <button
-                type="button"
-                onClick={() => setPreviewSuratData(attendanceToday.holiday_info)}
-                className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-purple-500/25 transition-all text-sm cursor-pointer"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Lihat Surat Edaran Resmi</span>
-              </button>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSuratPreview(true)}
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold rounded-xl transition-all text-xs cursor-pointer shadow-xs"
+                >
+                  <FileText className="w-4 h-4 text-purple-400" />
+                  <span>📄 Lihat Surat Edaran Resmi</span>
+                </button>
+              </div>
             )}
+          </div>
+          <div className="pt-2">
             <Link
               to={backTarget}
-              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl border border-slate-700 transition-all text-sm"
+              className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/25 transition-all text-sm"
             >
               <span>Kembali</span>
             </Link>
           </div>
         </div>
 
-        {/* Modal Preview Surat Edaran */}
         <ModalPreviewSuratEdaran
-          isOpen={!!previewSuratData}
-          onClose={() => setPreviewSuratData(null)}
-          suratData={previewSuratData}
+          isOpen={showSuratPreview}
+          onClose={() => setShowSuratPreview(false)}
+          suratData={attendanceToday?.holiday_info}
         />
       </div>
     );
@@ -502,29 +503,13 @@ export default function AbsensiHarian() {
 
       {/* Banner Notifikasi Khusus jika Hari Masuk Khusus (Upacara / Event Sekolah) */}
       {isSpecialSchoolDay && !result && (
-        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 flex justify-center animate-in fade-in">
-          <div
-            onClick={() => {
-              if (attendanceToday?.holiday_info?.lampiran_surat) {
-                setPreviewSuratData(attendanceToday.holiday_info);
-              }
-            }}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md ${
-              attendanceToday?.holiday_info?.lampiran_surat
-                ? "cursor-pointer hover:bg-amber-400 pointer-events-auto"
-                : "pointer-events-none"
-            }`}
-          >
+        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 pointer-events-none flex justify-center animate-in fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md">
             <Flag className="w-4 h-4 text-slate-950 shrink-0" />
             <span>
               Kegiatan Khusus:{" "}
               {attendanceToday?.holiday_name || "Wajib Masuk Sekolah"}
             </span>
-            {attendanceToday?.holiday_info?.lampiran_surat && (
-              <span className="ml-1 px-2 py-0.5 rounded-lg bg-black/15 text-[10px] uppercase tracking-wider font-extrabold flex items-center gap-1">
-                <FileText className="w-3 h-3" /> Lihat Surat
-              </span>
-            )}
           </div>
         </div>
       )}
@@ -809,12 +794,6 @@ export default function AbsensiHarian() {
           </span>
         </button>
       </div>
-      {/* Modal Preview Surat Edaran */}
-      <ModalPreviewSuratEdaran
-        isOpen={!!previewSuratData}
-        onClose={() => setPreviewSuratData(null)}
-        suratData={previewSuratData}
-      />
     </div>
   );
 }

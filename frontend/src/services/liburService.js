@@ -46,6 +46,17 @@ export const liburService = {
     return res.data;
   },
 
+  uploadSuratEdaran: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post("/hari_libur/upload_surat", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return res.data;
+  },
+
   importFile: async (formData) => {
     const res = await api.post("/hari_libur/import_file", formData, {
       headers: {

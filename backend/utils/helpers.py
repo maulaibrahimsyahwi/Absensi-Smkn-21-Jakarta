@@ -147,7 +147,36 @@ def get_holiday_status(dt=None):
         # Fallback jika query DB gagal / belum inisialisasi
         pass
 
-    # Prioritas 3: Hari Akhir Pekan Standar (Sabtu & Minggu)
+    # Prioritas 3: Hari Libur Nasional & Cuti Bersama Otomatis (Tanpa Perlu Sinkronisasi Manual)
+    try:
+        from utils.national_holidays import get_national_holiday_on_date
+        nat_holiday = get_national_holiday_on_date(cur_date)
+        if nat_holiday:
+            return {
+                "is_school_day": False,
+                "is_holiday": True,
+                "is_special_school_day": False,
+                "is_weekend": is_weekend_cal,
+                "nama_hari": nama_hari,
+                "holiday_event": {
+                    "id": f"nat_{cur_date.strftime('%Y%m%d')}",
+                    "nama": nat_holiday["nama"],
+                    "kategori": nat_holiday.get("kategori", "libur_nasional"),
+                    "tipe_hari": "libur",
+                    "tanggal_mulai": nat_holiday["tanggal_mulai"],
+                    "tanggal_selesai": nat_holiday["tanggal_selesai"],
+                    "keterangan": nat_holiday.get("keterangan", "Hari Libur Nasional Resmi Indonesia"),
+                    "is_active": True,
+                    "is_built_in": True,
+                    "lampiran_surat": None,
+                    "nama_file_surat": None,
+                },
+                "message": f"Hari ini adalah hari libur nasional: {nat_holiday['nama']}."
+            }
+    except Exception:
+        pass
+
+    # Prioritas 4: Hari Akhir Pekan Standar (Sabtu & Minggu)
     if is_weekend_cal:
         return {
             "is_school_day": False,

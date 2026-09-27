@@ -28,12 +28,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
-import { liburService } from "../services/liburService";
 import ProfileModal from "../components/ProfileModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import SignaturePadModal from "../components/SignaturePadModal";
 import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
+import { liburService } from "../services/liburService";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
 
 export default function PortalPiket() {
@@ -57,7 +57,7 @@ export default function PortalPiket() {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [selectedSlip, setSelectedSlip] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [statusToday, setStatusToday] = useState(null);
+  const [liburStatus, setLiburStatus] = useState(null);
   const [previewSuratData, setPreviewSuratData] = useState(null);
 
   // State Notifikasi Izin Siswa untuk Guru Piket
@@ -115,7 +115,7 @@ export default function PortalPiket() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resNotif, resStatusToday] = await Promise.allSettled([
+      const [resSummary, resNotif, resLibur] = await Promise.allSettled([
         api.get("/piket/summary_today"),
         api.get("/piket/notifikasi"),
         liburService.getStatusToday(),
@@ -135,8 +135,8 @@ export default function PortalPiket() {
       ) {
         setPengajuanList(resNotif.value.data.notifikasi);
       }
-      if (resStatusToday.status === "fulfilled" && resStatusToday.value) {
-        setStatusToday(resStatusToday.value);
+      if (resLibur.status === "fulfilled" && resLibur.value?.success) {
+        setLiburStatus(resLibur.value);
       }
     } catch (err) {
       // Fallback silent
@@ -164,6 +164,12 @@ export default function PortalPiket() {
             if (res.data?.success && Array.isArray(res.data.notifikasi)) {
               setPengajuanList(res.data.notifikasi);
             }
+          })
+          .catch(() => {});
+        liburService
+          .getStatusToday()
+          .then((res) => {
+            if (res?.success) setLiburStatus(res);
           })
           .catch(() => {});
       }
@@ -340,76 +346,73 @@ export default function PortalPiket() {
         </div>
       )}
 
-      {/* Banner Informasi Hari Libur Sekolah / Libur Semester */}
-      {statusToday?.is_holiday && (
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-amber-500/5 border border-purple-500/30 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+      {/* Banner Informasi Hari Libur / Masuk Khusus untuk Guru Piket */}
+      {liburStatus?.is_holiday && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-amber-500/5 border border-purple-500/30 text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="p-2.5 rounded-2xl bg-purple-600 text-white shrink-0 shadow-md shadow-purple-600/20">
+            <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-md shadow-purple-600/20">
               <Sun className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  {statusToday.holiday_event?.nama || "Hari Libur Sekolah"}
+                  {liburStatus.holiday_event?.nama || "Hari Libur Sekolah"}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">
-                  {statusToday.holiday_event?.kategori === "libur_semester"
+                  {liburStatus.holiday_event?.kategori === "libur_semester"
                     ? "Libur Semester"
                     : "Libur Resmi"}
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                {statusToday.message ||
-                  "Hari ini operasional KBM sekolah diliburkan. Presensi harian siswa ditutup secara otomatis."}
+                {liburStatus.message ||
+                  "Hari ini operasional sekolah dan presensi harian diliburkan."}
               </p>
             </div>
           </div>
-
-          {statusToday?.holiday_event?.lampiran_surat && (
+          {liburStatus.holiday_event?.lampiran_surat && (
             <button
               type="button"
-              onClick={() => setPreviewSuratData(statusToday.holiday_event)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+              onClick={() => setPreviewSuratData(liburStatus.holiday_event)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
             >
-              <FileText className="w-4 h-4 text-purple-200" />
-              <span>Lihat Surat Edaran Resmi</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>📄 Lihat Surat Edaran Resmi</span>
             </button>
           )}
         </div>
       )}
 
-      {/* Banner Kegiatan Masuk Khusus (Upacara / Event Sekolah di Luar Hari Normal) */}
-      {statusToday?.is_special_school_day && (
-        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/5 border border-amber-500/40 text-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+      {liburStatus?.is_special_school_day && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/5 border border-amber-500/40 text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="p-2.5 rounded-2xl bg-amber-500 text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
+            <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
               <Flag className="w-5 h-5" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
                   Wajib Hadir:{" "}
-                  {statusToday.holiday_event?.nama || "Kegiatan Khusus Sekolah"}
+                  {liburStatus.holiday_event?.nama || "Kegiatan Khusus Sekolah"}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 uppercase">
                   Masuk Khusus
                 </span>
               </div>
               <p className="text-xs text-slate-700 leading-relaxed">
-                {statusToday.holiday_event?.keterangan ||
-                  "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa diwajibkan hadir dan presensi dibuka."}
+                {liburStatus.holiday_event?.keterangan ||
+                  "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa dan guru diwajibkan hadir."}
               </p>
             </div>
           </div>
-
-          {statusToday?.holiday_event?.lampiran_surat && (
+          {liburStatus.holiday_event?.lampiran_surat && (
             <button
               type="button"
-              onClick={() => setPreviewSuratData(statusToday.holiday_event)}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 w-full sm:w-auto justify-center"
+              onClick={() => setPreviewSuratData(liburStatus.holiday_event)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
             >
-              <FileText className="w-4 h-4 text-amber-200" />
-              <span>Lihat Surat Edaran Resmi</span>
+              <FileText className="w-3.5 h-3.5" />
+              <span>📄 Lihat Surat Edaran Resmi</span>
             </button>
           )}
         </div>
@@ -749,9 +752,9 @@ export default function PortalPiket() {
         description="Bubuhkan tanda tangan Anda sebagai identitas sah penandatangan Surat Izin Masuk dan Keluar Siswa."
       />
 
-      {/* Modal Preview Surat Edaran Resmi */}
+      {/* Modal Pratinjau Surat Edaran Resmi */}
       <ModalPreviewSuratEdaran
-        isOpen={!!previewSuratData}
+        isOpen={Boolean(previewSuratData)}
         onClose={() => setPreviewSuratData(null)}
         suratData={previewSuratData}
       />

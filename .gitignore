@@ -54,6 +54,8 @@ backend/absensi.db-shm
 
 # File upload atau media runtime pengguna jika ada
 backend/uploads/
+backend/static/uploads/
+backend/static/cache_holidays/
 uploads/
 storage/
 

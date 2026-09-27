@@ -32,6 +32,7 @@ import { SMKN21_COORDINATES, formatDistance } from "../utils/geoUtils";
 import { useAudioFeedback, useLivenessDetector } from "../hooks/useFaceScanner";
 import useGeofence from "../hooks/useGeofence";
 import { liburService } from "../services/liburService";
+import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
 
 const KEPERLUAN_OPTIONS = [
   {
@@ -85,6 +86,7 @@ export default function AbsensiPerpus() {
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // 3 detik
   const [holidayStatus, setHolidayStatus] = useState(null);
+  const [showSuratPreview, setShowSuratPreview] = useState(false);
 
   const { playSound } = useAudioFeedback();
 
@@ -322,8 +324,20 @@ export default function AbsensiPerpus() {
                 ? "Layanan kunjungan dan peminjaman buku akan dibuka kembali pada hari sekolah aktif berikutnya."
                 : "Layanan perpustakaan akan dibuka kembali pada hari Senin."}
             </p>
+            {holidayStatus?.holiday_event?.lampiran_surat && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSuratPreview(true)}
+                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold rounded-xl transition-all text-xs cursor-pointer shadow-xs"
+                >
+                  <FileText className="w-4 h-4 text-purple-400" />
+                  <span>📄 Lihat Surat Edaran Resmi</span>
+                </button>
+              </div>
+            )}
           </div>
-          <div className="pt-3">
+          <div className="pt-2">
             <Link
               to={backTarget}
               className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all text-sm"
@@ -332,6 +346,12 @@ export default function AbsensiPerpus() {
             </Link>
           </div>
         </div>
+
+        <ModalPreviewSuratEdaran
+          isOpen={showSuratPreview}
+          onClose={() => setShowSuratPreview(false)}
+          suratData={holidayStatus?.holiday_event}
+        />
       </div>
     );
   }

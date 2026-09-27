@@ -24,6 +24,11 @@ import {
   FileText,
   Send,
   Check,
+  Lock,
+  Paperclip,
+  ExternalLink,
+  Eye,
+  Download,
 } from "lucide-react";
 import { liburService } from "../../services/liburService";
 import ModalPreviewSuratEdaran from "./ModalPreviewSuratEdaran";
@@ -69,21 +74,6 @@ export default function ModalKalenderLibur({
     String(new Date().getFullYear()),
   );
 
-  // Preview Modal Surat Edaran State
-  const [previewSuratData, setPreviewSuratData] = useState(null);
-
-  // Quick Surat Edaran State
-  const [seTarget, setSeTarget] = useState("hari_ini"); // "hari_ini" | "besok" | "rentang"
-  const [seTipeHari, setSeTipeHari] = useState("libur"); // "libur" | "masuk_khusus"
-  const [seJudul, setSeJudul] = useState("");
-  const [seNomor, setSeNomor] = useState("");
-  const [seTglMulai, setSeTglMulai] = useState("");
-  const [seTglSelesai, setSeTglSelesai] = useState("");
-  const [seKeterangan, setSeKeterangan] = useState("");
-  const [seLampiranSurat, setSeLampiranSurat] = useState(null);
-  const [seNamaFileSurat, setSeNamaFileSurat] = useState("");
-  const [seSubmitting, setSeSubmitting] = useState(false);
-
   // Import File State
   const [importFileObj, setImportFileObj] = useState(null);
   const [importLoading, setImportLoading] = useState(false);
@@ -103,8 +93,11 @@ export default function ModalKalenderLibur({
   const [formTglSelesai, setFormTglSelesai] = useState("");
   const [formTipeHari, setFormTipeHari] = useState("libur");
   const [formKeterangan, setFormKeterangan] = useState("");
-  const [formLampiranSurat, setFormLampiranSurat] = useState(null);
-  const [formNamaFileSurat, setFormNamaFileSurat] = useState("");
+  const [formFileSurat, setFormFileSurat] = useState(null);
+  const [formFileUrl, setFormFileUrl] = useState("");
+  const [formFileName, setFormFileName] = useState("");
+  const [uploadingSurat, setUploadingSurat] = useState(false);
+  const [previewSuratModal, setPreviewSuratModal] = useState(null);
 
   const currentYearNum =
     parseInt(selectedTahun, 10) || new Date().getFullYear();
@@ -194,31 +187,9 @@ export default function ModalKalenderLibur({
     setFormTglSelesai("");
     setFormTipeHari("libur");
     setFormKeterangan("");
-    setFormLampiranSurat(null);
-    setFormNamaFileSurat("");
-  };
-
-  const handleFileChange = (file, setLampiran, setNamaFile) => {
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setNotification({
-        type: "error",
-        message: "Ukuran file maksimal 5MB. Silakan kompres atau pilih file lain.",
-      });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setLampiran(e.target.result);
-      setNamaFile(file.name);
-    };
-    reader.onerror = () => {
-      setNotification({
-        type: "error",
-        message: "Gagal membaca file lampiran.",
-      });
-    };
-    reader.readAsDataURL(file);
+    setFormFileUrl("");
+    setFormFileName("");
+    setFormFileSurat(null);
   };
 
   const handleOpenEdit = (item) => {
@@ -229,8 +200,9 @@ export default function ModalKalenderLibur({
     setFormTglSelesai(item.tanggal_selesai || item.tanggal_mulai || "");
     setFormTipeHari(item.tipe_hari || "libur");
     setFormKeterangan(item.keterangan || "");
-    setFormLampiranSurat(item.lampiran_surat || null);
-    setFormNamaFileSurat(item.nama_file_surat || "");
+    setFormFileUrl(item.lampiran_surat || "");
+    setFormFileName(item.nama_file_surat || "");
+    setFormFileSurat(null);
     setActiveTab("tambah");
   };
 
@@ -246,6 +218,32 @@ export default function ModalKalenderLibur({
 
     setSubmitting(true);
     try {
+      let finalFileUrl = formFileUrl;
+      let finalFileName = formFileName;
+
+      if (formFileSurat) {
+        setUploadingSurat(true);
+        try {
+          const uploadRes = await liburService.uploadSuratEdaran(formFileSurat);
+          if (uploadRes?.success) {
+            finalFileUrl = uploadRes.url;
+            finalFileName = uploadRes.filename;
+          }
+        } catch (errUpload) {
+          console.error("Gagal mengunggah surat edaran:", errUpload);
+          setNotification({
+            type: "error",
+            message:
+              "Gagal mengunggah berkas Surat Edaran. Periksa format dan ukuran file.",
+          });
+          setSubmitting(false);
+          setUploadingSurat(false);
+          return;
+        } finally {
+          setUploadingSurat(false);
+        }
+      }
+
       const payload = {
         nama: formNama.trim(),
         kategori: formKategori,
@@ -253,12 +251,12 @@ export default function ModalKalenderLibur({
         tanggal_selesai: formTglSelesai || formTglMulai,
         tipe_hari: formTipeHari,
         keterangan: formKeterangan.trim(),
-        lampiran_surat: formLampiranSurat,
-        nama_file_surat: formNamaFileSurat,
+        lampiran_surat: finalFileUrl || null,
+        nama_file_surat: finalFileName || null,
         is_active: true,
       };
 
-      if (editingId) {
+      if (editingId && !String(editingId).startsWith("auto_")) {
         await liburService.updateHariLibur(editingId, payload);
         setNotification({
           type: "success",
@@ -268,7 +266,7 @@ export default function ModalKalenderLibur({
         await liburService.createHariLibur(payload);
         setNotification({
           type: "success",
-          message: `Jadwal '${payload.nama}' berhasil ditambahkan ke kalender.`,
+          message: `Jadwal '${payload.nama}' berhasil disimpan ke kalender sekolah.`,
         });
       }
 
@@ -418,60 +416,6 @@ export default function ModalKalenderLibur({
     }
   };
 
-  const handleQuickSE = async (e) => {
-    e.preventDefault();
-    if (seTarget === "rentang" && !seTglMulai) {
-      setNotification({
-        type: "error",
-        message: "Tanggal mulai wajib ditentukan jika memilih rentang tanggal.",
-      });
-      return;
-    }
-    setSeSubmitting(true);
-    try {
-      const payload = {
-        target: seTarget,
-        tipe_hari: seTipeHari,
-        judul: seJudul.trim(),
-        nomor_se: seNomor.trim(),
-        tanggal_mulai: seTglMulai,
-        tanggal_selesai: seTglSelesai || seTglMulai,
-        keterangan: seKeterangan.trim(),
-        lampiran_surat: seLampiranSurat,
-        nama_file_surat: seNamaFileSurat,
-      };
-      const res = await liburService.quickSuratEdaran(payload);
-      if (res?.success) {
-        setNotification({
-          type: "success",
-          message: res.message || "Surat Edaran berhasil diterapkan!",
-        });
-        setSeJudul("");
-        setSeNomor("");
-        setSeKeterangan("");
-        setSeLampiranSurat(null);
-        setSeNamaFileSurat("");
-        setActiveTab("daftar");
-        await fetchAllData();
-        if (onRefreshStatus) onRefreshStatus();
-      } else {
-        setNotification({
-          type: "error",
-          message: res?.message || "Gagal menerapkan Surat Edaran.",
-        });
-      }
-    } catch (err) {
-      setNotification({
-        type: "error",
-        message:
-          err.response?.data?.message ||
-          "Terjadi kesalahan saat memproses Surat Edaran.",
-      });
-    } finally {
-      setSeSubmitting(false);
-    }
-  };
-
   const handleUploadFile = async (e) => {
     e.preventDefault();
     if (!importFileObj) {
@@ -498,16 +442,26 @@ export default function ModalKalenderLibur({
         await fetchAllData();
         if (onRefreshStatus) onRefreshStatus();
       } else {
+        setImportStats(res);
         setNotification({
           type: "error",
           message: res?.message || "Gagal mengimpor file kalender.",
         });
       }
     } catch (err) {
+      const errMsg =
+        err.response?.data?.message || "Gagal mengunggah file kalender.";
+      const errList = err.response?.data?.errors || [];
+      setImportStats({
+        message: errMsg,
+        errors: errList,
+        added: 0,
+        skipped: 0,
+        isError: true,
+      });
       setNotification({
         type: "error",
-        message:
-          err.response?.data?.message || "Gagal mengunggah file kalender.",
+        message: errMsg,
       });
     } finally {
       setImportLoading(false);
@@ -696,22 +650,6 @@ export default function ModalKalenderLibur({
 
             <button
               type="button"
-              onClick={() => setActiveTab("quick_se")}
-              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === "quick_se"
-                  ? "border-rose-600 text-rose-700"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              <Zap className="w-4 h-4 text-rose-600 fill-rose-600" />
-              <span>⚡ Aksi Surat Edaran</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-100 text-rose-700 font-bold hidden sm:inline">
-                SE Dadakan
-              </span>
-            </button>
-
-            <button
-              type="button"
               onClick={() => setActiveTab("import_file")}
               className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
                 activeTab === "import_file"
@@ -765,57 +703,31 @@ export default function ModalKalenderLibur({
           {activeTab === "daftar" && (
             <>
               {/* Automation Quick Actions Banner */}
-              <div className="bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 border border-purple-200/80 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-2 w-2 rounded-full bg-purple-600 animate-pulse" />
-                      <h4 className="text-xs sm:text-sm font-bold text-purple-950 flex items-center gap-1.5">
-                        <Zap className="w-4 h-4 text-purple-600 fill-purple-600" />
-                        Otomatisasi 1-Klik Kalender (Tahun {selectedTahun})
+                      <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <h4 className="text-xs sm:text-sm font-bold text-emerald-950 flex items-center gap-1.5">
+                        🟢 Kalender Libur Nasional Otomatis Aktif (2024 - 2030+)
                       </h4>
                     </div>
-                    <p className="text-[11px] text-purple-800/80 leading-relaxed max-w-xl">
-                      Tidak perlu input manual satu per satu! Klik tombol di
-                      bawah untuk langsung mengimpor seluruh tanggal merah SKB 3
-                      Menteri atau libur semester resmi Disdik DKI.
+                    <p className="text-[11px] text-emerald-800/80 leading-relaxed max-w-xl">
+                      Seluruh tanggal merah resmi SKB 3 Menteri sudah otomatis
+                      terintegrasi dan aktif untuk tahun {selectedTahun} tanpa
+                      perlu klik atau sinkron manual.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setActiveTab("quick_se")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-                      title="Buka form kilat penanganan Surat Edaran dadakan"
-                    >
-                      <Zap className="w-3.5 h-3.5 fill-current" />
-                      <span>⚡ SE Dadakan</span>
-                    </button>
-
-                    <button
-                      type="button"
                       onClick={() => setActiveTab("import_file")}
                       className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-                      title="Upload file spreadsheet jadwal libur dari TU"
+                      title="Upload file spreadsheet jadwal libur dari TU/Dinas"
                     >
                       <Upload className="w-3.5 h-3.5" />
-                      <span>📥 Upload Excel</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSyncNational}
-                      disabled={syncing}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                      title="Impor seluruh tanggal merah SKB 3 Menteri untuk tahun ini"
-                    >
-                      {syncing ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Zap className="w-3.5 h-3.5 fill-current" />
-                      )}
-                      <span>⚡ Sinkron Nasional</span>
+                      <span>📥 Upload Excel / CSV</span>
                     </button>
 
                     <button
@@ -830,7 +742,7 @@ export default function ModalKalenderLibur({
                       ) : (
                         <BookOpen className="w-3.5 h-3.5" />
                       )}
-                      <span>📚 Impor Semester</span>
+                      <span>📚 Impor Libur Semester</span>
                     </button>
                   </div>
                 </div>
@@ -866,23 +778,19 @@ export default function ModalKalenderLibur({
                       {selectedTahun}
                     </div>
                     <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      Gunakan fitur 1-klik di bawah untuk langsung mengimpor
-                      seluruh tanggal merah nasional atau jadwal libur semester
-                      secara otomatis tanpa perlu input manual.
+                      Gunakan fitur di bawah untuk mengimpor jadwal libur
+                      semester atau unggah spreadsheet kalender sekolah.
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
                     <button
                       type="button"
-                      onClick={handleSyncNational}
-                      disabled={syncing}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      onClick={() => setActiveTab("import_file")}
+                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
                     >
-                      <Zap className="w-4 h-4 fill-current" />
-                      <span>
-                        ⚡ Sinkronkan Libur Nasional ({selectedTahun})
-                      </span>
+                      <Upload className="w-4 h-4" />
+                      <span>📥 Upload Excel / CSV</span>
                     </button>
                     <button
                       type="button"
@@ -910,6 +818,7 @@ export default function ModalKalenderLibur({
                       (k) => k.value === item.kategori,
                     );
                     const isMasukKhusus = item.tipe_hari === "masuk_khusus";
+                    const isBuiltin = Boolean(item.is_builtin);
 
                     return (
                       <div
@@ -917,22 +826,28 @@ export default function ModalKalenderLibur({
                         className={`p-4 rounded-2xl border transition-all hover:shadow-md space-y-3 relative ${
                           isMasukKhusus
                             ? "bg-blue-50/40 border-blue-200/80"
-                            : "bg-white border-slate-200/80"
+                            : isBuiltin
+                              ? "bg-emerald-50/20 border-emerald-200/60"
+                              : "bg-white border-slate-200/80"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
                             <span
                               className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border mb-1.5 ${
-                                isMasukKhusus
-                                  ? "bg-blue-100 text-blue-800 border-blue-200"
-                                  : katObj?.badgeColor ||
-                                    "bg-slate-100 text-slate-700 border-slate-200"
+                                isBuiltin
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                  : isMasukKhusus
+                                    ? "bg-blue-100 text-blue-800 border-blue-200"
+                                    : katObj?.badgeColor ||
+                                      "bg-slate-100 text-slate-700 border-slate-200"
                               }`}
                             >
-                              {isMasukKhusus
-                                ? "🔵 Wajib Masuk Khusus"
-                                : katObj?.label || item.kategori}
+                              {isBuiltin
+                                ? "🟢 Nasional Otomatis"
+                                : isMasukKhusus
+                                  ? "🔵 Wajib Masuk Khusus"
+                                  : katObj?.label || item.kategori}
                             </span>
                             <h3 className="font-bold text-sm text-slate-900 leading-snug break-words">
                               {item.nama}
@@ -944,18 +859,31 @@ export default function ModalKalenderLibur({
                               type="button"
                               onClick={() => handleOpenEdit(item)}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              title="Edit / Geser Tanggal"
+                              title={
+                                isBuiltin
+                                  ? "Ubah status atau sesuaikan tanggal libur ini"
+                                  : "Edit / Geser Tanggal"
+                              }
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeletingItem(item)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                              title="Hapus Agenda"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isBuiltin ? (
+                              <span
+                                className="p-1.5 rounded-lg text-slate-300 cursor-not-allowed inline-flex items-center"
+                                title="Hari libur resmi SKB 3 Menteri otomatis. Gunakan tombol Edit jika sekolah masuk pada hari ini."
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setDeletingItem(item)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Hapus Agenda"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -982,17 +910,18 @@ export default function ModalKalenderLibur({
                           </p>
                         )}
 
+                        {/* Tombol Preview Surat Edaran jika ada lampiran */}
                         {item.lampiran_surat && (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewSuratData(item)}
-                            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-xs border border-purple-200/80 transition-colors shadow-xs cursor-pointer"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-purple-600" />
-                            <span className="truncate">
-                              Lihat Surat Edaran ({item.nama_file_surat || "Dokumen Resmi"})
-                            </span>
-                          </button>
+                          <div className="pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewSuratModal(item)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-purple-600" />
+                              <span>📄 Lihat Surat Edaran Resmi</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     );
@@ -1002,368 +931,7 @@ export default function ModalKalenderLibur({
             </>
           )}
 
-          {/* TAB 2: Aksi Cepat Surat Edaran Dadakan */}
-          {activeTab === "quick_se" && (
-            <form
-              onSubmit={handleQuickSE}
-              className="max-w-2xl mx-auto space-y-4"
-            >
-              <div className="bg-rose-50/70 border border-rose-200/80 p-4 rounded-2xl flex items-start gap-3">
-                <Zap className="w-5 h-5 text-rose-600 shrink-0 mt-0.5 fill-rose-600" />
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-rose-950 uppercase tracking-wider">
-                    Penanganan Cepat Surat Edaran (SE) Dadakan
-                  </h4>
-                  <p className="text-xs text-rose-900/80 leading-relaxed">
-                    Menerima Surat Edaran dari Disdik, Kemenag, atau Kepala
-                    Sekolah? Terapkan status libur atau kegiatan wajib masuk
-                    secara instan dalam hitungan detik tanpa perlu utak-atik
-                    kalender tahunan.
-                  </p>
-                </div>
-              </div>
-
-              {/* 1. Kapan Diberlakukan? */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  1. Kapan Surat Edaran Ini Berlaku?{" "}
-                  <span className="text-rose-500">*</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setSeTarget("hari_ini")}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                      seTarget === "hari_ini"
-                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-800">
-                        Hari Ini
-                      </span>
-                      {seTarget === "hari_ini" && (
-                        <Check className="w-4 h-4 text-rose-600" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Langsung aktif hari ini (
-                      {new Date().toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                      )
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSeTarget("besok")}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                      seTarget === "besok"
-                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-800">
-                        Besok
-                      </span>
-                      {seTarget === "besok" && (
-                        <Check className="w-4 h-4 text-rose-600" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Berlaku untuk besok hari
-                    </p>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSeTarget("rentang")}
-                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                      seTarget === "rentang"
-                        ? "bg-rose-50/80 border-rose-400 ring-2 ring-rose-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-slate-800">
-                        Rentang Tanggal
-                      </span>
-                      {seTarget === "rentang" && (
-                        <Check className="w-4 h-4 text-rose-600" />
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      Berlaku lebih dari 1 hari
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Jika Target = Rentang, Tampilkan Input Tanggal */}
-              {seTarget === "rentang" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50/80 rounded-2xl border border-slate-200 animate-in fade-in">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Tanggal Mulai <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={seTglMulai}
-                      onChange={(e) => {
-                        setSeTglMulai(e.target.value);
-                        if (!seTglSelesai || seTglSelesai < e.target.value) {
-                          setSeTglSelesai(e.target.value);
-                        }
-                      }}
-                      required
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Tanggal Selesai <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={seTglSelesai}
-                      min={seTglMulai}
-                      onChange={(e) => setSeTglSelesai(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs sm:text-sm bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* 2. Dampak Operasional Presensi */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  2. Dampak Operasional Presensi
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <label
-                    className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                      seTipeHari === "libur"
-                        ? "bg-rose-50 border-rose-300 ring-2 ring-rose-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="seTipeHari"
-                      value="libur"
-                      checked={seTipeHari === "libur"}
-                      onChange={() => setSeTipeHari("libur")}
-                      className="text-rose-600 focus:ring-rose-500"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">
-                        🔴 Liburkan Sekolah (Tutup Presensi)
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Scanner tertutup, auto-alpa dibekukan otomatis
-                      </p>
-                    </div>
-                  </label>
-
-                  <label
-                    className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
-                      seTipeHari === "masuk_khusus"
-                        ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200"
-                        : "bg-white border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="seTipeHari"
-                      value="masuk_khusus"
-                      checked={seTipeHari === "masuk_khusus"}
-                      onChange={() => setSeTipeHari("masuk_khusus")}
-                      className="text-blue-600 focus:ring-blue-500"
-                    />
-                    <div>
-                      <p className="text-xs font-bold text-slate-900">
-                        🔵 Wajib Masuk Khusus (Presensi Dibuka)
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Upacara / kegiatan hari besar (tetap wajib hadir)
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* 3. Dasar Surat Edaran & Perihal */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    3. Nomor Surat Edaran (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={seNomor}
-                    onChange={(e) => setSeNomor(e.target.value)}
-                    placeholder="Contoh: SE Disdik DKI No. 12/2026"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    4. Perihal / Alasan <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={seJudul}
-                    onChange={(e) => setSeJudul(e.target.value)}
-                    placeholder="Contoh: PJJ Mandiri Cuaca Ekstrem"
-                    required
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Pills for Perihal */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mr-1">
-                  Pilih Cepat:
-                </span>
-                {[
-                  "Cuaca Ekstrem / Banjir",
-                  "PJJ Belajar Mandiri di Rumah",
-                  "Pergeseran Sidang Isbat Libur",
-                  "Rapat Dinas & KKG Guru",
-                  "Upacara Hari Peringatan Nasional",
-                ].map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    onClick={() => setSeJudul(chip)}
-                    className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition-colors cursor-pointer"
-                  >
-                    + {chip}
-                  </button>
-                ))}
-              </div>
-
-              {/* 5. Keterangan / Instruksi untuk Siswa & Guru */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  5. Instruksi / Pesan untuk Guru & Siswa
-                </label>
-                <textarea
-                  value={seKeterangan}
-                  onChange={(e) => setSeKeterangan(e.target.value)}
-                  placeholder="Contoh: Seluruh siswa kelas X, XI, XII SMKN 21 melaksanakan kegiatan PJJ mandiri di rumah sesuai arahan Disdik DKI..."
-                  rows={2}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-rose-400 focus:outline-hidden"
-                />
-              </div>
-
-              {/* 6. Unggah Surat Edaran Resmi (PDF / Gambar) */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>6. Unggah Dokumen Surat Edaran (Foto/PDF)</span>
-                  <span className="text-[11px] font-normal text-slate-400">PDF, JPG, PNG (Maks 5MB)</span>
-                </label>
-
-                {seLampiranSurat ? (
-                  <div className="flex items-center justify-between p-3 bg-rose-50/60 border border-rose-200 rounded-2xl">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">
-                          {seNamaFileSurat || "Surat_Edaran"}
-                        </p>
-                        <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Berkas siap dilampirkan & ditampilkan ke siswa/guru
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPreviewSuratData({
-                            nama: seJudul || "Pratinjau Surat Edaran",
-                            lampiran_surat: seLampiranSurat,
-                            nama_file_surat: seNamaFileSurat,
-                            tanggal_mulai: seTglMulai || "Hari Ini",
-                            tanggal_selesai: seTglSelesai || seTglMulai || "Hari Ini",
-                            tipe_hari: seTipeHari,
-                          })
-                        }
-                        className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-50 text-rose-700 border border-rose-200 rounded-lg transition-colors cursor-pointer"
-                      >
-                        Pratinjau
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSeLampiranSurat(null);
-                          setSeNamaFileSurat("");
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="Hapus berkas"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-rose-400 bg-slate-50/60 hover:bg-rose-50/20 rounded-2xl p-4 cursor-pointer transition-all">
-                    <input
-                      type="file"
-                      accept=".pdf,image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleFileChange(file, setSeLampiranSurat, setSeNamaFileSurat);
-                      }}
-                    />
-                    <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      Pilih atau Seret Foto / Dokumen PDF Surat Edaran
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">
-                      Dokumen ini otomatis dapat dilihat langsung oleh siswa dan guru piket di portal mereka
-                    </span>
-                  </label>
-                )}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("daftar")}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={seSubmitting}
-                  className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                >
-                  {seSubmitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4 fill-current" />
-                  )}
-                  <span>⚡ Terapkan Surat Edaran Sekarang</span>
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* TAB 3: Impor File Excel / CSV Kaldik */}
+          {/* TAB 2: Impor File Excel / CSV Kaldik */}
           {activeTab === "import_file" && (
             <div className="max-w-2xl mx-auto space-y-4">
               <div className="bg-indigo-50/70 border border-indigo-200/80 p-4 rounded-2xl flex items-start gap-3">
@@ -1463,20 +1031,50 @@ export default function ModalKalenderLibur({
 
                 {/* Import Result Stats if any */}
                 {importStats && (
-                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 space-y-2 animate-in fade-in">
+                  <div
+                    className={`p-4 rounded-2xl border space-y-2 animate-in fade-in ${
+                      importStats.isError
+                        ? "bg-rose-50 border-rose-200 text-rose-900"
+                        : "bg-emerald-50 border-emerald-200 text-emerald-900"
+                    }`}
+                  >
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      {importStats.isError ? (
+                        <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                      ) : (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      )}
                       <p className="text-xs font-bold">{importStats.message}</p>
                     </div>
-                    <div className="text-[11px] text-emerald-800 flex gap-4 pl-7">
-                      <span>
-                        ✅ Ditambahkan: <strong>{importStats.added}</strong>
-                      </span>
-                      <span>
-                        ℹ️ Dilewati (Sudah Ada):{" "}
-                        <strong>{importStats.skipped}</strong>
-                      </span>
-                    </div>
+                    {!importStats.isError && (
+                      <div className="text-[11px] text-emerald-800 flex gap-4 pl-7">
+                        <span>
+                          ✅ Ditambahkan: <strong>{importStats.added}</strong>
+                        </span>
+                        <span>
+                          ℹ️ Dilewati (Sudah Ada):{" "}
+                          <strong>{importStats.skipped}</strong>
+                        </span>
+                      </div>
+                    )}
+                    {importStats.errors && importStats.errors.length > 0 && (
+                      <div className="mt-2 pl-7 text-[11px] space-y-1">
+                        <p className="font-semibold text-rose-800">
+                          Catatan / Baris Bermasalah (
+                          {importStats.errors.length}):
+                        </p>
+                        <div className="max-h-32 overflow-y-auto space-y-1 pr-2">
+                          {importStats.errors.map((err, eIdx) => (
+                            <p
+                              key={eIdx}
+                              className="text-rose-700 bg-rose-100/70 px-2.5 py-1 rounded-lg"
+                            >
+                              {err}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1665,77 +1263,116 @@ export default function ModalKalenderLibur({
                 />
               </div>
 
-              {/* 7. Unggah Berkas Surat Edaran */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                  <span>7. Unggah Berkas Surat Edaran / SK (Opsional)</span>
-                  <span className="text-[11px] font-normal text-slate-400">PDF, JPG, PNG (Maks 5MB)</span>
+              {/* 7. Lampiran Berkas Surat Edaran Resmi */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Paperclip className="w-3.5 h-3.5 text-purple-600" />
+                    7. Lampiran Berkas Surat Edaran (Opsional)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-normal lowercase">
+                    (PDF, PNG, JPG, maks. 10MB)
+                  </span>
                 </label>
 
-                {formLampiranSurat ? (
-                  <div className="flex items-center justify-between p-3 bg-purple-50/60 border border-purple-200 rounded-2xl">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
-                        <FileText className="w-4 h-4" />
-                      </div>
+                {formFileUrl && !formFileSurat && (
+                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-purple-600 shrink-0" />
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 truncate">
-                          {formNamaFileSurat || "Lampiran_Dokumen"}
+                        <p className="text-xs font-semibold text-purple-950 truncate">
+                          {formFileName || "Berkas Surat Edaran Terlampir"}
                         </p>
-                        <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Berkas terlampir & tersimpan
+                        <p className="text-[10px] text-purple-700 truncate">
+                          Tersimpan di sistem
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={() =>
-                          setPreviewSuratData({
-                            nama: formNama || "Preview Dokumen",
-                            lampiran_surat: formLampiranSurat,
-                            nama_file_surat: formNamaFileSurat,
-                            tanggal_mulai: formTglMulai,
-                            tanggal_selesai: formTglSelesai || formTglMulai,
-                            tipe_hari: formTipeHari,
+                          setPreviewSuratModal({
+                            nama: formNama || "Surat Edaran",
+                            lampiran_surat: formFileUrl,
+                            nama_file_surat: formFileName,
                           })
                         }
-                        className="px-2.5 py-1 text-xs font-semibold bg-white hover:bg-slate-50 text-purple-700 border border-purple-200 rounded-lg transition-colors cursor-pointer"
+                        className="px-2.5 py-1 text-xs bg-white text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg font-medium cursor-pointer transition-colors flex items-center gap-1"
                       >
-                        Pratinjau
+                        <Eye className="w-3 h-3" />
+                        <span>Pratinjau</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => {
-                          setFormLampiranSurat(null);
-                          setFormNamaFileSurat("");
+                          setFormFileUrl("");
+                          setFormFileName("");
+                          setFormFileSurat(null);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                        title="Hapus berkas"
+                        className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                        title="Hapus lampiran"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 hover:border-purple-400 bg-slate-50/60 hover:bg-purple-50/20 rounded-2xl p-4 cursor-pointer transition-all">
+                )}
+
+                {formFileSurat && (
+                  <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-emerald-950 truncate">
+                          {formFileSurat.name}
+                        </p>
+                        <p className="text-[10px] text-emerald-700">
+                          {(formFileSurat.size / 1024).toFixed(1)} KB • Siap
+                          diunggah saat simpan
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormFileSurat(null)}
+                      className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                      title="Batalkan file ini"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {!formFileUrl && !formFileSurat && (
+                  <div className="border border-dashed border-slate-300 hover:border-purple-400 bg-slate-50/50 hover:bg-purple-50/30 rounded-2xl p-3 text-center transition-colors">
                     <input
                       type="file"
-                      accept=".pdf,image/png,image/jpeg,image/webp"
-                      className="hidden"
+                      id="suratEdaranInput"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleFileChange(file, setFormLampiranSurat, setFormNamaFileSurat);
+                        if (file) {
+                          if (file.size > 10 * 1024 * 1024) {
+                            setNotification({
+                              type: "error",
+                              message: "Ukuran berkas melebihi batas 10MB.",
+                            });
+                            return;
+                          }
+                          setFormFileSurat(file);
+                        }
                       }}
+                      className="hidden"
                     />
-                    <Upload className="w-6 h-6 text-slate-400 mb-1" />
-                    <span className="text-xs font-semibold text-slate-700">
-                      Pilih atau Seret Foto / Dokumen PDF Surat Edaran
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5">
-                      Lampirkan dokumen jika ada edaran resmi terkait agenda ini
-                    </span>
-                  </label>
+                    <label
+                      htmlFor="suratEdaranInput"
+                      className="cursor-pointer flex items-center justify-center gap-2 text-xs text-slate-600 hover:text-purple-700 py-1"
+                    >
+                      <Upload className="w-4 h-4 text-slate-400" />
+                      <span>Unggah PDF atau Foto Surat Edaran Resmi</span>
+                    </label>
+                  </div>
                 )}
               </div>
 
@@ -1892,11 +1529,12 @@ export default function ModalKalenderLibur({
           </div>
         </div>
       )}
-      {/* Modal Preview Surat Edaran */}
+
+      {/* Modal Preview Surat Edaran Resmi */}
       <ModalPreviewSuratEdaran
-        isOpen={!!previewSuratData}
-        onClose={() => setPreviewSuratData(null)}
-        suratData={previewSuratData}
+        isOpen={Boolean(previewSuratModal)}
+        onClose={() => setPreviewSuratModal(null)}
+        suratData={previewSuratModal}
       />
     </div>
   );
