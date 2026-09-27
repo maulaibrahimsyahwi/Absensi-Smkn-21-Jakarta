@@ -20,6 +20,9 @@ import {
   GraduationCap,
   Laptop,
   Users,
+  Sun,
+  Flag,
+  Calendar,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
@@ -47,20 +50,20 @@ export default function AbsensiHarian() {
 
   const { playSound } = useAudioFeedback();
 
-  // Pengecekan Presensi Hari Ini: Jika siswa sudah absen hari ini, cegah absen berulang
+  // Pengecekan Presensi & Status Operasional Hari Ini (Hari Sekolah, Libur, Sudah Absen)
   useEffect(() => {
     const checkTodayAttendance = async () => {
-      if (isSiswa && user?.id) {
-        try {
-          const res = await api.get("/presensi/status_today", {
-            params: { siswa_id: user.id },
-          });
-          if (res.data) {
-            setAttendanceToday(res.data);
-          }
-        } catch (err) {
-          // Lanjutkan jika ada kendala jaringan sesaat
+      try {
+        const params = {};
+        if (isSiswa && user?.id) {
+          params.siswa_id = user.id;
         }
+        const res = await api.get("/presensi/status_today", { params });
+        if (res.data) {
+          setAttendanceToday(res.data);
+        }
+      } catch (err) {
+        // Lanjutkan jika ada kendala jaringan sesaat
       }
     };
     checkTodayAttendance();
@@ -138,8 +141,12 @@ export default function AbsensiHarian() {
     return () => clearInterval(timer);
   }, []);
 
-  // Pengecekan Akhir Pekan (Sabtu = 6, Minggu = 0)
-  const isWeekend = [0, 6].includes(new Date().getDay());
+  // Pengecekan Hari Libur Terjadwal & Akhir Pekan
+  const isRawWeekend = [0, 6].includes(new Date().getDay());
+  const isSpecialSchoolDay = Boolean(attendanceToday?.is_special_school_day);
+  const isHoliday = Boolean(attendanceToday?.is_holiday);
+  // Presensi ditutup jika hari libur resmi, ATAU akhir pekan (kecuali ada kegiatan masuk khusus)
+  const isAttendanceClosed = isHoliday || (isRawWeekend && !isSpecialSchoolDay);
 
   // Liveness Detection Adaptif & Anti-DDoS Polling (~750ms sequential loop via useFaceScanner hook)
   const verifiedTokenRef = useRef(null);
@@ -152,7 +159,7 @@ export default function AbsensiHarian() {
   } = useLivenessDetector({
     webcamRef,
     isActive:
-      !isWeekend &&
+      !isAttendanceClosed &&
       !loading &&
       !result &&
       effectiveGpsValid &&
@@ -165,7 +172,7 @@ export default function AbsensiHarian() {
   });
 
   const captureAndVerify = useCallback(async () => {
-    if (isWeekend) return;
+    if (isAttendanceClosed) return;
     if (!effectiveGpsValid) return;
     if (isSiswa && attendanceToday?.already_attended) return;
     if (!webcamRef.current) return;
@@ -279,7 +286,7 @@ export default function AbsensiHarian() {
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
   useEffect(() => {
     if (
-      isWeekend ||
+      isAttendanceClosed ||
       loading ||
       result ||
       !effectiveGpsValid ||
@@ -301,7 +308,7 @@ export default function AbsensiHarian() {
 
     return () => clearInterval(timer);
   }, [
-    isWeekend,
+    isAttendanceClosed,
     countdown,
     isLiveVerified,
     loading,
@@ -312,28 +319,60 @@ export default function AbsensiHarian() {
     captureAndVerify,
   ]);
 
-  // Akhir Pekan (Sabtu & Minggu): Presensi Ditutup
-  if (isWeekend) {
-    const namaHariIni = new Date().toLocaleDateString("id-ID", {
-      weekday: "long",
-    });
+  // Hari Libur atau Akhir Pekan: Presensi Ditutup
+  if (isAttendanceClosed) {
+    const namaHariIni =
+      attendanceToday?.hari ||
+      new Date().toLocaleDateString("id-ID", { weekday: "long" });
+    const isSemesterBreak =
+      attendanceToday?.holiday_info?.kategori === "libur_semester";
+
     return (
       <div className="fixed inset-0 w-screen h-screen bg-slate-950 flex items-center justify-center p-4 select-none z-50">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
-            <Clock className="w-8 h-8" />
+          <div
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-lg ${
+              isHoliday
+                ? isSemesterBreak
+                  ? "bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-purple-500/10"
+                  : "bg-rose-500/15 border border-rose-500/30 text-rose-400 shadow-rose-500/10"
+                : "bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-amber-500/10"
+            }`}
+          >
+            {isHoliday ? (
+              <Sun className="w-8 h-8" />
+            ) : (
+              <Clock className="w-8 h-8" />
+            )}
           </div>
           <div className="space-y-2">
+            {isHoliday && (
+              <span
+                className={`inline-block px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider mb-1 border ${
+                  isSemesterBreak
+                    ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                    : "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                }`}
+              >
+                {isSemesterBreak ? "Libur Semester" : "Hari Libur Resmi"}
+              </span>
+            )}
             <h2 className="text-xl sm:text-2xl font-black text-white">
-              Hari Libur Sekolah ({namaHariIni})
+              {isHoliday
+                ? attendanceToday?.holiday_name || "Hari Libur Sekolah"
+                : `Hari Libur Akhir Pekan (${namaHariIni})`}
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Sistem presensi harian SMKN 21 Jakarta hanya digunakan pada hari
-              sekolah aktif (<strong>Senin s/d Jumat</strong>).
+              {isHoliday
+                ? attendanceToday?.message ||
+                  attendanceToday?.holiday_info?.keterangan ||
+                  "Hari ini operasional presensi sekolah diliburkan sesuai kalender akademik."
+                : "Sistem presensi harian SMKN 21 Jakarta hanya digunakan pada hari sekolah aktif (Senin s/d Jumat)."}
             </p>
             <p className="text-xs text-slate-400">
-              Presensi kehadiran akan dibuka kembali pada hari{" "}
-              <strong>Senin</strong> pukul <strong>05:00 WIB</strong>.
+              {isHoliday
+                ? "Siswa tidak perlu melakukan scan presensi kehadiran hari ini."
+                : "Presensi kehadiran akan dibuka kembali pada hari Senin pukul 05:00 WIB."}
             </p>
           </div>
           <div className="pt-3">
@@ -440,6 +479,16 @@ export default function AbsensiHarian() {
           </div>
         </div>
       </div>
+
+      {/* Banner Notifikasi Khusus jika Hari Masuk Khusus (Upacara / Event Sekolah) */}
+      {isSpecialSchoolDay && !result && (
+        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 pointer-events-none flex justify-center animate-in fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md">
+            <Flag className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>Kegiatan Khusus: {attendanceToday?.holiday_name || "Wajib Masuk Sekolah"}</span>
+          </div>
+        </div>
+      )}
 
       {/* 5. Loading Indicator Saat Memverifikasi */}
       {loading && (

@@ -401,4 +401,42 @@ class AuditLog(db.Model):
         }
 
 
+class HariLibur(db.Model):
+    """
+    Model Kalender Akademik & Hari Libur Sekolah SMKN 21 Jakarta.
+    Mengelola:
+    - Libur Semester / Kenaikan Kelas (rentang tanggal)
+    - Hari Libur Nasional & Cuti Bersama
+    - Hari Masuk Khusus (Upacara 17 Agustus, Hardiknas yang jatuh di tanggal merah/weekend)
+    - Override Harian Cepat (Libur mendadak / Masuk mendadak)
+    """
+    __tablename__ = 'hari_libur'
+    id = db.Column(db.Integer, primary_key=True)
+    nama = db.Column(db.String(150), nullable=False)
+    kategori = db.Column(db.String(50), default="libur_semester", nullable=False)  # "libur_semester", "libur_nasional", "cuti_bersama", "khusus"
+    tanggal_mulai = db.Column(db.Date, nullable=False, index=True)
+    tanggal_selesai = db.Column(db.Date, nullable=False, index=True)
+    tipe_hari = db.Column(db.String(20), default="libur", nullable=False)  # "libur" atau "masuk_khusus"
+    keterangan = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_by = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "nama": self.nama,
+            "kategori": self.kategori,
+            "tanggal_mulai": self.tanggal_mulai.strftime("%Y-%m-%d") if self.tanggal_mulai else None,
+            "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d") if self.tanggal_selesai else None,
+            "tipe_hari": self.tipe_hari,
+            "keterangan": self.keterangan or "",
+            "is_active": bool(self.is_active),
+            "created_by": self.created_by or "-",
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
+            "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None
+        }
+
+
 

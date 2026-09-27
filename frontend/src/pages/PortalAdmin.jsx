@@ -25,6 +25,10 @@ import {
   Award,
   RefreshCw,
   Laptop,
+  UserRound,
+  CalendarDays,
+  Sun,
+  Flag,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -32,6 +36,8 @@ import ProfileModal from "../components/ProfileModal";
 import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 import ModalPengaturanPJJ from "../components/pjj/ModalPengaturanPJJ";
+import ModalKalenderLibur from "../components/libur/ModalKalenderLibur";
+import { liburService } from "../services/liburService";
 
 export default function PortalAdmin() {
   const navigate = useNavigate();
@@ -63,6 +69,8 @@ export default function PortalAdmin() {
   const [profileModalTab, setProfileModalTab] = useState("profil");
   const [isPjjModalOpen, setIsPjjModalOpen] = useState(false);
   const [pjjActiveInfo, setPjjActiveInfo] = useState(null);
+  const [isLiburModalOpen, setIsLiburModalOpen] = useState(false);
+  const [liburStatusToday, setLiburStatusToday] = useState(null);
   const [notification, setNotification] = useState(null);
 
   // Live Clock (WIB)
@@ -92,14 +100,15 @@ export default function PortalAdmin() {
     year: "numeric",
   });
 
-  // Fetch Ringkasan Statistik Sekolah & Notifikasi Pengajuan Izin & Status PJJ
+  // Fetch Ringkasan Statistik Sekolah, Notifikasi Pengajuan Izin, Status PJJ & Hari Libur
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resNotif, resPjj] = await Promise.allSettled([
+      const [resSummary, resNotif, resPjj, resLibur] = await Promise.allSettled([
         api.get("/rekap/admin_summary"),
         api.get("/piket/notifikasi"),
         api.get("/pjj/status"),
+        liburService.getStatusToday(),
       ]);
 
       if (
@@ -122,6 +131,12 @@ export default function PortalAdmin() {
         resPjj.value.data.data
       ) {
         setPjjActiveInfo(resPjj.value.data.data);
+      }
+      if (
+        resLibur.status === "fulfilled" &&
+        resLibur.value?.success
+      ) {
+        setLiburStatusToday(resLibur.value);
       }
     } catch (err) {
       console.error("Gagal memuat ringkasan admin:", err);
@@ -149,6 +164,12 @@ export default function PortalAdmin() {
             if (res.data?.success && Array.isArray(res.data.notifikasi)) {
               setPengajuanList(res.data.notifikasi);
             }
+          })
+          .catch(() => {});
+        liburService
+          .getStatusToday()
+          .then((res) => {
+            if (res?.success) setLiburStatusToday(res);
           })
           .catch(() => {});
       }
@@ -204,13 +225,10 @@ export default function PortalAdmin() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <ShieldCheck className="w-8 h-8 sm:w-11 sm:h-11 text-purple-300" />
+                <UserRound className="w-8 h-8 sm:w-11 sm:h-11 text-purple-300" />
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/25 border border-purple-400/30 text-[10px] sm:text-[11px] font-bold tracking-wide uppercase text-purple-200 mb-1">
-                Superadmin SMKN 21
-              </span>
               <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight truncate sm:whitespace-normal">
                 {user?.nama || "Administrator SMKN 21"}
               </h1>
@@ -220,6 +238,44 @@ export default function PortalAdmin() {
                   <Clock className="w-3.5 h-3.5 text-purple-300 shrink-0" />
                   {currentTimeStr}
                 </span>
+                {liburStatusToday && (
+                  <button
+                    type="button"
+                    onClick={() => setIsLiburModalOpen(true)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-colors cursor-pointer ${
+                      liburStatusToday.is_holiday
+                        ? "bg-rose-500/30 text-rose-200 border-rose-400/40 hover:bg-rose-500/40"
+                        : liburStatusToday.is_special_school_day
+                          ? "bg-amber-500/30 text-amber-200 border-amber-400/40 hover:bg-amber-500/40"
+                          : liburStatusToday.is_weekend
+                            ? "bg-slate-500/30 text-slate-200 border-slate-400/40 hover:bg-slate-500/40"
+                            : "bg-emerald-500/30 text-emerald-200 border-emerald-400/40 hover:bg-emerald-500/40"
+                    }`}
+                    title="Klik untuk membuka Pengaturan Kalender & Hari Libur Sekolah"
+                  >
+                    {liburStatusToday.is_holiday ? (
+                      <>
+                        <Sun className="w-3 h-3 text-rose-300" />
+                        <span>Libur: {liburStatusToday.holiday_event?.nama || "Sekolah Libur"}</span>
+                      </>
+                    ) : liburStatusToday.is_special_school_day ? (
+                      <>
+                        <Flag className="w-3 h-3 text-amber-300" />
+                        <span>Masuk Khusus: {liburStatusToday.holiday_event?.nama || "Kegiatan"}</span>
+                      </>
+                    ) : liburStatusToday.is_weekend ? (
+                      <>
+                        <Calendar className="w-3 h-3 text-slate-300" />
+                        <span>Akhir Pekan</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3 h-3 text-emerald-300" />
+                        <span>Hari Sekolah Aktif</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </p>
             </div>
           </div>
@@ -339,7 +395,7 @@ export default function PortalAdmin() {
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">
           {/* Card 1: Data & Biometrik Siswa */}
           <Link
             to="/registrasi"
@@ -456,34 +512,68 @@ export default function PortalAdmin() {
             <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
 
-          {/* Card 7: Pengaturan Mode PJJ */}
+        </div>
+
+        {/* Panel Kontrol Operasional Khusus: Kalender Libur & Mode Daring */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {/* Card: Pengaturan Kalender & Hari Libur Sekolah */}
+          <button
+            type="button"
+            onClick={() => setIsLiburModalOpen(true)}
+            className="group bg-gradient-to-r from-rose-600 via-rose-700 to-pink-700 hover:from-rose-700 hover:to-pink-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <CalendarDays className="w-6 h-6" />
+                {liburStatusToday?.is_holiday && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-300 rounded-full border-2 border-rose-700 animate-ping"></span>
+                )}
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-base truncate">
+                  Kalender & Libur Sekolah
+                </h3>
+                <p className="text-[11px] text-rose-100 mt-0.5 truncate">
+                  {liburStatusToday?.is_holiday
+                    ? `🏖️ ${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
+                    : liburStatusToday?.is_special_school_day
+                      ? `🇮🇩 Masuk Khusus: ${liburStatusToday.holiday_event?.nama || "Kegiatan"}`
+                      : "Libur semester, libur nasional & override harian"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-rose-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Kelola Libur</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card: Pengaturan Mode Daring (PJJ) */}
           <button
             type="button"
             onClick={() => setIsPjjModalOpen(true)}
-            className="group bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer sm:col-span-2 lg:col-span-3"
+            className="group bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
                 <Laptop className="w-6 h-6" />
                 {pjjActiveInfo?.is_active_today && (
                   <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-violet-700 animate-ping"></span>
                 )}
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-base">
-                    Pengaturan Mode Daring
-                  </h3>
-                </div>
-                <p className="text-[11px] text-violet-100 mt-0.5">
+              <div className="min-w-0">
+                <h3 className="font-bold text-base truncate">
+                  Pengaturan Mode Daring
+                </h3>
+                <p className="text-[11px] text-violet-100 mt-0.5 truncate">
                   {pjjActiveInfo?.is_active_today
                     ? `${pjjActiveInfo.keterangan || "Mode Daring"} • ${pjjActiveInfo.tipe_lingkup === "semua" ? "Semua Kelas" : pjjActiveInfo.tipe_lingkup === "tingkat" ? `Tingkat ${pjjActiveInfo.tingkat_aktif?.join(", ")}` : `${pjjActiveInfo.kelas_aktif?.length || 0} Kelas Terpilih`}`
                     : "Atur jadwal dan kelas yang melaksanakan Pembelajaran Jarak Jauh"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors">
-              <span>Kelola Daring</span>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Kelola Daring</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -572,6 +662,13 @@ export default function PortalAdmin() {
         isOpen={isPjjModalOpen}
         onClose={() => setIsPjjModalOpen(false)}
         onUpdated={fetchSummary}
+      />
+
+      {/* Modal Kalender & Hari Libur Sekolah */}
+      <ModalKalenderLibur
+        isOpen={isLiburModalOpen}
+        onClose={() => setIsLiburModalOpen(false)}
+        onRefreshStatus={fetchSummary}
       />
     </div>
   );

@@ -13,6 +13,9 @@ import {
   User,
   Lock,
   X,
+  Sun,
+  Flag,
+  Calendar,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -557,6 +560,54 @@ export default function PortalSiswa() {
         </div>
       )}
 
+      {/* Banner Informasi Hari Libur Sekolah / Libur Semester */}
+      {personalData?.status_hari_ini?.is_holiday && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-purple-500/10 via-rose-500/10 to-amber-500/5 border border-purple-500/30 text-slate-800 flex items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-purple-600 text-white shrink-0 shadow-md shadow-purple-600/20">
+              <Sun className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  {personalData.status_hari_ini.holiday_event?.nama || "Hari Libur Sekolah"}
+                </h3>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">
+                  {personalData.status_hari_ini.holiday_event?.kategori === "libur_semester" ? "Libur Semester" : "Libur Resmi"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {personalData.status_hari_ini.message || "Hari ini operasional sekolah dan presensi harian diliburkan. Anda tidak perlu melakukan scan presensi."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Kegiatan Masuk Khusus (Upacara / Event Sekolah di Luar Hari Normal) */}
+      {personalData?.status_hari_ini?.is_special_school_day && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-orange-500/5 border border-amber-500/40 text-slate-800 flex items-start sm:items-center justify-between gap-3.5 animate-in fade-in shadow-xs">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="p-2.5 rounded-xl bg-amber-500 text-slate-950 shrink-0 shadow-md shadow-amber-500/20">
+              <Flag className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  Wajib Hadir: {personalData.status_hari_ini.holiday_event?.nama || "Kegiatan Khusus Sekolah"}
+                </h3>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 uppercase">
+                  Masuk Khusus
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                {personalData.status_hari_ini.holiday_event?.keterangan || "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa diwajibkan hadir dan melakukan scan presensi."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tombol Aksi Cepat (HANYA MUNCUL UNTUK SISWA AKTIF) */}
       {!isAlumni && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
@@ -572,7 +623,11 @@ export default function PortalSiswa() {
                 <div>
                   <h3 className="font-bold text-base">Presensi Harian</h3>
                   <p className="text-[11px] text-emerald-100">
-                    Scan wajah mandiri
+                    {personalData?.status_hari_ini?.is_holiday
+                      ? "🏖️ Sedang Libur"
+                      : personalData?.status_hari_ini?.is_special_school_day
+                        ? "🇮🇩 Masuk Khusus"
+                        : "Scan wajah mandiri"}
                   </p>
                 </div>
               </div>

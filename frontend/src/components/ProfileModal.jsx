@@ -48,8 +48,8 @@ export default function ProfileModal({
   if (!isOpen) return null;
 
   const tabs = [
-    { id: "profil", label: "Profil", icon: User },
-    { id: "keamanan", label: "Keamanan", icon: ShieldCheck },
+    { id: "profil", label: "Profil" },
+    { id: "keamanan", label: "Keamanan" },
   ];
 
   const modalContent = (
@@ -85,7 +85,6 @@ export default function ProfileModal({
         {/* Tab Selector Bar */}
         <div className="flex border-b border-slate-100 bg-white px-3 pt-2 gap-1 overflow-x-auto no-scrollbar flex-shrink-0">
           {tabs.map((tab) => {
-            const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -98,7 +97,6 @@ export default function ProfileModal({
                     : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
                 }`}
               >
-                <Icon className="w-4 h-4" />
                 <span>{tab.label}</span>
               </button>
             );

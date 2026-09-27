@@ -186,9 +186,7 @@ export default function EditSiswaModal({
                   }}
                   className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  {isCustomMode
-                    ? "← Pilih dari Dropdown"
-                    : "+ Ketik Kelas Baru"}
+                  {isCustomMode ? "Pilih dari kelas" : "+ Kelas Baru"}
                 </button>
               </div>
 

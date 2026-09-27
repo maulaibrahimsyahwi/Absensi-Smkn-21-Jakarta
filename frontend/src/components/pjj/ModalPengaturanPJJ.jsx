@@ -425,49 +425,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Pilihan Kelas
                     </label>
-                    {/* SMART PRESETS (1-CLICK) */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => applyPreset("SEMUA_PJJ")}
-                        className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer ${
-                          tipeLingkup === "semua"
-                            ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        <span>Semua Siswa</span>
-                      </button>
 
-                      <button
-                        type="button"
-                        onClick={() => applyPreset("X_XI_PJJ")}
-                        className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer ${
-                          tipeLingkup === "tingkat" &&
-                          tingkatAktif.includes("X") &&
-                          tingkatAktif.includes("XI") &&
-                          !tingkatAktif.includes("XII")
-                            ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        <span>Kelas 10 & 11 Daring</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => applyPreset("XII_ONLY_PJJ")}
-                        className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center text-center gap-1 transition-all cursor-pointer ${
-                          tipeLingkup === "tingkat" &&
-                          tingkatAktif.length === 1 &&
-                          tingkatAktif.includes("XII")
-                            ? "bg-purple-600 text-white border-purple-600 shadow-xs"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                        }`}
-                      >
-                        <span>Hanya Kelas 12 Daring</span>
-                      </button>
-                    </div>
                     <div className="grid grid-cols-3 gap-2.5">
                       {["X", "XI", "XII"].map((tingkat) => {
                         const isTingkatActive = tingkatAktif.includes(tingkat);
@@ -478,7 +436,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                             onClick={() => toggleTingkat(tingkat)}
                             className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                               isTingkatActive
-                                ? "bg-white text-indigo-700 border-indigo-300 shadow-xs ring-2 ring-indigo-500/20"
+                                ? "bg-blue-600 text-white border-blue-600 shadow-xs"
                                 : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-white"
                             }`}
                           >
@@ -493,8 +451,8 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                   <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
                     <div className="bg-slate-100/80 px-4 py-2.5 flex items-center justify-between text-xs font-bold text-slate-700">
                       <span>
-                        Rincian Kelas ({kelasAktif.length} dari{" "}
-                        {DAFTAR_KELAS_SMKN21.length} Kelas )
+                        Pilih {kelasAktif.length} dari{" "}
+                        {DAFTAR_KELAS_SMKN21.length}
                       </span>
                     </div>
 

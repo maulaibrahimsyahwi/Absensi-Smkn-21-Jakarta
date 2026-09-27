@@ -1,0 +1,758 @@
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Calendar,
+  X,
+  Plus,
+  Trash2,
+  Edit2,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  RotateCcw,
+  Sparkles,
+  ShieldAlert,
+  Loader2,
+  Sun,
+  Flag,
+  CalendarDays,
+  Search,
+  Filter,
+} from "lucide-react";
+import { liburService } from "../../services/liburService";
+
+const KATEGORI_OPTIONS = [
+  { value: "libur_semester", label: "Libur Semester / Kenaikan Kelas", badgeColor: "bg-purple-100 text-purple-800 border-purple-200" },
+  { value: "libur_nasional", label: "Hari Libur Nasional", badgeColor: "bg-rose-100 text-rose-800 border-rose-200" },
+  { value: "cuti_bersama", label: "Cuti Bersama Pemerintah", badgeColor: "bg-amber-100 text-amber-800 border-amber-200" },
+  { value: "khusus", label: "Libur Khusus / Kegiatan Sekolah", badgeColor: "bg-blue-100 text-blue-800 border-blue-200" },
+];
+
+export default function ModalKalenderLibur({ isOpen, onClose, onRefreshStatus }) {
+  const [activeTab, setActiveTab] = useState("daftar"); // "daftar" | "tambah"
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [liburList, setLiburList] = useState([]);
+  const [statusToday, setStatusToday] = useState(null);
+  const [notification, setNotification] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedTahun, setSelectedTahun] = useState(String(new Date().getFullYear()));
+
+  // Form State
+  const [editingId, setEditingId] = useState(null);
+  const [formNama, setFormNama] = useState("");
+  const [formKategori, setFormKategori] = useState("libur_semester");
+  const [formTglMulai, setFormTglMulai] = useState("");
+  const [formTglSelesai, setFormTglSelesai] = useState("");
+  const [formTipeHari, setFormTipeHari] = useState("libur");
+  const [formKeterangan, setFormKeterangan] = useState("");
+
+  // Modal konfirmasi hapus
+  const [deletingItem, setDeletingItem] = useState(null);
+
+  // Quick Override Prompt Modal
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideAction, setOverrideAction] = useState("libur"); // "libur" | "masuk_khusus"
+  const [overrideNama, setOverrideNama] = useState("");
+  const [overrideKet, setOverrideKet] = useState("");
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const [listRes, statusRes] = await Promise.all([
+        liburService.getHariLiburList({ tahun: selectedTahun }),
+        liburService.getStatusToday(),
+      ]);
+      setLiburList(Array.isArray(listRes) ? listRes : []);
+      setStatusToday(statusRes || null);
+    } catch (err) {
+      console.error("Gagal mengambil data kalender libur:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchAllData();
+    }
+  }, [isOpen, selectedTahun]);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setFormNama("");
+    setFormKategori("libur_semester");
+    setFormTglMulai("");
+    setFormTglSelesai("");
+    setFormTipeHari("libur");
+    setFormKeterangan("");
+  };
+
+  const handleOpenEdit = (item) => {
+    setEditingId(item.id);
+    setFormNama(item.nama);
+    setFormKategori(item.kategori || "libur_semester");
+    setFormTglMulai(item.tanggal_mulai || "");
+    setFormTglSelesai(item.tanggal_selesai || item.tanggal_mulai || "");
+    setFormTipeHari(item.tipe_hari || "libur");
+    setFormKeterangan(item.keterangan || "");
+    setActiveTab("tambah");
+  };
+
+  const handleSubmitForm = async (e) => {
+    e.preventDefault();
+    if (!formNama.trim() || !formTglMulai) {
+      setNotification({ type: "error", message: "Nama kegiatan dan tanggal mulai wajib diisi." });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        nama: formNama.trim(),
+        kategori: formKategori,
+        tanggal_mulai: formTglMulai,
+        tanggal_selesai: formTglSelesai || formTglMulai,
+        tipe_hari: formTipeHari,
+        keterangan: formKeterangan.trim(),
+        is_active: true,
+      };
+
+      if (editingId) {
+        await liburService.updateHariLibur(editingId, payload);
+        setNotification({ type: "success", message: `Jadwal '${payload.nama}' berhasil diperbarui.` });
+      } else {
+        await liburService.createHariLibur(payload);
+        setNotification({ type: "success", message: `Jadwal '${payload.nama}' berhasil ditambahkan ke kalender.` });
+      }
+
+      resetForm();
+      setActiveTab("daftar");
+      fetchAllData();
+      if (onRefreshStatus) onRefreshStatus();
+    } catch (err) {
+      const msg = err.response?.data?.message || "Gagal menyimpan jadwal libur.";
+      setNotification({ type: "error", message: msg });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await liburService.deleteHariLibur(deletingItem.id);
+      setNotification({ type: "success", message: `Jadwal '${deletingItem.nama}' berhasil dihapus.` });
+      setDeletingItem(null);
+      fetchAllData();
+      if (onRefreshStatus) onRefreshStatus();
+    } catch (err) {
+      setNotification({ type: "error", message: "Gagal menghapus jadwal libur." });
+    }
+  };
+
+  const handleQuickOverride = async () => {
+    setSubmitting(true);
+    try {
+      await liburService.quickOverrideToday({
+        action: overrideAction,
+        nama: overrideNama.trim(),
+        keterangan: overrideKet.trim(),
+      });
+      setNotification({
+        type: "success",
+        message: `Status hari ini berhasil diubah: ${overrideAction === "libur" ? "Diliburkan Khusus" : "Wajib Masuk Khusus"}.`,
+      });
+      setShowOverrideModal(false);
+      setOverrideNama("");
+      setOverrideKet("");
+      fetchAllData();
+      if (onRefreshStatus) onRefreshStatus();
+    } catch (err) {
+      setNotification({ type: "error", message: "Gagal melakukan override hari ini." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleResetOverride = async () => {
+    if (!window.confirm("Kembalikan status hari ini ke jadwal kalender normal?")) return;
+    setSubmitting(true);
+    try {
+      await liburService.quickOverrideToday({ action: "reset" });
+      setNotification({ type: "success", message: "Status hari ini telah dikembalikan ke kalender normal." });
+      fetchAllData();
+      if (onRefreshStatus) onRefreshStatus();
+    } catch (err) {
+      setNotification({ type: "error", message: "Gagal mereset status hari ini." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filteredList = useMemo(() => {
+    return liburList.filter((item) => {
+      const q = searchTerm.toLowerCase();
+      return (
+        item.nama?.toLowerCase().includes(q) ||
+        item.keterangan?.toLowerCase().includes(q) ||
+        item.kategori?.toLowerCase().includes(q)
+      );
+    });
+  }, [liburList, searchTerm]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in">
+      <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+        {/* Header Modal */}
+        <div className="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-purple-300 shrink-0">
+              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-bold tracking-tight truncate">
+                Kalender Akademik & Hari Libur Sekolah
+              </h2>
+              <p className="text-xs text-purple-200 truncate">
+                Kelola libur semester, tanggal merah, upacara khusus, & override presensi
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+            title="Tutup Modal"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Floating Notification */}
+        {notification && (
+          <div
+            className={`mx-4 mt-3 p-3 rounded-2xl text-xs font-semibold flex items-center justify-between transition-all ${
+              notification.type === "success"
+                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                : "bg-rose-50 text-rose-800 border border-rose-200"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {notification.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              )}
+              <span>{notification.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNotification(null)}
+              className="text-slate-400 hover:text-slate-600 ml-2"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Banner Status Hari Ini & Quick Override Bar */}
+        <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className={`w-3.5 h-3.5 rounded-full shrink-0 animate-pulse ${
+                statusToday?.is_holiday
+                  ? "bg-rose-500 ring-4 ring-rose-100"
+                  : statusToday?.is_special_school_day
+                  ? "bg-blue-500 ring-4 ring-blue-100"
+                  : statusToday?.is_weekend
+                  ? "bg-amber-500 ring-4 ring-amber-100"
+                  : "bg-emerald-500 ring-4 ring-emerald-100"
+              }`}
+            />
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Status Presensi Hari Ini ({statusToday?.nama_hari || "Hari Ini"})
+              </div>
+              <div className="text-sm font-bold text-slate-800 truncate">
+                {statusToday?.is_holiday
+                  ? `🔴 Libur: ${statusToday?.holiday_event?.nama || "Libur Sekolah"}`
+                  : statusToday?.is_special_school_day
+                  ? `🔵 Wajib Masuk Khusus: ${statusToday?.holiday_event?.nama}`
+                  : statusToday?.is_weekend
+                  ? `🟡 Libur Akhir Pekan (${statusToday?.nama_hari})`
+                  : "🟢 Hari Sekolah Aktif (Presensi Buka)"}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Override Buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setOverrideAction("libur");
+                setOverrideNama("Diliburkan Khusus Hari Ini");
+                setOverrideKet("");
+                setShowOverrideModal(true);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+              title="Liburkan sekolah hari ini secara mendadak"
+            >
+              <Sun className="w-3.5 h-3.5 text-rose-600" />
+              <span>Liburkan Hari Ini</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOverrideAction("masuk_khusus");
+                setOverrideNama("Wajib Masuk Khusus Hari Ini");
+                setOverrideKet("");
+                setShowOverrideModal(true);
+              }}
+              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+              title="Wajibkan masuk & buka presensi hari ini (meski tgl merah/weekend)"
+            >
+              <Flag className="w-3.5 h-3.5 text-blue-600" />
+              <span>Wajibkan Masuk</span>
+            </button>
+
+            {statusToday?.holiday_event?.kategori === "khusus" && (
+              <button
+                type="button"
+                onClick={handleResetOverride}
+                disabled={submitting}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+                title="Batalkan override dan kembalikan ke jadwal kalender normal"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tab Selector Nav */}
+        <div className="px-4 sm:px-6 pt-3 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("daftar");
+                resetForm();
+              }}
+              className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "daftar"
+                  ? "border-purple-600 text-purple-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <CalendarDays className="w-4 h-4" />
+              <span>Daftar Libur Terjadwal</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600">
+                {liburList.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("tambah");
+                if (!editingId) resetForm();
+              }}
+              className={`px-4 py-2.5 text-xs sm:text-sm font-bold border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "tambah"
+                  ? "border-purple-600 text-purple-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>{editingId ? "Edit Jadwal Libur" : "Tambah Jadwal Libur"}</span>
+            </button>
+          </div>
+
+          {activeTab === "daftar" && (
+            <div className="flex items-center gap-2 pb-2">
+              <select
+                value={selectedTahun}
+                onChange={(e) => setSelectedTahun(e.target.value)}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-700 focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+              >
+                {[0, 1, -1].map((offset) => {
+                  const y = new Date().getFullYear() + offset;
+                  return (
+                    <option key={y} value={String(y)}>
+                      Tahun {y}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Body Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          {activeTab === "daftar" ? (
+            <>
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Cari nama hari libur, kategori, atau nomor edaran..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden transition-all"
+                />
+              </div>
+
+              {loading ? (
+                <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center space-y-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+                  <p className="text-xs font-semibold text-slate-500">Memuat kalender libur sekolah...</p>
+                </div>
+              ) : filteredList.length === 0 ? (
+                <div className="py-16 text-center text-slate-400 space-y-3">
+                  <Calendar className="w-12 h-12 mx-auto text-slate-300" />
+                  <div className="text-sm font-bold text-slate-600">Belum Ada Agenda Libur Terjadwal</div>
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                    Tambahkan jadwal libur semester, tanggal merah nasional, atau cuti bersama melalui tab "Tambah Jadwal Libur".
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("tambah")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Tambah Jadwal Sekarang</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {filteredList.map((item) => {
+                    const katObj = KATEGORI_OPTIONS.find((k) => k.value === item.kategori);
+                    const isMasukKhusus = item.tipe_hari === "masuk_khusus";
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-4 rounded-2xl border transition-all hover:shadow-md space-y-3 relative ${
+                          isMasukKhusus
+                            ? "bg-blue-50/40 border-blue-200/80"
+                            : "bg-white border-slate-200/80"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border mb-1.5 ${
+                                isMasukKhusus
+                                  ? "bg-blue-100 text-blue-800 border-blue-200"
+                                  : katObj?.badgeColor || "bg-slate-100 text-slate-700 border-slate-200"
+                              }`}
+                            >
+                              {isMasukKhusus ? "🔵 Wajib Masuk Khusus" : katObj?.label || item.kategori}
+                            </span>
+                            <h3 className="font-bold text-sm text-slate-900 leading-snug break-words">
+                              {item.nama}
+                            </h3>
+                          </div>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              title="Edit / Geser Tanggal"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingItem(item)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Hapus Agenda"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Rentang Tanggal */}
+                        <div className="bg-slate-50/80 rounded-xl p-2.5 text-xs text-slate-600 flex items-center justify-between border border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-purple-600 shrink-0" />
+                            <span className="font-semibold text-slate-800">
+                              {item.tanggal_mulai === item.tanggal_selesai
+                                ? item.tanggal_mulai
+                                : `${item.tanggal_mulai} s/d ${item.tanggal_selesai}`}
+                            </span>
+                          </div>
+                          <span className="text-[11px] font-medium text-slate-400">
+                            {item.tipe_hari === "masuk_khusus" ? "Presensi Buka" : "Presensi Tutup"}
+                          </span>
+                        </div>
+
+                        {item.keterangan && (
+                          <p className="text-[11px] text-slate-500 italic bg-white p-2 rounded-lg border border-slate-100 break-words">
+                            "{item.keterangan}"
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            /* Tab Form Tambah / Edit */
+            <form onSubmit={handleSubmitForm} className="max-w-2xl mx-auto space-y-4">
+              <div className="bg-purple-50/50 border border-purple-200/70 p-4 rounded-2xl flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-purple-600 shrink-0" />
+                <p className="text-xs text-purple-900 leading-relaxed">
+                  Jadwal libur yang didaftarkan di sini akan otomatis menutup scanner presensi dari hari Senin sampai Jumat, membekukan auto-alpa, dan mengecualikannya dari hari efektif belajar.
+                </p>
+              </div>
+
+              {/* Nama Hari Libur */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  1. Nama Hari Libur / Kegiatan <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formNama}
+                  onChange={(e) => setFormNama(e.target.value)}
+                  placeholder="Contoh: Libur Semester Ganjil TA 2025/2026 atau Hari Raya Idul Fitri"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Kategori & Tipe Hari */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    2. Kategori Libur
+                  </label>
+                  <select
+                    value={formKategori}
+                    onChange={(e) => setFormKategori(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
+                  >
+                    {KATEGORI_OPTIONS.map((k) => (
+                      <option key={k.value} value={k.value}>
+                        {k.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    3. Dampak Presensi
+                  </label>
+                  <select
+                    value={formTipeHari}
+                    onChange={(e) => setFormTipeHari(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
+                  >
+                    <option value="libur">🔴 Liburkan Sekolah (Tutup Presensi)</option>
+                    <option value="masuk_khusus">🔵 Wajib Masuk Khusus (Upacara / Presensi Tetap Buka)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tanggal Mulai & Selesai */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    4. Tanggal Mulai <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formTglMulai}
+                    onChange={(e) => {
+                      setFormTglMulai(e.target.value);
+                      if (!formTglSelesai || formTglSelesai < e.target.value) {
+                        setFormTglSelesai(e.target.value);
+                      }
+                    }}
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    5. Tanggal Selesai (Jika Rentang)
+                  </label>
+                  <input
+                    type="date"
+                    value={formTglSelesai}
+                    min={formTglMulai}
+                    onChange={(e) => setFormTglSelesai(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    *Kosongkan jika hanya 1 hari tanggal merah.
+                  </p>
+                </div>
+              </div>
+
+              {/* Keterangan / Catatan Tambahan */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  6. Keterangan / Dasar Surat Edaran
+                </label>
+                <textarea
+                  value={formKeterangan}
+                  onChange={(e) => setFormKeterangan(e.target.value)}
+                  placeholder="Contoh: Berdasarkan Surat Edaran Disdik DKI Jakarta No. 421/2026 tentang Libur Semester"
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetForm();
+                    setActiveTab("daftar");
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  <span>{editingId ? "Simpan Perubahan Jadwal" : "Tambahkan ke Kalender"}</span>
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* Modal Konfirmasi Hapus */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-slate-900">Hapus Agenda Libur?</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Apakah Anda yakin ingin menghapus <strong>"{deletingItem.nama}"</strong> dari kalender sekolah?
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingItem(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex-1"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex-1"
+              >
+                Ya, Hapus
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Quick Override Today */}
+      {showOverrideModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                  overrideAction === "libur"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {overrideAction === "libur" ? <Sun className="w-5 h-5" /> : <Flag className="w-5 h-5" />}
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  {overrideAction === "libur" ? "Liburkan Sekolah Hari Ini" : "Wajibkan Hadir Hari Ini"}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Override status operasional khusus untuk hari ini saja
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Kegiatan / Alasan
+                </label>
+                <input
+                  type="text"
+                  value={overrideNama}
+                  onChange={(e) => setOverrideNama(e.target.value)}
+                  placeholder="Contoh: Rapat Dewan Guru / Bencana Banjir / Upacara Bendera"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Keterangan Singkat
+                </label>
+                <textarea
+                  value={overrideKet}
+                  onChange={(e) => setOverrideKet(e.target.value)}
+                  placeholder="Pesan yang akan tampil di layar scanner siswa..."
+                  rows={2}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowOverrideModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickOverride}
+                disabled={submitting}
+                className={`px-4 py-2 rounded-xl text-white text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                  overrideAction === "libur"
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                <span>Terapkan Hari Ini</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

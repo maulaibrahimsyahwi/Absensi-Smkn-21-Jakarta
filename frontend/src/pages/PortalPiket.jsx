@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Loader2,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -250,13 +251,13 @@ export default function PortalPiket() {
             </div>
             <div className="min-w-0 flex-1">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/25 border border-blue-400/30 text-[10px] sm:text-[11px] font-bold tracking-wide uppercase text-blue-200 mb-1">
-                Petugas Piket SMKN 21
+                Guru Piket SMKN 21
               </span>
               <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight truncate sm:whitespace-normal">
                 {user?.nama || "Bapak / Ibu Guru Piket"}
               </h1>
               <p className="text-xs sm:text-sm text-blue-200 font-medium truncate mt-0.5">
-                NIP {user?.username} &bull; Petugas Piket SMKN 21
+                {user?.username} &bull; Guru Piket SMKN 21
               </p>
             </div>
           </div>
@@ -482,7 +483,7 @@ export default function PortalPiket() {
       </div>
 
       {/* Tabel Ringkasan Surat Izin yang Diterbitkan Hari Ini */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200/80 shadow-xs space-y-4">
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200/80 shadow-xs space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900">
@@ -509,7 +510,7 @@ export default function PortalPiket() {
             {/* 1. Mobile Cards View (< md) */}
             <div className="md:hidden divide-y divide-slate-100">
               {summaryData.recent_izin.map((item) => (
-                <div key={item.id} className="py-3.5 space-y-2.5">
+                <div key={item.id} className="py-3.5 space-y-1.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-sm text-slate-800 truncate">
@@ -536,14 +537,14 @@ export default function PortalPiket() {
 
                   <div className="bg-slate-50 rounded-xl p-2.5 text-xs text-slate-600 space-y-1">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400">Jam Pelajaran:</span>
+                      <span className="text-slate-400">Jam Pelajaran</span>
                       <span className="font-semibold text-slate-700">
                         {item.jam_ke || "-"}
                       </span>
                     </div>
                     <div className="text-slate-700 text-xs">
                       <span className="text-slate-400 text-[11px]">
-                        Alasan:{" "}
+                        Alasan{" "}
                       </span>
                       <span className="break-words">{item.alasan || "-"}</span>
                     </div>
@@ -556,8 +557,8 @@ export default function PortalPiket() {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
                       title="Lihat atau Cetak Lembar Surat Izin"
                     >
-                      <Printer className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      <span>Cetak Slip</span>
+                      <Eye className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Lihat</span>
                     </button>
                   </div>
                 </div>

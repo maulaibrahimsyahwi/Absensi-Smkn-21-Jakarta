@@ -6,6 +6,7 @@ from utils.auth_middleware import generate_token, token_required, role_required,
 from collections import defaultdict
 from datetime import datetime, timedelta
 import time as time_module
+from utils.helpers import get_holiday_status
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -463,9 +464,20 @@ def get_personal_siswa_rekap():
     izin = sum(1 for h in harian_records if h.status == 'Izin')
     total_hadir = tepat_waktu + terlambat
 
+    now_dt = datetime.now()
+    h_status = get_holiday_status(now_dt)
+
     return jsonify({
         "success": True,
         "siswa": siswa.to_dict(),
+        "status_hari_ini": {
+            "is_school_day": h_status["is_school_day"],
+            "is_weekend": h_status["is_weekend"],
+            "is_holiday": h_status["is_holiday"],
+            "is_special_school_day": h_status.get("is_special_school_day", False),
+            "holiday_event": h_status.get("holiday_event"),
+            "message": h_status["message"]
+        },
         "statistik": {
             "total_hadir": total_hadir,
             "tepat_waktu": tepat_waktu,

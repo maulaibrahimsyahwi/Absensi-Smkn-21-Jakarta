@@ -471,7 +471,7 @@ export default function CatatPelanggaran() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto flex flex-col justify-center space-y-6">
+    <div className="min-h-[calc(100vh-4rem)] py-2.5 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto flex flex-col justify-center space-y-6">
       {/* Modal / Slip Sukses */}
       {successData && (
         <div className="bg-white rounded-2xl border border-emerald-200 p-6 sm:p-8 shadow-xl space-y-6 animate-in zoom-in-95">
@@ -732,7 +732,7 @@ export default function CatatPelanggaran() {
                                     {s.nama}
                                   </p>
                                   <p className="text-[11px] text-slate-500">
-                                    {s.kelas} • NIS {s.nis}
+                                    {s.nis} • {s.kelas}
                                   </p>
                                 </div>
                                 <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded">

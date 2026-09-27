@@ -7,7 +7,7 @@ export default function TabKeamanan({ user, updateUserProfile }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-3 animate-in fade-in duration-200">
       {/* 1. Ubah Kata Sandi (Posisi di Atas dengan Tombol Toggle Buka/Tutup) */}
       <div className="p-4 sm:p-5 rounded-2xl border border-slate-200 bg-white space-y-4">
         <div className="flex items-center justify-between gap-3 pb-2.5 border-b border-slate-100">
@@ -35,12 +35,13 @@ export default function TabKeamanan({ user, updateUserProfile }) {
                 : "bg-blue-50 text-blue-600 hover:bg-blue-100"
             }`}
           >
-            <span>{showChangePassword ? "Tutup" : "Ubah Sandi"}</span>
-            {showChangePassword ? (
-              <ChevronUp className="w-3.5 h-3.5" />
-            ) : (
-              <ChevronDown className="w-3.5 h-3.5" />
-            )}
+            <span>
+              {showChangePassword ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </span>
           </button>
         </div>
 

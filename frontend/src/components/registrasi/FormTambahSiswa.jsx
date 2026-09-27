@@ -203,9 +203,6 @@ export default function FormTambahSiswa({
               <label className="block text-xs font-bold text-slate-700">
                 Jenis Kelamin
               </label>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Pilih Gender
-              </span>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -255,7 +252,7 @@ export default function FormTambahSiswa({
                 disabled={reRecordingSiswa !== null}
                 className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer flex items-center gap-1"
               >
-                {isCustomMode ? "Pilih dari Dropdown" : "+ Ketik Kelas Baru"}
+                {isCustomMode ? "Pilih kelas" : "+ Kelas Baru"}
               </button>
             </div>
 

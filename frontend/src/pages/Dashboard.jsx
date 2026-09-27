@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   ArrowLeft,
   BarChart3,
+  UsersRound,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import CustomDropdown from "../components/CustomDropdown";
@@ -594,7 +595,7 @@ export default function Dashboard() {
   const stats = siswaPeriode.statistik || {};
 
   return (
-    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-3">
+    <div className="py-6 sm:py-6 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-3">
       {/* 1. Header & Period Filter */}
       <DashboardPeriodFilter
         periodeMode={periodeMode}
@@ -662,7 +663,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* 3. Main Content Card */}
+      {/* 4. Main Content Card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Sub-Tab Navigation Bar (Pill Buttons yang responsif tanpa scroll horizontal) */}
         <div className="border-b border-slate-200 px-4 sm:px-6 py-3 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
@@ -837,7 +838,7 @@ export default function Dashboard() {
                         : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200/80"
                     }`}
                   >
-                    <ShieldCheck className="w-4 h-4" />
+                    <UsersRound className="w-4 h-4" />
                     <span>Kelola Guru Piket</span>
                   </button>
                 )}

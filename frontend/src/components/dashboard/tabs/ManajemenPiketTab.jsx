@@ -431,8 +431,8 @@ export default function ManajemenPiketTab() {
             </p>
             <p className="text-xs text-slate-400 mt-1">
               {searchTerm
-                ? "Tidak ada akun yang sesuai dengan pencarian."
-                : "Belum ada akun guru piket yang ditambahkan."}
+                ? "Tidak ada akun yang sesuai dengan pencarian"
+                : "Belum ada akun guru piket yang ditambahkan"}
             </p>
           </div>
         ) : (

@@ -204,7 +204,7 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
         <div className="p-4 rounded-2xl border border-blue-100 bg-blue-50/50 space-y-4 animate-in zoom-in-95">
           <div className="text-center space-y-1">
             <h5 className="font-bold text-slate-800 text-sm">
-              Pindai QR Code di Google Authenticator
+              Pindai QR Code di Aplikasi Authenticator
             </h5>
             <p className="text-xs text-slate-500">
               Buka aplikasi Authenticator di ponsel Anda, pilih{" "}
@@ -223,7 +223,7 @@ export default function TabKeamanan2FA({ user, updateUserProfile }) {
           {/* Kunci Rahasia Manual */}
           <div className="space-y-1">
             <label className="block text-[11px] font-bold text-slate-600 text-center">
-              Atau masukkan kunci rahasia ini secara manual:
+              Atau masukkan kunci rahasia ini secara manual
             </label>
             <div className="flex items-center gap-2 max-w-xs mx-auto">
               <input

@@ -10,7 +10,7 @@ import {
 export default function DashboardKpiCards({ stats = {}, isPiket = false }) {
   return (
     <div
-      className={`grid gap-3 sm:gap-4 mb-6 sm:mb-8 ${
+      className={`grid gap-3 sm:gap-4 mb-6 sm:mb-6 ${
         isPiket
           ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4"
           : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"

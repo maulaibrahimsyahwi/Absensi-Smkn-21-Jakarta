@@ -20,12 +20,7 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
         {/* Tombol Close & Print (Disembunyikan saat dicetak) */}
         <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 print:hidden">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span>Surat Izin Resmi Diterbitkan</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+            {" "}
             <button
               type="button"
               onClick={handlePrint}
@@ -34,6 +29,8 @@ export default function SlipIzinPiketModal({ slipData, isOpen, onClose }) {
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak Surat</span>
             </button>
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={onClose}

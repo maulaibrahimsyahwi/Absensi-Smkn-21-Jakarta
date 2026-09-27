@@ -99,20 +99,6 @@ export default function DashboardPeriodFilter({
               <span>Data Siswa</span>
             </Link>
           )}
-          <button
-            type="button"
-            onClick={() => onRefresh && onRefresh(true)}
-            disabled={loading}
-            className="inline-flex items-center justify-center cursor-pointer gap-1.5 sm:gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50 flex-shrink-0"
-            title="Segarkan data rekapitulasi"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
-            />
-            <span className="hidden sm:inline">
-              {loading ? "Menyegarkan..." : "Refresh"}
-            </span>
-          </button>
 
           {/* Dropdown Menu Unduh Rekap (XLSX, XLS, CSV) */}
           <div className="relative flex-1 sm:flex-none" ref={exportDropdownRef}>
@@ -233,11 +219,25 @@ export default function DashboardPeriodFilter({
               </div>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => onRefresh && onRefresh(true)}
+            disabled={loading}
+            className="inline-flex items-center justify-center cursor-pointer gap-1.5 sm:gap-2 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs disabled:opacity-50 flex-shrink-0"
+            title="Segarkan data rekapitulasi"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${loading ? "animate-spin text-blue-600" : ""}`}
+            />
+            <span className="hidden sm:inline">
+              {loading ? "Menyegarkan..." : "Refresh"}
+            </span>
+          </button>
         </div>
       </div>
 
       {/* FILTER PERIODE WAKTU (PER BULAN & PER TAHUN) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 sm:p-5 mb-6 sm:mb-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 sm:p-5 mb-6 sm:mb-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
         {/* Toggle Mode: Per Bulan vs Per Tahun */}
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 w-full sm:w-auto">

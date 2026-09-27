@@ -3,7 +3,16 @@ from flask import Blueprint, request, jsonify
 from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_POLYGON, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
 from face_utils import verify_face
-from utils.helpers import calculate_distance_meters, is_point_in_polygon, check_status_kehadiran, is_presensi_open, is_school_day, is_kelas_pjj, get_flattened_known_faces
+from utils.helpers import (
+    calculate_distance_meters,
+    is_point_in_polygon,
+    check_status_kehadiran,
+    is_presensi_open,
+    is_school_day,
+    is_kelas_pjj,
+    get_flattened_known_faces,
+    get_holiday_status,
+)
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from routes.biometrik_routes import verify_liveness_token
 from utils.auth_middleware import token_required
@@ -19,32 +28,58 @@ def get_status_today():
     Memeriksa apakah siswa sudah melakukan presensi harian pada hari ini.
     """
     siswa_id = request.args.get('siswa_id')
-    if not siswa_id:
-        return jsonify({"success": False, "message": "ID siswa diperlukan."}), 400
-    
-    siswa = Siswa.query.get(siswa_id)
-    if not siswa:
-        return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
-
     now_dt = datetime.now()
-    nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
-    is_weekend = not is_school_day(now_dt)
-    pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, now_dt)
+    h_status = get_holiday_status(now_dt)
+    nama_hari = h_status["nama_hari"]
+    is_school_day_today = h_status["is_school_day"]
 
-    if is_weekend:
+    if not is_school_day_today:
+        h_event = h_status["holiday_event"]
         return jsonify({
             "success": True,
             "already_attended": False,
-            "is_weekend": True,
+            "is_weekend": h_status["is_weekend"],
+            "is_holiday": h_status["is_holiday"],
+            "holiday_name": h_event["nama"] if h_event else "",
+            "holiday_info": h_event,
+            "is_special_school_day": False,
             "is_pjj": False,
             "pjj_info": "",
             "is_presensi_open": False,
             "hari": nama_hari,
             "jam_buka": "05:00 WIB",
             "jam_batas": "06:30 WIB",
-            "message": f"Hari ini adalah hari {nama_hari} (Libur Akhir Pekan). Presensi kehadiran dibuka kembali hari Senin pukul 05:00 WIB.",
+            "message": h_status["message"],
             "data": None
         })
+
+    # Jika hari sekolah tapi siswa_id tidak diberikan (misal kiosk mode umum)
+    if not siswa_id:
+        is_special = h_status.get("is_special_school_day", False)
+        holiday_evt = h_status.get("holiday_event")
+        return jsonify({
+            "success": True,
+            "already_attended": False,
+            "is_weekend": False,
+            "is_holiday": False,
+            "is_special_school_day": is_special,
+            "holiday_name": holiday_evt["nama"] if (is_special and holiday_evt) else "",
+            "holiday_info": holiday_evt,
+            "is_pjj": False,
+            "pjj_info": "",
+            "is_presensi_open": is_presensi_open(now_dt),
+            "hari": nama_hari,
+            "jam_buka": "05:00 WIB",
+            "jam_batas": "06:30 WIB",
+            "message": h_status["message"],
+            "data": None
+        })
+
+    siswa = Siswa.query.get(siswa_id)
+    if not siswa:
+        return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+
+    pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, now_dt)
 
     today_start = datetime.combine(date.today(), time.min)
     today_end = datetime.combine(date.today(), time.max)
@@ -54,16 +89,25 @@ def get_status_today():
         AbsensiHarian.waktu <= today_end
     ).first()
 
+    is_special = h_status.get("is_special_school_day", False)
+    holiday_evt = h_status.get("holiday_event")
+
     if absen_today:
         return jsonify({
             "success": True,
             "already_attended": True,
             "is_weekend": False,
+            "is_holiday": False,
+            "is_special_school_day": is_special,
+            "holiday_name": holiday_evt["nama"] if (is_special and holiday_evt) else "",
+            "holiday_info": holiday_evt,
             "is_pjj": pjj_active,
             "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
+            "hari": nama_hari,
             "jam_buka": "05:00 WIB",
             "jam_batas": "06:30 WIB",
+            "message": h_status["message"],
             "data": {
                 "id": absen_today.id,
                 "nama": siswa.nama,
@@ -77,11 +121,17 @@ def get_status_today():
             "success": True,
             "already_attended": False,
             "is_weekend": False,
+            "is_holiday": False,
+            "is_special_school_day": is_special,
+            "holiday_name": holiday_evt["nama"] if (is_special and holiday_evt) else "",
+            "holiday_info": holiday_evt,
             "is_pjj": pjj_active,
             "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
+            "hari": nama_hari,
             "jam_buka": "05:00 WIB",
             "jam_batas": "06:30 WIB",
+            "message": h_status["message"],
             "data": None
         })
 
@@ -127,14 +177,15 @@ def verify_harian():
         except (ValueError, TypeError):
             expected_siswa_id = None
 
-    # Validasi Hari Operasional: Presensi hanya aktif pada hari sekolah (Senin s/d Jumat)
+    # Validasi Hari Operasional: Presensi hanya aktif pada hari sekolah
     now_dt = datetime.now()
-    if not is_school_day(now_dt):
-        nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
+    h_status = get_holiday_status(now_dt)
+    if not h_status["is_school_day"]:
         return jsonify({
             "success": False,
-            "is_weekend": True,
-            "message": f"Presensi harian ditolak! Sistem presensi SMKN 21 hanya beroperasi pada hari Senin s/d Jumat. Hari ini adalah hari {nama_hari} (Libur Akhir Pekan)."
+            "is_weekend": h_status["is_weekend"],
+            "is_holiday": h_status["is_holiday"],
+            "message": f"Presensi harian ditolak! {h_status['message']}"
         }), 400
 
     # Validasi Jam Operasional: Presensi baru dibuka mulai pukul 05:00 WIB
@@ -335,14 +386,15 @@ def verify_perpus():
     is_mock = data.get('is_mock', False)
     simulated = data.get('simulated', False)
     
-    # Validasi Hari Operasional: Perpustakaan hanya melayani presensi pada hari sekolah (Senin s/d Jumat)
+    # Validasi Hari Operasional: Perpustakaan hanya melayani presensi pada hari sekolah aktif
     now_dt = datetime.now()
-    if not is_school_day(now_dt):
-        nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now_dt.weekday()]
+    h_status = get_holiday_status(now_dt)
+    if not h_status["is_school_day"]:
         return jsonify({
             "success": False,
-            "is_weekend": True,
-            "message": f"Presensi perpustakaan ditolak! Layanan perpustakaan SMKN 21 hanya beroperasi pada hari Senin s/d Jumat. Hari ini adalah hari {nama_hari} (Libur Akhir Pekan)."
+            "is_weekend": h_status["is_weekend"],
+            "is_holiday": h_status["is_holiday"],
+            "message": f"Presensi perpustakaan ditolak! {h_status['message']}"
         }), 400
 
     if not keperluan:

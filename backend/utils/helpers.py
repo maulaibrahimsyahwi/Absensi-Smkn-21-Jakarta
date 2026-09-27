@@ -91,13 +91,93 @@ def is_point_in_polygon(lat, lon, polygon):
     return inside
 
 
-def is_school_day(dt=None):
+def get_holiday_status(dt=None):
     """
-    Mengecek apakah hari ini adalah hari operasional sekolah SMKN 21 (Senin s/d Jumat).
-    Sabtu (weekday 5) dan Minggu (weekday 6) adalah hari libur sekolah.
+    Mengecek status operasional sekolah untuk tanggal tertentu.
+    Mempertimbangkan:
+    1. Hari Masuk Khusus (tipe_hari = 'masuk_khusus') -> Siswa wajib masuk (misal Upacara HUT RI / Hardiknas).
+    2. Hari Libur Terjadwal (tipe_hari = 'libur') -> Libur semester, libur nasional, cuti bersama, libur khusus.
+    3. Akhir Pekan Alami (Sabtu & Minggu) jika tidak ada konfigurasi khusus.
     """
     now = dt if dt is not None else datetime.now()
-    return now.weekday() < 5  # 0..4 = Senin s/d Jumat
+    cur_date = now.date() if isinstance(now, datetime) else now
+    nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now.weekday()]
+    is_weekend_cal = now.weekday() >= 5
+
+    try:
+        from models import HariLibur
+        # Prioritas 1: Hari Masuk Khusus (Override agar tetap buka presensi meski weekend / tanggal merah)
+        special_day = HariLibur.query.filter(
+            HariLibur.is_active == True,
+            HariLibur.tipe_hari == "masuk_khusus",
+            HariLibur.tanggal_mulai <= cur_date,
+            HariLibur.tanggal_selesai >= cur_date
+        ).first()
+
+        if special_day:
+            return {
+                "is_school_day": True,
+                "is_holiday": False,
+                "is_special_school_day": True,
+                "is_weekend": is_weekend_cal,
+                "nama_hari": nama_hari,
+                "holiday_event": special_day.to_dict(),
+                "message": f"Hari ini wajib hadir (Kegiatan Khusus): {special_day.nama}."
+            }
+
+        # Prioritas 2: Hari Libur Terjadwal (Libur semester, libur nasional, libur mendadak)
+        holiday = HariLibur.query.filter(
+            HariLibur.is_active == True,
+            HariLibur.tipe_hari == "libur",
+            HariLibur.tanggal_mulai <= cur_date,
+            HariLibur.tanggal_selesai >= cur_date
+        ).first()
+
+        if holiday:
+            return {
+                "is_school_day": False,
+                "is_holiday": True,
+                "is_special_school_day": False,
+                "is_weekend": is_weekend_cal,
+                "nama_hari": nama_hari,
+                "holiday_event": holiday.to_dict(),
+                "message": f"Hari ini adalah hari libur sekolah: {holiday.nama} ({holiday.keterangan or 'Presensi Ditutup'})."
+            }
+    except Exception:
+        # Fallback jika query DB gagal / belum inisialisasi
+        pass
+
+    # Prioritas 3: Hari Akhir Pekan Standar (Sabtu & Minggu)
+    if is_weekend_cal:
+        return {
+            "is_school_day": False,
+            "is_holiday": False,
+            "is_special_school_day": False,
+            "is_weekend": True,
+            "nama_hari": nama_hari,
+            "holiday_event": None,
+            "message": f"Hari ini adalah hari {nama_hari} (Libur Akhir Pekan). Presensi kehadiran dibuka kembali hari Senin pukul 05:00 WIB."
+        }
+
+    # Hari Sekolah Normal (Senin s/d Jumat)
+    return {
+        "is_school_day": True,
+        "is_holiday": False,
+        "is_special_school_day": False,
+        "is_weekend": False,
+        "nama_hari": nama_hari,
+        "holiday_event": None,
+        "message": ""
+    }
+
+
+def is_school_day(dt=None):
+    """
+    Mengecek apakah hari ini adalah hari operasional aktif sekolah SMKN 21.
+    Menghormati kalender hari libur, libur semester, hari masuk khusus, serta akhir pekan.
+    """
+    status = get_holiday_status(dt)
+    return status["is_school_day"]
 
 
 def is_presensi_open(dt=None):

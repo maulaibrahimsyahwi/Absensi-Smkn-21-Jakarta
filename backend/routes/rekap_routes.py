@@ -4,6 +4,7 @@ from sqlalchemy import extract
 from sqlalchemy.orm import joinedload
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa, AuditLog
 from utils.auth_middleware import token_required, role_required
+from utils.helpers import get_holiday_status
 
 rekap_bp = Blueprint('rekap', __name__)
 
@@ -319,6 +320,14 @@ def generate_alpa_today():
     today = date.today()
     today_start = datetime.combine(today, time.min)
     today_end = datetime.combine(today, time.max)
+
+    now_dt = datetime.now()
+    h_status = get_holiday_status(now_dt)
+    if not h_status["is_school_day"]:
+        return jsonify({
+            "success": False,
+            "message": f"Pencatatan Alpa otomatis dibatalkan! {h_status['message']}"
+        }), 400
 
     try:
         siswa_aktif = Siswa.query.filter((Siswa.status == 'Aktif') | (Siswa.status == None)).all()

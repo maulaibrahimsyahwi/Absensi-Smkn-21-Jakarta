@@ -22,12 +22,16 @@ import {
   Navigation,
   AlertTriangle,
   RefreshCw,
+  Sun,
+  Flag,
+  Calendar,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
 import { SMKN21_COORDINATES, formatDistance } from "../utils/geoUtils";
 import { useAudioFeedback, useLivenessDetector } from "../hooks/useFaceScanner";
 import useGeofence from "../hooks/useGeofence";
+import { liburService } from "../services/liburService";
 
 const KEPERLUAN_OPTIONS = [
   {
@@ -80,8 +84,22 @@ export default function AbsensiPerpus() {
   const [customKeperluan, setCustomKeperluan] = useState("");
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // 3 detik
+  const [holidayStatus, setHolidayStatus] = useState(null);
 
   const { playSound } = useAudioFeedback();
+
+  // Pengecekan Hari Libur & Status Operasional Sekolah
+  useEffect(() => {
+    const fetchHoliday = async () => {
+      try {
+        const res = await liburService.getStatusToday();
+        if (res?.success) {
+          setHolidayStatus(res);
+        }
+      } catch (e) {}
+    };
+    fetchHoliday();
+  }, []);
 
   // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
   useEffect(() => {
@@ -128,20 +146,24 @@ export default function AbsensiPerpus() {
     return () => clearInterval(timer);
   }, []);
 
-  // Pengecekan Hari Libur Akhir Pekan (Sabtu = 6, Minggu = 0)
-  const isWeekend = [0, 6].includes(new Date().getDay());
+  // Pengecekan Hari Libur Terjadwal & Akhir Pekan
+  const isRawWeekend = [0, 6].includes(new Date().getDay());
+  const isSpecialSchoolDay = Boolean(holidayStatus?.is_special_school_day);
+  const isHoliday = Boolean(holidayStatus?.is_holiday);
+  // Layanan perpustakaan ditutup jika hari libur resmi, ATAU akhir pekan (kecuali jika ada kegiatan masuk khusus)
+  const isPerpusClosed = isHoliday || (isRawWeekend && !isSpecialSchoolDay);
 
   // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
   const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
     useLivenessDetector({
       webcamRef,
-      isActive: !isWeekend && !loading && !showPopup && !result && isGpsValid,
+      isActive: !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
       onLiveVerified: () => setCountdown(3),
       pollIntervalMs: 600,
     });
 
   const captureFace = useCallback(() => {
-    if (isWeekend) return;
+    if (isPerpusClosed) return;
     if (!isGpsValid) return;
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
@@ -156,12 +178,12 @@ export default function AbsensiPerpus() {
       });
       setCountdown(3);
     }
-  }, [webcamRef, isGpsValid, isWeekend]);
+  }, [webcamRef, isGpsValid, isPerpusClosed]);
 
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI & GPS VALID (3 Detik)
   useEffect(() => {
     if (
-      isWeekend ||
+      isPerpusClosed ||
       loading ||
       showPopup ||
       result ||
@@ -183,7 +205,7 @@ export default function AbsensiPerpus() {
 
     return () => clearInterval(timer);
   }, [
-    isWeekend,
+    isPerpusClosed,
     countdown,
     isLiveVerified,
     loading,
@@ -244,28 +266,60 @@ export default function AbsensiPerpus() {
     }
   };
 
-  // Akhir Pekan (Sabtu & Minggu): Perpustakaan Tutup
-  if (isWeekend) {
-    const namaHariIni = new Date().toLocaleDateString("id-ID", {
-      weekday: "long",
-    });
+  // Hari Libur atau Akhir Pekan: Perpustakaan Ditutup
+  if (isPerpusClosed) {
+    const namaHariIni =
+      holidayStatus?.nama_hari ||
+      new Date().toLocaleDateString("id-ID", { weekday: "long" });
+    const isSemesterBreak =
+      holidayStatus?.holiday_event?.kategori === "libur_semester";
+
     return (
       <div className="fixed inset-0 w-screen h-screen bg-slate-950 flex items-center justify-center p-4 select-none z-50">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/10">
-            <BookOpen className="w-8 h-8" />
+          <div
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-lg ${
+              isHoliday
+                ? isSemesterBreak
+                  ? "bg-purple-500/15 border border-purple-500/30 text-purple-400 shadow-purple-500/10"
+                  : "bg-rose-500/15 border border-rose-500/30 text-rose-400 shadow-rose-500/10"
+                : "bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-emerald-500/10"
+            }`}
+          >
+            {isHoliday ? (
+              <Sun className="w-8 h-8" />
+            ) : (
+              <BookOpen className="w-8 h-8" />
+            )}
           </div>
           <div className="space-y-2">
+            {isHoliday && (
+              <span
+                className={`inline-block px-3 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider mb-1 border ${
+                  isSemesterBreak
+                    ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                    : "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                }`}
+              >
+                {isSemesterBreak ? "Libur Semester" : "Hari Libur Resmi"}
+              </span>
+            )}
             <h2 className="text-xl sm:text-2xl font-black text-white">
-              Hari Libur Sekolah ({namaHariIni})
+              {isHoliday
+                ? holidayStatus?.holiday_event?.nama || "Hari Libur Sekolah"
+                : `Hari Libur Akhir Pekan (${namaHariIni})`}
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              Layanan absensi kunjungan perpustakaan SMKN 21 Jakarta hanya
-              dibuka pada hari sekolah aktif (<strong>Senin s/d Jumat</strong>).
+              {isHoliday
+                ? holidayStatus?.message ||
+                  holidayStatus?.holiday_event?.keterangan ||
+                  "Layanan perpustakaan SMKN 21 Jakarta sedang diliburkan sesuai kalender akademik."
+                : "Layanan absensi kunjungan perpustakaan SMKN 21 Jakarta hanya dibuka pada hari sekolah aktif (Senin s/d Jumat)."}
             </p>
             <p className="text-xs text-slate-400">
-              Layanan perpustakaan akan dibuka kembali pada hari{" "}
-              <strong>Senin</strong>.
+              {isHoliday
+                ? "Layanan kunjungan dan peminjaman buku akan dibuka kembali pada hari sekolah aktif berikutnya."
+                : "Layanan perpustakaan akan dibuka kembali pada hari Senin."}
             </p>
           </div>
           <div className="pt-3">
@@ -361,6 +415,16 @@ export default function AbsensiPerpus() {
           </span>
         </div>
       </div>
+
+      {/* Banner Notifikasi Khusus jika Hari Masuk Khusus (Upacara / Event Sekolah) */}
+      {isSpecialSchoolDay && !result && (
+        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 pointer-events-none flex justify-center animate-in fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md">
+            <Flag className="w-4 h-4 text-slate-950 shrink-0" />
+            <span>Kegiatan Khusus: {holidayStatus?.holiday_event?.nama || "Wajib Masuk Sekolah"}</span>
+          </div>
+        </div>
+      )}
 
       {/* 5. Loading State */}
       {loading && (
