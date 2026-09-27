@@ -570,14 +570,19 @@ export default function PortalSiswa() {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  {personalData.status_hari_ini.holiday_event?.nama || "Hari Libur Sekolah"}
+                  {personalData.status_hari_ini.holiday_event?.nama ||
+                    "Hari Libur Sekolah"}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 uppercase">
-                  {personalData.status_hari_ini.holiday_event?.kategori === "libur_semester" ? "Libur Semester" : "Libur Resmi"}
+                  {personalData.status_hari_ini.holiday_event?.kategori ===
+                  "libur_semester"
+                    ? "Libur Semester"
+                    : "Libur Resmi"}
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                {personalData.status_hari_ini.message || "Hari ini operasional sekolah dan presensi harian diliburkan. Anda tidak perlu melakukan scan presensi."}
+                {personalData.status_hari_ini.message ||
+                  "Hari ini operasional sekolah dan presensi harian diliburkan. Anda tidak perlu melakukan scan presensi."}
               </p>
             </div>
           </div>
@@ -594,14 +599,17 @@ export default function PortalSiswa() {
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-0.5">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                  Wajib Hadir: {personalData.status_hari_ini.holiday_event?.nama || "Kegiatan Khusus Sekolah"}
+                  Wajib Hadir:{" "}
+                  {personalData.status_hari_ini.holiday_event?.nama ||
+                    "Kegiatan Khusus Sekolah"}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300 uppercase">
                   Masuk Khusus
                 </span>
               </div>
               <p className="text-xs text-slate-700 leading-relaxed">
-                {personalData.status_hari_ini.holiday_event?.keterangan || "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa diwajibkan hadir dan melakukan scan presensi."}
+                {personalData.status_hari_ini.holiday_event?.keterangan ||
+                  "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa diwajibkan hadir dan melakukan scan presensi."}
               </p>
             </div>
           </div>

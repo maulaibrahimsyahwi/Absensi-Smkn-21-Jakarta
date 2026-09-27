@@ -99,7 +99,28 @@ def test_libur_system():
         assert res_ov_reset.status_code == 200
         print("[OK] Quick Override 'reset' hari ini berhasil dikembalikan ke normal")
 
-        # Bersihkan data test libur
+        # 8. Test 1-Click Sync National Holidays
+        res_sync_nat = client.post('/api/hari_libur/sync_national', json={'tahun': 2026}, headers=admin_headers)
+        assert res_sync_nat.status_code == 200
+        data_nat = res_sync_nat.get_json()
+        assert data_nat["success"] == True
+        print(f"[OK] 1-Click Sync Libur Nasional 2026 berhasil: {data_nat['added']} hari libur diimpor, {data_nat['skipped']} dilewati.")
+
+        # Test duplicate sync (should skip all)
+        res_sync_nat2 = client.post('/api/hari_libur/sync_national', json={'tahun': 2026}, headers=admin_headers)
+        assert res_sync_nat2.status_code == 200
+        data_nat2 = res_sync_nat2.get_json()
+        assert data_nat2["added"] == 0
+        print(f"[OK] Deteksi duplikasi sync berjalan: {data_nat2['skipped']} hari libur dilewati.")
+
+        # 9. Test 1-Click Sync Academic Calendar
+        res_sync_acad = client.post('/api/hari_libur/sync_academic', json={'tahun': 2026}, headers=admin_headers)
+        assert res_sync_acad.status_code == 200
+        data_acad = res_sync_acad.get_json()
+        assert data_acad["success"] == True
+        print(f"[OK] 1-Click Sync Libur Semester 2026 berhasil: {data_acad['added']} agenda libur diimpor.")
+
+        # Bersihkan data test libur manual
         client.delete(f'/api/hari_libur/{created_id}', headers=admin_headers)
         client.delete(f'/api/hari_libur/{special_id}', headers=admin_headers)
         print("[OK] Cleanup data pengujian kalender libur selesai")

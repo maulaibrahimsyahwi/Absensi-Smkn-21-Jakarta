@@ -104,12 +104,14 @@ export default function PortalAdmin() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resNotif, resPjj, resLibur] = await Promise.allSettled([
-        api.get("/rekap/admin_summary"),
-        api.get("/piket/notifikasi"),
-        api.get("/pjj/status"),
-        liburService.getStatusToday(),
-      ]);
+      const [resSummary, resNotif, resPjj, resLibur] = await Promise.allSettled(
+        [
+          api.get("/rekap/admin_summary"),
+          api.get("/piket/notifikasi"),
+          api.get("/pjj/status"),
+          liburService.getStatusToday(),
+        ],
+      );
 
       if (
         resSummary.status === "fulfilled" &&
@@ -132,10 +134,7 @@ export default function PortalAdmin() {
       ) {
         setPjjActiveInfo(resPjj.value.data.data);
       }
-      if (
-        resLibur.status === "fulfilled" &&
-        resLibur.value?.success
-      ) {
+      if (resLibur.status === "fulfilled" && resLibur.value?.success) {
         setLiburStatusToday(resLibur.value);
       }
     } catch (err) {
@@ -256,12 +255,19 @@ export default function PortalAdmin() {
                     {liburStatusToday.is_holiday ? (
                       <>
                         <Sun className="w-3 h-3 text-rose-300" />
-                        <span>Libur: {liburStatusToday.holiday_event?.nama || "Sekolah Libur"}</span>
+                        <span>
+                          Libur:{" "}
+                          {liburStatusToday.holiday_event?.nama ||
+                            "Sekolah Libur"}
+                        </span>
                       </>
                     ) : liburStatusToday.is_special_school_day ? (
                       <>
                         <Flag className="w-3 h-3 text-amber-300" />
-                        <span>Masuk Khusus: {liburStatusToday.holiday_event?.nama || "Kegiatan"}</span>
+                        <span>
+                          Masuk Khusus:{" "}
+                          {liburStatusToday.holiday_event?.nama || "Kegiatan"}
+                        </span>
                       </>
                     ) : liburStatusToday.is_weekend ? (
                       <>
@@ -511,7 +517,6 @@ export default function PortalAdmin() {
             </div>
             <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </Link>
-
         </div>
 
         {/* Panel Kontrol Operasional Khusus: Kalender Libur & Mode Daring */}

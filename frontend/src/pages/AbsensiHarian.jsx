@@ -485,7 +485,10 @@ export default function AbsensiHarian() {
         <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 pointer-events-none flex justify-center animate-in fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md">
             <Flag className="w-4 h-4 text-slate-950 shrink-0" />
-            <span>Kegiatan Khusus: {attendanceToday?.holiday_name || "Wajib Masuk Sekolah"}</span>
+            <span>
+              Kegiatan Khusus:{" "}
+              {attendanceToday?.holiday_name || "Wajib Masuk Sekolah"}
+            </span>
           </div>
         </div>
       )}

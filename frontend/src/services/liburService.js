@@ -30,4 +30,14 @@ export const liburService = {
     const res = await api.post("/hari_libur/quick_override_today", payload);
     return res.data;
   },
+
+  syncNational: async (tahun) => {
+    const res = await api.post("/hari_libur/sync_national", { tahun });
+    return res.data;
+  },
+
+  syncAcademic: async (tahun) => {
+    const res = await api.post("/hari_libur/sync_academic", { tahun });
+    return res.data;
+  },
 };

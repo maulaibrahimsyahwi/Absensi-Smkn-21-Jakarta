@@ -157,7 +157,8 @@ export default function AbsensiPerpus() {
   const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
     useLivenessDetector({
       webcamRef,
-      isActive: !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
+      isActive:
+        !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
       onLiveVerified: () => setCountdown(3),
       pollIntervalMs: 600,
     });
@@ -421,7 +422,10 @@ export default function AbsensiPerpus() {
         <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 pointer-events-none flex justify-center animate-in fade-in">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-500/90 border border-amber-400 text-slate-950 font-bold text-xs shadow-xl backdrop-blur-md">
             <Flag className="w-4 h-4 text-slate-950 shrink-0" />
-            <span>Kegiatan Khusus: {holidayStatus?.holiday_event?.nama || "Wajib Masuk Sekolah"}</span>
+            <span>
+              Kegiatan Khusus:{" "}
+              {holidayStatus?.holiday_event?.nama || "Wajib Masuk Sekolah"}
+            </span>
           </div>
         </div>
       )}
