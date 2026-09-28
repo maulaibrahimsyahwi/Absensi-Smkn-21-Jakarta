@@ -57,6 +57,11 @@ export const liburService = {
     return res.data;
   },
 
+  getDokumenInfo: async (filename) => {
+    const res = await api.get(`/hari_libur/dokumen_info/${filename}`);
+    return res.data;
+  },
+
   importFile: async (formData) => {
     const res = await api.post("/hari_libur/import_file", formData, {
       headers: {

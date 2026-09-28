@@ -33,27 +33,46 @@ import {
 } from "lucide-react";
 import { liburService } from "../../services/liburService";
 import ModalPreviewSuratEdaran from "./ModalPreviewSuratEdaran";
+import CustomDatePicker from "../CustomDatePicker";
+import CustomDropdown from "../CustomDropdown";
 
 const KATEGORI_OPTIONS = [
   {
     value: "libur_semester",
     label: "Libur Semester / Kenaikan Kelas",
+    sublabel: "Kalender Pendidikan Resmi Disdik",
     badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
   },
   {
     value: "libur_nasional",
     label: "Hari Libur Nasional",
+    sublabel: "SKB 3 Menteri Resmi",
     badgeColor: "bg-rose-100 text-rose-800 border-rose-200",
   },
   {
     value: "cuti_bersama",
     label: "Cuti Bersama Pemerintah",
+    sublabel: "Instruksi Pemerintah / Bersama",
     badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
   },
   {
     value: "khusus",
     label: "Libur Khusus / Kegiatan Sekolah",
+    sublabel: "Surat Edaran Internal SMKN 21",
     badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
+  },
+];
+
+const DAMPAK_PRESENSI_OPTIONS = [
+  {
+    value: "libur",
+    label: "Liburkan Sekolah (Tutup Presensi)",
+    sublabel: "Siswa & piket diliburkan otomatis",
+  },
+  {
+    value: "masuk_khusus",
+    label: "Wajib Masuk Khusus (Presensi Dibuka)",
+    sublabel: "Upacara / agenda wajib di tgl merah",
   },
 ];
 
@@ -579,7 +598,7 @@ export default function ModalKalenderLibur({
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <span>Import Excel/CSV</span>
+              <span>Import Jadwal</span>
             </button>
 
             <button
@@ -716,9 +735,9 @@ export default function ModalKalenderLibur({
                               }`}
                             >
                               {isBuiltin
-                                ? "🟢 Nasional Otomatis"
+                                ? "Nasional"
                                 : isMasukKhusus
-                                  ? "🔵 Wajib Masuk Khusus"
+                                  ? "Wajib Masuk Khusus"
                                   : katObj?.label || item.kategori}
                             </span>
                             <h3 className="font-bold text-sm text-slate-900 leading-snug break-words">
@@ -791,7 +810,7 @@ export default function ModalKalenderLibur({
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
                             >
                               <FileText className="w-3.5 h-3.5 text-purple-600" />
-                              <span>📄 Lihat Surat Edaran Resmi</span>
+                              <span>Lihat Surat Edaran Resmi</span>
                             </button>
                           </div>
                         )}
@@ -921,169 +940,183 @@ export default function ModalKalenderLibur({
           {activeTab === "tambah" && (
             <form
               onSubmit={handleSubmitForm}
-              className="max-w-2xl mx-auto space-y-4"
+              className="max-w-3xl mx-auto space-y-5 animate-in fade-in duration-200"
             >
-              {/* Pintasan Template Presets (Hanya tampil saat mode Tambah, bukan Edit) */}
-              {!editingId && (
-                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      Preset Template Libur & Kegiatan
-                    </span>
+              {/* Header Title Card */}
+              <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-100 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    {editingId ? (
+                      <Edit2 className="w-5 h-5" />
+                    ) : (
+                      <CalendarClock className="w-5 h-5" />
+                    )}
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {presetTemplates.map((tmpl, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setFormNama(tmpl.nama);
-                          setFormKategori(tmpl.kategori);
-                          setFormTglMulai(tmpl.tglMulai);
-                          setFormTglSelesai(tmpl.tglSelesai);
-                          setFormTipeHari(tmpl.tipeHari);
-                          setFormKeterangan(tmpl.keterangan);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-purple-200/80 bg-white hover:bg-purple-50 hover:border-purple-300 text-purple-900 text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-95"
-                      >
-                        <span>{tmpl.emoji}</span>
-                        <span>{tmpl.label}</span>
-                      </button>
-                    ))}
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                      {editingId
+                        ? "Edit Agenda Kalender Sekolah"
+                        : "Tambah Agenda Kalender Sekolah"}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {editingId
+                        ? "Perbarui tanggal, dampak presensi, atau berkas surat edaran resmi."
+                        : "Konfigurasi jadwal libur semester, hari libur nasional, atau kegiatan masuk khusus."}
+                    </p>
                   </div>
                 </div>
-              )}
+                {editingId && (
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
+                    Mode Edit
+                  </span>
+                )}
+              </div>
 
-              {/* Nama Hari Libur */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  1. Nama Hari Libur / Kegiatan{" "}
+              {/* Card 1: Nama Agenda */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Nama Hari Libur / Kegiatan{" "}
                   <span className="text-rose-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={formNama}
-                  onChange={(e) => setFormNama(e.target.value)}
-                  placeholder="Contoh: Libur Semester Ganjil TA 2025/2026 atau Hari Raya Idul Fitri"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
-                />
-              </div>
-
-              {/* Kategori & Tipe Hari */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    2. Kategori Libur
-                  </label>
-                  <select
-                    value={formKategori}
-                    onChange={(e) => setFormKategori(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
-                  >
-                    {KATEGORI_OPTIONS.map((k) => (
-                      <option key={k.value} value={k.value}>
-                        {k.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    3. Dampak Presensi
-                  </label>
-                  <select
-                    value={formTipeHari}
-                    onChange={(e) => setFormTipeHari(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
-                  >
-                    <option value="libur">
-                      Liburkan Sekolah (Tutup Presensi)
-                    </option>
-                    <option value="masuk_khusus">
-                      Wajib Masuk Khusus (Upacara / Presensi Tetap Buka)
-                    </option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Tanggal Mulai & Selesai */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    4. Tanggal Mulai <span className="text-rose-500">*</span>
-                  </label>
+                <div className="relative">
                   <input
-                    type="date"
-                    value={formTglMulai}
-                    onChange={(e) => {
-                      setFormTglMulai(e.target.value);
-                      if (!formTglSelesai || formTglSelesai < e.target.value) {
-                        setFormTglSelesai(e.target.value);
-                      }
-                    }}
+                    type="text"
+                    value={formNama}
+                    onChange={(e) => setFormNama(e.target.value)}
+                    placeholder="Contoh: Libur Kenaikan Kelas TA 2025/2026 atau Hari Raya Idul Fitri"
                     required
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-hidden transition-all bg-white"
                   />
                 </div>
+                <p className="text-[11px] text-slate-400">
+                  Nama ini akan ditampilkan pada kalender akademik dan portal
+                  siswa/guru.
+                </p>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    5. Tanggal Selesai (Jika Rentang)
-                  </label>
-                  <input
-                    type="date"
-                    value={formTglSelesai}
-                    min={formTglMulai}
-                    onChange={(e) => setFormTglSelesai(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    *Kosongkan jika hanya 1 hari tanggal merah.
-                  </p>
+              {/* Card 2: Tanggal Pelaksanaan (CustomDatePicker) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <CalendarDays className="w-4 h-4 text-purple-600 shrink-0" />
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Rentang Waktu Pelaksanaan
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                      Tanggal Mulai <span className="text-rose-500">*</span>
+                    </label>
+                    <CustomDatePicker
+                      value={formTglMulai}
+                      onChange={(val) => {
+                        setFormTglMulai(val);
+                        if (!formTglSelesai || formTglSelesai < val) {
+                          setFormTglSelesai(val);
+                        }
+                      }}
+                      placeholder="Pilih tanggal mulai..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                      Tanggal Selesai (Opsional)
+                    </label>
+                    <CustomDatePicker
+                      value={formTglSelesai}
+                      minDate={formTglMulai}
+                      onChange={(val) => setFormTglSelesai(val)}
+                      placeholder="Pilih tanggal selesai..."
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      *Samakan dengan tanggal mulai jika agenda hanya 1 hari.
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Keterangan / Catatan Tambahan */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  6. Keterangan / Dasar Surat Edaran
+              {/* Card 3: Klasifikasi & Dampak Presensi (CustomDropdown) */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                  <Filter className="w-4 h-4 text-purple-600 shrink-0" />
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Klasifikasi & Kebijakan Presensi
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                      Kategori Agenda
+                    </label>
+                    <CustomDropdown
+                      value={formKategori}
+                      onChange={(val) => setFormKategori(val)}
+                      options={KATEGORI_OPTIONS}
+                      placeholder="Pilih kategori libur..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1.5">
+                      Dampak Terhadap Presensi
+                    </label>
+                    <CustomDropdown
+                      value={formTipeHari}
+                      onChange={(val) => setFormTipeHari(val)}
+                      options={DAMPAK_PRESENSI_OPTIONS}
+                      placeholder="Pilih dampak presensi..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 4: Keterangan / Dasar Surat Edaran */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-2">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Keterangan / Nomor Surat Edaran (Opsional)
                 </label>
                 <textarea
                   value={formKeterangan}
                   onChange={(e) => setFormKeterangan(e.target.value)}
-                  placeholder="Contoh: Berdasarkan Surat Edaran Disdik DKI Jakarta No. 421/2026 tentang Libur Semester"
+                  placeholder="Contoh: Berdasarkan Surat Edaran Disdik DKI Jakarta No. 421/2026 tentang Libur Semester..."
                   rows={2}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-hidden transition-all bg-white"
                 />
               </div>
 
-              {/* 7. Lampiran Berkas Surat Edaran Resmi */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    7. Lampiran Berkas Surat Edaran (Opsional)
+              {/* Card 5: Lampiran Berkas Surat Edaran */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="w-4 h-4 text-purple-600 shrink-0" />
+                    <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Lampiran Berkas Surat Edaran (Opsional)
+                    </h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    PDF, PNG, JPG maks. 10MB
                   </span>
-                  <span className="text-[10px] text-slate-400 font-normal lowercase">
-                    (PDF, PNG, JPG, maks. 10MB)
-                  </span>
-                </label>
+                </div>
 
                 {formFileUrl && !formFileSurat && (
-                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+                  <div className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-purple-600/10 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200">
+                        <FileText className="w-5 h-5" />
+                      </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-purple-950 truncate">
+                        <p className="text-xs font-bold text-purple-950 truncate">
                           {formFileName || "Berkas Surat Edaran Terlampir"}
                         </p>
-                        <p className="text-[10px] text-purple-700 truncate">
-                          Tersimpan di sistem
+                        <p className="text-[10px] text-purple-700">
+                          Tersimpan di server
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() =>
@@ -1093,9 +1126,9 @@ export default function ModalKalenderLibur({
                             nama_file_surat: formFileName,
                           })
                         }
-                        className="px-2.5 py-1 text-xs bg-white text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg font-medium cursor-pointer transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 text-xs bg-white text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-xl font-bold cursor-pointer transition-colors flex items-center gap-1.5 shadow-2xs"
                       >
-                        <Eye className="w-3 h-3" />
+                        <Eye className="w-3.5 h-3.5" />
                         <span>Pratinjau</span>
                       </button>
                       <button
@@ -1105,7 +1138,7 @@ export default function ModalKalenderLibur({
                           setFormFileName("");
                           setFormFileSurat(null);
                         }}
-                        className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                        className="p-1.5 text-rose-500 hover:bg-rose-50 hover:text-rose-700 rounded-xl cursor-pointer transition-colors border border-rose-200/60"
                         title="Hapus lampiran"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1115,22 +1148,25 @@ export default function ModalKalenderLibur({
                 )}
 
                 {formFileSurat && (
-                  <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-emerald-600/10 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-200">
+                        <FileText className="w-5 h-5" />
+                      </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-emerald-950 truncate">
+                        <p className="text-xs font-bold text-emerald-950 truncate">
                           {formFileSurat.name}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {(formFileSurat.size / 1024).toFixed(1)} KB
+                          {(formFileSurat.size / 1024).toFixed(1)} KB (Siap
+                          diunggah)
                         </p>
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setFormFileSurat(null)}
-                      className="p-1 text-rose-500 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors"
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl cursor-pointer transition-colors border border-rose-200/60"
                       title="Batalkan file ini"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1139,7 +1175,7 @@ export default function ModalKalenderLibur({
                 )}
 
                 {!formFileUrl && !formFileSurat && (
-                  <div className="border border-dashed border-slate-300 hover:border-purple-400 bg-slate-50/50 hover:bg-purple-50/30 rounded-2xl p-3 text-center transition-colors">
+                  <div className="border-2 border-dashed border-slate-200 hover:border-purple-400 bg-slate-50/60 hover:bg-purple-50/30 rounded-2xl p-5 text-center transition-all cursor-pointer">
                     <input
                       type="file"
                       id="suratEdaranInput"
@@ -1161,35 +1197,45 @@ export default function ModalKalenderLibur({
                     />
                     <label
                       htmlFor="suratEdaranInput"
-                      className="cursor-pointer flex items-center justify-center gap-2 text-xs text-slate-600 hover:text-purple-700 py-1"
+                      className="cursor-pointer flex flex-col items-center justify-center gap-2 text-xs text-slate-600 hover:text-purple-700"
                     >
-                      <Upload className="w-4 h-4 text-slate-400" />
-                      <span>Unggah PDF atau Foto Surat Edaran Resmi</span>
+                      <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-600 flex items-center justify-center shadow-2xs">
+                        <Upload className="w-5 h-5" />
+                      </div>
+                      <span className="font-bold text-slate-800">
+                        Klik untuk memilih berkas Surat Edaran
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        PDF atau Foto Dokumen resmi untuk pratinjau siswa dan guru
+                        (Maks. 10MB)
+                      </span>
                     </label>
                   </div>
                 )}
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3">
+              <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => {
                     resetForm();
                     setActiveTab("daftar");
                   }}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : null}
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
                   <span>
                     {editingId
                       ? "Simpan Perubahan Jadwal"

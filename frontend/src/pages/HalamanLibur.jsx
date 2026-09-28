@@ -18,6 +18,10 @@ import {
   ArrowRight,
   School,
   Sparkles,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { liburService } from "../services/liburService";
@@ -35,6 +39,14 @@ export default function HalamanLibur() {
   const [profileModalTab, setProfileModalTab] = useState("profil");
   const [currentTimeStr, setCurrentTimeStr] = useState("");
   const [currentDateStr, setCurrentDateStr] = useState("");
+
+  // PDF Preview & Custom Page Controls
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(true);
+  const [pdfCurrentPage, setPdfCurrentPage] = useState(1);
+  const [pdfTotalPages, setPdfTotalPages] = useState(1);
+
+  // Custom Logout Confirmation Modal
+  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState(false);
 
   // Live Clock (WIB) & Tanggal Bahasa Indonesia
   useEffect(() => {
@@ -100,10 +112,7 @@ export default function HalamanLibur() {
   }, [fetchStatus]);
 
   const handleLogout = () => {
-    if (window.confirm("Apakah Anda yakin ingin keluar dari sistem?")) {
-      logout();
-      navigate("/login", { replace: true });
-    }
+    setShowLogoutConfirmModal(true);
   };
 
   const holidayEvent = statusData?.holiday_event;
@@ -111,6 +120,25 @@ export default function HalamanLibur() {
   const namaFileSurat =
     holidayEvent?.nama_file_surat || "Surat_Edaran_Resmi.pdf";
   const isPdf = suratUrl.toLowerCase().includes(".pdf");
+
+  // Inisialisasi dan sinkronisasi jumlah halaman berkas PDF
+  useEffect(() => {
+    if (holidayEvent?.total_pages && Number(holidayEvent.total_pages) > 0) {
+      setPdfTotalPages(Number(holidayEvent.total_pages));
+    } else if (isPdf && suratUrl) {
+      const filename = suratUrl.split("/").pop();
+      if (filename) {
+        liburService
+          .getDokumenInfo(filename)
+          .then((res) => {
+            if (res?.total_pages && Number(res.total_pages) > 0) {
+              setPdfTotalPages(Number(res.total_pages));
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [holidayEvent, isPdf, suratUrl]);
 
   // Format kategori libur
   const formatKategori = (kat) => {
@@ -192,17 +220,6 @@ export default function HalamanLibur() {
 
           {/* Right Header: Clock & User Info */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            {/* Live Clock Pill */}
-            <div className="hidden md:flex flex-col items-end text-right">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>{currentTimeStr}</span>
-              </div>
-              <span className="text-[11px] text-slate-400 font-medium">
-                {currentDateStr}
-              </span>
-            </div>
-
             {/* Admin Back Link */}
             {role === "admin" && (
               <button
@@ -288,13 +305,9 @@ export default function HalamanLibur() {
               {/* Badge Status */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-200 text-xs font-extrabold tracking-wide uppercase shadow-xs">
-                  <Sun className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Status: Kegiatan Diliburkan</span>
+                  <span>Kegiatan Diliburkan</span>
                 </span>
-                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold">
-                  <Calendar className="w-3.5 h-3.5 text-blue-300" />
-                  <span>{formatRangeDate()}</span>
-                </span>
+
                 {holidayEvent?.kategori && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-200 text-[11px] font-bold">
                     {formatKategori(holidayEvent.kategori)}
@@ -314,33 +327,19 @@ export default function HalamanLibur() {
                   "Seluruh kegiatan presensi kehadiran tatap muka, pembinaan piket, dan kegiatan belajar mengajar di lingkungan SMKN 21 Jakarta diliburkan."}
               </p>
             </div>
-
-            {/* Quick Action Button: Refresh */}
-            <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 shrink-0 self-start md:self-center">
-              <button
-                type="button"
-                disabled={isRefreshing}
-                onClick={() => fetchStatus(true)}
-                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition-all flex items-center justify-center gap-2 backdrop-blur-md cursor-pointer disabled:opacity-60 shadow-xs active:scale-95"
-              >
-                <RefreshCw
-                  className={`w-4 h-4 ${isRefreshing ? "animate-spin text-amber-300" : ""}`}
-                />
-                <span>
-                  {isRefreshing ? "Memeriksa Status..." : "Cek Ulang Status"}
-                </span>
-              </button>
-            </div>
           </div>
         </div>
 
         {/* Embedded Document Preview / Announcement Card */}
         {suratUrl ? (
           <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/40 overflow-hidden">
-            {/* Document Header Bar */}
-            <div className="px-5 py-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800">
+            {/* Document Header Bar with Collapsible Trigger & ChevronDown */}
+            <div
+              onClick={() => setIsPdfPreviewOpen((prev) => !prev)}
+              className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b border-slate-800 cursor-pointer select-none transition-colors hover:bg-slate-850"
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
@@ -348,7 +347,7 @@ export default function HalamanLibur() {
                     <h3 className="text-sm sm:text-base font-bold text-white truncate">
                       Surat Edaran Resmi Sekolah
                     </h3>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
                       Resmi
                     </span>
                   </div>
@@ -358,50 +357,148 @@ export default function HalamanLibur() {
                 </div>
               </div>
 
-              {/* Actions: Buka Tab Baru & Unduh */}
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                <a
-                  href={suratUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="Buka dokumen di tab baru"
+              {/* Toggle Chevron & Label */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-slate-300 font-medium hidden sm:inline">
+                  {isPdfPreviewOpen
+                    ? "Sembunyikan Berkas"
+                    : "Lihat Berkas Surat"}
+                </span>
+                <div
+                  className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-transform duration-300 ${
+                    isPdfPreviewOpen ? "rotate-180" : ""
+                  }`}
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Buka Tab Baru</span>
-                </a>
-                <a
-                  href={suratUrl}
-                  download
-                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                  title="Unduh berkas surat edaran"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Dokumen</span>
-                </a>
+                  <ChevronDown className="w-4 h-4" />
+                </div>
               </div>
             </div>
 
-            {/* Document Viewer Frame */}
-            <div className="p-3 sm:p-5 bg-slate-100/70">
-              {isPdf ? (
-                <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner">
-                  <iframe
-                    src={suratUrl}
-                    title="Pratinjau Surat Edaran Resmi"
-                    className="w-full h-[650px] sm:h-[750px] border-none"
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-center p-4 bg-white rounded-2xl border border-slate-200 shadow-inner">
-                  <img
-                    src={suratUrl}
-                    alt="Pratinjau Surat Edaran"
-                    className="max-w-full max-h-[750px] rounded-xl object-contain shadow-md"
-                  />
-                </div>
-              )}
-            </div>
+            {/* Document Viewer Area (Collapsible) */}
+            {isPdfPreviewOpen && (
+              <div className="animate-in fade-in duration-200">
+                {isPdf ? (
+                  <>
+                    {/* Custom PDF Navigation Toolbar */}
+                    <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 text-white text-xs select-none">
+                      {/* Left: Indicator */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-bold text-[10px] uppercase tracking-wider border border-purple-500/30">
+                          PDF
+                        </span>
+                        <span className="font-semibold text-slate-300 truncate hidden md:inline text-xs">
+                          {namaFileSurat}
+                        </span>
+                      </div>
+
+                      {/* Center: Custom Page Navigation [ < ] [ 1 ] / 3 [ > ] */}
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPdfCurrentPage((p) => Math.max(1, p - 1));
+                          }}
+                          disabled={pdfCurrentPage <= 1}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
+                          title="Halaman Sebelumnya"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 text-xs font-bold">
+                          <span className="text-[11px] text-slate-400 font-normal hidden sm:inline">
+                            Halaman
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={pdfTotalPages}
+                            value={pdfCurrentPage}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (
+                                !isNaN(val) &&
+                                val >= 1 &&
+                                val <= pdfTotalPages
+                              ) {
+                                setPdfCurrentPage(val);
+                              }
+                            }}
+                            className="w-9 text-center bg-slate-950 border border-slate-700 rounded text-purple-300 font-bold py-0.5 focus:outline-hidden focus:ring-1 focus:ring-purple-400"
+                          />
+                          <span className="text-slate-400">/</span>
+                          <span className="text-slate-200 min-w-[14px] text-center">
+                            {pdfTotalPages}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPdfCurrentPage((p) =>
+                              Math.min(pdfTotalPages, p + 1),
+                            );
+                          }}
+                          disabled={pdfCurrentPage >= pdfTotalPages}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
+                          title="Halaman Selanjutnya"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <a
+                          href={suratUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold border border-slate-700"
+                          title="Buka dokumen di tab baru"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Tab Baru</span>
+                        </a>
+                        <a
+                          href={suratUrl}
+                          download
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-bold shadow-xs"
+                          title="Unduh berkas surat edaran"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Unduh</span>
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Frame PDF tanpa toolbar bawaan browser */}
+                    <div className="p-2 sm:p-4 bg-slate-100/70">
+                      <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner">
+                        <iframe
+                          key={`pdf-page-${pdfCurrentPage}`}
+                          src={`${suratUrl}#page=${pdfCurrentPage}&toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                          title="Pratinjau Surat Edaran Resmi"
+                          className="w-full h-[650px] sm:h-[750px] border-none block"
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-4 bg-slate-100/70 flex items-center justify-center">
+                    <img
+                      src={suratUrl}
+                      alt="Pratinjau Surat Edaran"
+                      className="max-w-full max-h-[750px] rounded-xl object-contain shadow-md"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* Card jika tidak ada surat edaran yang dilampirkan */
@@ -422,50 +519,6 @@ export default function HalamanLibur() {
             </div>
           </div>
         )}
-
-        {/* Informational Guidance Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-            <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Clock className="w-4 h-4" />
-            </div>
-            <h4 className="text-sm font-bold text-slate-900">
-              Jadwal Presensi Dibuka
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Layanan presensi tatap muka akan dibuka kembali pada hari aktif
-              sekolah berikutnya mulai pukul{" "}
-              <strong className="text-slate-700">05:00 WIB</strong> s/d{" "}
-              <strong className="text-slate-700">06:30 WIB</strong>.
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4" />
-            </div>
-            <h4 className="text-sm font-bold text-slate-900">
-              Status Kehadiran Siswa
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Siswa tidak perlu melakukan presensi atau pengajuan surat
-              izin/sakit selama periode libur sekolah berlangsung.
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <School className="w-4 h-4" />
-            </div>
-            <h4 className="text-sm font-bold text-slate-900">
-              Pusat Informasi Sekolah
-            </h4>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Informasi resmi terkait kegiatan sekolah dan pengumuman mendadak
-              dapat dipantau melalui wali kelas dan tata usaha SMKN 21.
-            </p>
-          </div>
-        </div>
       </main>
 
       {/* Profile Modal */}
@@ -475,6 +528,46 @@ export default function HalamanLibur() {
           onClose={() => setIsProfileModalOpen(false)}
           initialTab={profileModalTab}
         />
+      )}
+
+      {/* Modal Konfirmasi Logout Kustom */}
+      {showLogoutConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs select-none animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100 shadow-inner">
+              <LogOut className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-lg font-bold text-slate-900">
+                Konfirmasi Keluar Akun
+              </h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Apakah Anda yakin ingin keluar dari sistem presensi SMKN 21
+                Jakarta? Anda perlu masuk kembali untuk mengakses portal akun.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirmModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirmModal(false);
+                  logout();
+                  navigate("/login", { replace: true });
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
+              >
+                Ya, Keluar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

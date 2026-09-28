@@ -55,11 +55,15 @@ export default function ProtectedRoute({
   ) {
     // Alihkan siswa ke Portal Siswa (atau /libur jika sedang libur)
     if (role === "siswa") {
-      return <Navigate to={isSchoolHoliday ? "/libur" : "/portal-siswa"} replace />;
+      return (
+        <Navigate to={isSchoolHoliday ? "/libur" : "/portal-siswa"} replace />
+      );
     }
     // Alihkan guru piket ke Beranda Guru Piket (atau /libur jika sedang libur)
     if (role === "piket") {
-      return <Navigate to={isSchoolHoliday ? "/libur" : "/portal-piket"} replace />;
+      return (
+        <Navigate to={isSchoolHoliday ? "/libur" : "/portal-piket"} replace />
+      );
     }
     // Alihkan admin ke Beranda Admin
     if (role === "admin") {

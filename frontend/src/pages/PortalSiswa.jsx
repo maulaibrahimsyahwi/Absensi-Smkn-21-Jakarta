@@ -112,7 +112,10 @@ export default function PortalSiswa() {
         }
 
         // Jika hari ini libur, kunci portal siswa dan alihkan ke Halaman Libur Mandiri
-        if (newRekap.status_hari_ini && !newRekap.status_hari_ini.is_school_day) {
+        if (
+          newRekap.status_hari_ini &&
+          !newRekap.status_hari_ini.is_school_day
+        ) {
           navigate("/libur", { replace: true });
           return;
         }
@@ -604,7 +607,7 @@ export default function PortalSiswa() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>📄 Lihat Surat Edaran Resmi</span>
+                    <span> Lihat Surat Edaran Resmi</span>
                   </button>
                 </div>
               )}
@@ -647,7 +650,7 @@ export default function PortalSiswa() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>📄 Lihat Surat Edaran Resmi</span>
+                    <span> Lihat Surat Edaran Resmi</span>
                   </button>
                 </div>
               )}

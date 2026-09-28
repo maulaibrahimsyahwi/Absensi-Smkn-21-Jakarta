@@ -123,9 +123,7 @@ export default function Login() {
     }
 
     const defaultPortal =
-      user.role === "siswa"
-        ? "/portal-siswa"
-        : "/portal-piket";
+      user.role === "siswa" ? "/portal-siswa" : "/portal-piket";
 
     navigate(defaultPortal, { replace: true });
   };

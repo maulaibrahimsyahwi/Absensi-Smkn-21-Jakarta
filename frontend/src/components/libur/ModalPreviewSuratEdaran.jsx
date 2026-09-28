@@ -40,17 +40,18 @@ export default function ModalPreviewSuratEdaran({
                 title="Buka dokumen di jendela baru"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Buka Tab Baru</span>
+                <span className="hidden sm:inline">Buka</span>
               </a>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
-              title="Tutup pratinjau"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {url && (
+              <a
+                href={url}
+                download
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1 text-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </a>
+            )}
           </div>
         </div>
 
@@ -75,32 +76,13 @@ export default function ModalPreviewSuratEdaran({
 
         {/* Footer */}
         <div className="px-5 py-3.5 bg-white border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-500 shrink-0">
-          <div className="flex items-center gap-2 truncate">
-            <span className="font-semibold text-slate-700">
-              SMKN 21 Jakarta
-            </span>
-            <span>•</span>
-            <span className="truncate">
-              Dokumen Resmi Keputusan & Pengumuman Sekolah
-            </span>
-          </div>
           <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-            {url && (
-              <a
-                href={url}
-                download
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1 text-xs"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Unduh File</span>
-              </a>
-            )}
             <button
               type="button"
               onClick={onClose}
               className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl transition-colors cursor-pointer text-xs"
             >
-              Tutup Pratinjau
+              Tutup
             </button>
           </div>
         </div>

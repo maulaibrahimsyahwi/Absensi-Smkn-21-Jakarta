@@ -256,9 +256,8 @@ export default function PortalAdmin() {
                   >
                     {liburStatusToday.is_holiday ? (
                       <>
-                        <Sun className="w-3 h-3 text-rose-300" />
                         <span>
-                          Libur:{" "}
+                          Libur{" "}
                           {liburStatusToday.holiday_event?.nama ||
                             "Sekolah Libur"}
                         </span>
@@ -267,7 +266,7 @@ export default function PortalAdmin() {
                       <>
                         <Flag className="w-3 h-3 text-amber-300" />
                         <span>
-                          Masuk Khusus:{" "}
+                          Masuk Khusus{" "}
                           {liburStatusToday.holiday_event?.nama || "Kegiatan"}
                         </span>
                       </>
@@ -545,7 +544,7 @@ export default function PortalAdmin() {
                 </h3>
                 <p className="text-[11px] text-rose-100 mt-0.5 truncate">
                   {liburStatusToday?.is_holiday
-                    ? `🏖️ ${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
+                    ? `${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
                     : liburStatusToday?.is_special_school_day
                       ? `🇮🇩 Masuk Khusus: ${liburStatusToday.holiday_event?.nama || "Kegiatan"}`
                       : "Libur semester, libur nasional & override harian"}

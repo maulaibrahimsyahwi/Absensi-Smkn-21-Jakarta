@@ -383,7 +383,7 @@ export default function PortalPiket() {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>📄 Lihat Surat Edaran Resmi</span>
+              <span> Lihat Surat Edaran Resmi</span>
             </button>
           )}
         </div>

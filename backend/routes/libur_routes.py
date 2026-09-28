@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import csv
 import uuid
 import openpyxl
@@ -672,6 +673,24 @@ def quick_surat_edaran():
         return jsonify({"success": False, "message": f"Gagal menerapkan Surat Edaran: {str(e)}"}), 500
 
 
+def count_pdf_pages(filepath):
+    """
+    Menghitung jumlah halaman pada berkas PDF secara efisien tanpa modul pihak ketiga berat.
+    """
+    try:
+        with open(filepath, 'rb') as f:
+            data = f.read()
+        matches = re.findall(rb'/Type\s*/Page(?!s)', data)
+        if matches:
+            return len(matches)
+        counts = re.findall(rb'/Count\s+(\d+)', data)
+        if counts:
+            return max(int(c) for c in counts)
+        return 1
+    except Exception:
+        return 1
+
+
 @libur_bp.route('/api/hari_libur/upload_surat', methods=['POST'])
 @token_required
 @role_required(['admin'])
@@ -699,10 +718,15 @@ def upload_surat_edaran():
     filepath = os.path.join(UPLOAD_EDARAN_DIR, unique_name)
     file.save(filepath)
 
+    total_pages = 1
+    if ext == 'pdf':
+        total_pages = count_pdf_pages(filepath)
+
     return jsonify({
         "success": True,
         "url": f"/api/hari_libur/dokumen/{unique_name}",
-        "filename": file.filename
+        "filename": file.filename,
+        "total_pages": total_pages
     }), 200
 
 
@@ -712,6 +736,26 @@ def get_dokumen_edaran(filename):
     Menampilkan dan preview berkas Surat Edaran resmi (PDF/gambar) untuk siswa, guru, staf, atau admin.
     """
     return send_from_directory(UPLOAD_EDARAN_DIR, filename)
+
+
+@libur_bp.route('/api/hari_libur/dokumen_info/<path:filename>', methods=['GET'])
+def get_dokumen_info(filename):
+    """
+    Mengambil informasi berkas Surat Edaran (jumlah halaman PDF, tipe berkas, dsb.)
+    """
+    filepath = os.path.join(UPLOAD_EDARAN_DIR, filename)
+    if not os.path.exists(filepath):
+        return jsonify({"success": False, "message": "Berkas tidak ditemukan."}), 404
+
+    is_pdf = filename.lower().endswith('.pdf')
+    total_pages = count_pdf_pages(filepath) if is_pdf else 1
+
+    return jsonify({
+        "success": True,
+        "filename": filename,
+        "is_pdf": is_pdf,
+        "total_pages": total_pages
+    }), 200
 
 
 @libur_bp.route('/api/hari_libur/import_file', methods=['POST'])

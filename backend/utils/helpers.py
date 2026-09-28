@@ -250,6 +250,10 @@ def is_kelas_pjj(kelas_str, dt=None):
         now = dt if dt is not None else datetime.now()
         cur_date = now.date() if isinstance(now, datetime) else now
 
+        # Jika hari ini adalah hari libur sekolah atau akhir pekan, Mode PJJ tidak berlaku
+        if not is_school_day(now):
+            return False, ""
+
         # Validasi rentang tanggal jika disetel
         if cfg.tanggal_mulai and cur_date < cfg.tanggal_mulai:
             return False, ""

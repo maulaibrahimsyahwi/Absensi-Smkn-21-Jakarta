@@ -426,6 +426,26 @@ class HariLibur(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
     def to_dict(self):
+        total_pages = 1
+        if self.lampiran_surat and self.lampiran_surat.lower().endswith('.pdf'):
+            try:
+                import os, re
+                from config import BASE_DIR
+                fname = os.path.basename(self.lampiran_surat)
+                fpath = os.path.join(BASE_DIR, 'static', 'uploads', 'surat_edaran', fname)
+                if os.path.exists(fpath):
+                    with open(fpath, 'rb') as f:
+                        data = f.read()
+                    m = re.findall(rb'/Type\s*/Page(?!s)', data)
+                    if m:
+                        total_pages = len(m)
+                    else:
+                        c = re.findall(rb'/Count\s+(\d+)', data)
+                        if c:
+                            total_pages = max(int(x) for x in c)
+            except Exception:
+                total_pages = 1
+
         return {
             "id": self.id,
             "nama": self.nama,
@@ -436,6 +456,7 @@ class HariLibur(db.Model):
             "keterangan": self.keterangan or "",
             "lampiran_surat": self.lampiran_surat,
             "nama_file_surat": self.nama_file_surat,
+            "total_pages": total_pages,
             "is_active": bool(self.is_active),
             "created_by": self.created_by or "-",
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,

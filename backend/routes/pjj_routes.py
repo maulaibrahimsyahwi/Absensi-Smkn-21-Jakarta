@@ -3,7 +3,7 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from models import db, PengaturanPJJ, Siswa
 from utils.auth_middleware import token_required, role_required
-from utils.helpers import is_kelas_pjj
+from utils.helpers import is_kelas_pjj, get_holiday_status, is_school_day
 
 pjj_bp = Blueprint('pjj', __name__)
 
@@ -50,6 +50,9 @@ def get_pjj_status():
             if cfg.tanggal_mulai and cur_date < cfg.tanggal_mulai:
                 is_active_today = False
             if cfg.tanggal_selesai and cur_date > cfg.tanggal_selesai:
+                is_active_today = False
+            # Jika hari ini libur sekolah atau akhir pekan, PJJ otomatis tidak aktif
+            if not is_school_day(now_dt):
                 is_active_today = False
 
         data = cfg.to_dict()
@@ -145,9 +148,39 @@ def update_pjj_settings():
         if tgl_selesai and tgl_selesai < today_curr:
             return jsonify({"success": False, "message": "Tanggal selesai daring tidak boleh merupakan hari yang sudah berlalu."}), 400
         if tgl_mulai and tgl_mulai.weekday() in [5, 6]:
-            return jsonify({"success": False, "message": "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur)."}), 400
+            return jsonify({"success": False, "message": "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur akhir pekan)."}), 400
         if tgl_selesai and tgl_selesai.weekday() in [5, 6]:
-            return jsonify({"success": False, "message": "Tanggal selesai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur)."}), 400
+            return jsonify({"success": False, "message": "Tanggal selesai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur akhir pekan)."}), 400
+
+        # Validasi: Cek apakah tanggal mulai jatuh pada hari libur sekolah resmi / nasional
+        if tgl_mulai:
+            h_status_m = get_holiday_status(tgl_mulai)
+            if not h_status_m["is_school_day"]:
+                h_nama = h_status_m.get("holiday_event", {}).get("nama") or h_status_m.get("message") or "Hari Libur"
+                return jsonify({
+                    "success": False,
+                    "message": f"Mode PJJ tidak dapat diaktifkan pada tanggal libur sekolah: {h_nama}. Seluruh kegiatan pembelajaran saat libur ditiadakan."
+                }), 400
+
+        # Validasi: Cek apakah tanggal selesai jatuh pada hari libur sekolah resmi / nasional
+        if tgl_selesai:
+            h_status_s = get_holiday_status(tgl_selesai)
+            if not h_status_s["is_school_day"]:
+                h_nama = h_status_s.get("holiday_event", {}).get("nama") or h_status_s.get("message") or "Hari Libur"
+                return jsonify({
+                    "success": False,
+                    "message": f"Tanggal selesai PJJ bertepatan dengan hari libur sekolah: {h_nama}. Silakan pilih hari sekolah aktif."
+                }), 400
+
+        # Jika tanpa rentang tanggal spesifik (langsung aktif hari ini), cek apakah hari ini sedang libur sekolah
+        if not tgl_mulai and not tgl_selesai:
+            h_status_today = get_holiday_status(today_curr)
+            if not h_status_today["is_school_day"]:
+                h_nama = h_status_today.get("holiday_event", {}).get("nama") or h_status_today.get("message") or "Hari Libur"
+                return jsonify({
+                    "success": False,
+                    "message": f"Hari ini adalah hari libur sekolah ({h_nama}). Mode PJJ tidak dapat diaktifkan saat sekolah sedang libur."
+                }), 400
 
     try:
         cfg = get_or_create_pjj_config()

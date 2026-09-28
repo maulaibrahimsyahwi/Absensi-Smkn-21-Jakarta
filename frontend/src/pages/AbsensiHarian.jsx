@@ -369,13 +369,13 @@ export default function AbsensiHarian() {
               {isHoliday
                 ? attendanceToday?.message ||
                   attendanceToday?.holiday_info?.keterangan ||
-                  "Hari ini operasional presensi sekolah diliburkan sesuai kalender akademik."
-                : "Sistem presensi harian SMKN 21 Jakarta hanya digunakan pada hari sekolah aktif (Senin s/d Jumat)."}
+                  "Hari ini operasional presensi sekolah diliburkan sesuai kalender akademik"
+                : "Sistem presensi harian SMKN 21 Jakarta hanya digunakan pada hari sekolah aktif (Senin s/d Jumat)"}
             </p>
             <p className="text-xs text-slate-400">
               {isHoliday
-                ? "Siswa tidak perlu melakukan scan presensi kehadiran hari ini."
-                : "Presensi kehadiran akan dibuka kembali pada hari Senin pukul 05:00 WIB."}
+                ? "Siswa tidak perlu melakukan scan presensi kehadiran hari ini"
+                : "Presensi kehadiran akan dibuka kembali pada hari Senin pukul 05:00 WIB"}
             </p>
             {attendanceToday?.holiday_info?.lampiran_surat && (
               <div className="pt-2">
@@ -385,7 +385,7 @@ export default function AbsensiHarian() {
                   className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 hover:text-white border border-purple-500/40 font-bold rounded-xl transition-all text-xs cursor-pointer shadow-xs"
                 >
                   <FileText className="w-4 h-4 text-purple-400" />
-                  <span>📄 Lihat Surat Edaran Resmi</span>
+                  <span>Lihat Surat Edaran Resmi</span>
                 </button>
               </div>
             )}

@@ -19,6 +19,7 @@ import {
   Building,
 } from "lucide-react";
 import api from "../../services/api";
+import { liburService } from "../../services/liburService";
 import { useAuth } from "../../context/AuthContext";
 import {
   DAFTAR_KELAS_SMKN21,
@@ -33,6 +34,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [holidayStatus, setHolidayStatus] = useState(null);
 
   // Form State
   const [isActive, setIsActive] = useState(false);
@@ -125,6 +127,16 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
       .finally(() => {
         setLoading(false);
       });
+
+    // Ambil status operasional sekolah hari ini (apakah sedang libur/weekend)
+    liburService
+      .getStatusToday()
+      .then((res) => {
+        if (res && res.success) {
+          setHolidayStatus(res);
+        }
+      })
+      .catch(() => {});
   }, [isOpen, todayStr, defaultSchoolDayStr]);
 
   // SMART PRESETS
@@ -272,6 +284,24 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
           setSubmitting(false);
           return;
         }
+
+        // Cek jika hari ini / tanggal mulai adalah hari libur sekolah resmi
+        if (
+          holidayStatus &&
+          !holidayStatus.is_school_day &&
+          tanggalMulai === holidayStatus.tanggal
+        ) {
+          const reason =
+            holidayStatus.holiday_event?.nama ||
+            (holidayStatus.is_weekend
+              ? `Libur Akhir Pekan (${holidayStatus.nama_hari})`
+              : "Hari Libur Sekolah");
+          setErrorMsg(
+            `Mode PJJ tidak dapat diaktifkan pada tanggal libur: ${holidayStatus.tanggal} (${reason}). Seluruh kegiatan belajar diliburkan.`,
+          );
+          setSubmitting(false);
+          return;
+        }
       }
 
       const payload = {
@@ -350,6 +380,25 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
             <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500" />
               <span>{successMsg}</span>
+            </div>
+          )}
+
+          {holidayStatus && !holidayStatus.is_school_day && (
+            <div className="p-4 bg-amber-50/90 border border-amber-200 text-amber-950 rounded-2xl text-xs space-y-1.5 shadow-2xs">
+              <div className="flex items-center gap-2 font-bold text-amber-800">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Hari Libur Sekolah Terdeteksi ({holidayStatus.tanggal})</span>
+              </div>
+              <p className="text-[11px] text-amber-800 leading-relaxed">
+                Hari ini berstatus:{" "}
+                <strong className="text-amber-950 font-extrabold underline decoration-amber-400">
+                  {holidayStatus.holiday_event?.nama ||
+                    (holidayStatus.is_weekend
+                      ? `Libur Akhir Pekan (${holidayStatus.nama_hari})`
+                      : "Hari Libur Sekolah")}
+                </strong>
+                . Seluruh kegiatan presensi dan operasional belajar tatap muka maupun daring diliburkan penuh. Mode PJJ dinonaktifkan otomatis selama masa libur.
+              </p>
             </div>
           )}
 

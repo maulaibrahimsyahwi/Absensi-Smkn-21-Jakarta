@@ -34,8 +34,10 @@ function AppLayout() {
   // Mode kiosk layar penuh untuk kamera absensi (tanpa navbar & tanpa footer)
   const isKioskMode =
     location.pathname === "/harian" || location.pathname === "/perpus";
-  // Halaman mandiri khusus (kiosk kamera dan halaman libur mandiri)
-  const isStandalonePage = isKioskMode || location.pathname === "/libur";
+  // Halaman yang menyembunyikan navbar standar (kiosk kamera dan halaman pengumuman libur mandiri)
+  const hideNavbar = isKioskMode || location.pathname === "/libur";
+  // Footer ditampilkan di semua rute termasuk halaman libur, kecuali kiosk kamera layar penuh
+  const hideFooter = isKioskMode;
 
   return (
     <div
@@ -46,7 +48,7 @@ function AppLayout() {
       }`}
     >
       <OfflineBanner />
-      {!isStandalonePage && <Navbar />}
+      {!hideNavbar && <Navbar />}
 
       <main
         className={
@@ -184,7 +186,7 @@ function AppLayout() {
         </Suspense>
       </main>
 
-      {!isStandalonePage && (
+      {!hideFooter && (
         <footer className="py-6 border-t border-slate-200 bg-white/80 text-center text-xs text-slate-500">
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
             <p className="font-medium text-slate-600">
@@ -195,7 +197,7 @@ function AppLayout() {
         </footer>
       )}
 
-      {!isStandalonePage && <PwaInstallPrompt />}
+      {!hideNavbar && <PwaInstallPrompt />}
     </div>
   );
 }
