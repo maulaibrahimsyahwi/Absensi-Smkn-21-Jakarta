@@ -111,6 +111,12 @@ export default function PortalSiswa() {
           });
         }
 
+        // Jika hari ini libur, kunci portal siswa dan alihkan ke Halaman Libur Mandiri
+        if (newRekap.status_hari_ini && !newRekap.status_hari_ini.is_school_day) {
+          navigate("/libur", { replace: true });
+          return;
+        }
+
         prevPengajuanRef.current = newPengajuan;
         setPersonalData(newRekap);
       }

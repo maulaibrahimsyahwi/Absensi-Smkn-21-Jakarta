@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Eye,
   Download,
+  CalendarClock,
 } from "lucide-react";
 import { liburService } from "../../services/liburService";
 import ModalPreviewSuratEdaran from "./ModalPreviewSuratEdaran";
@@ -106,7 +107,6 @@ export default function ModalKalenderLibur({
     () => [
       {
         label: "Libur Semester Ganjil",
-        emoji: "📚",
         nama: `Libur Akhir Semester Ganjil TA ${currentYearNum}/${currentYearNum + 1}`,
         kategori: "libur_semester",
         tglMulai: `${currentYearNum}-12-22`,
@@ -116,7 +116,6 @@ export default function ModalKalenderLibur({
       },
       {
         label: "Libur Kenaikan Kelas (Genap)",
-        emoji: "🎓",
         nama: `Libur Kenaikan Kelas & Akhir Semester Genap ${currentYearNum}`,
         kategori: "libur_semester",
         tglMulai: `${currentYearNum}-06-23`,
@@ -126,7 +125,6 @@ export default function ModalKalenderLibur({
       },
       {
         label: "Upacara HUT RI 17 Agustus",
-        emoji: "🇮🇩",
         nama: `Upacara Peringatan HUT Kemerdekaan RI ke-${currentYearNum - 1945}`,
         kategori: "khusus",
         tglMulai: `${currentYearNum}-08-17`,
@@ -136,7 +134,6 @@ export default function ModalKalenderLibur({
       },
       {
         label: "Libur Awal Ramadhan",
-        emoji: "🌙",
         nama: `Libur Awal Bulan Suci Ramadhan ${currentYearNum}`,
         kategori: "khusus",
         tglMulai: `${currentYearNum}-03-02`,
@@ -206,6 +203,20 @@ export default function ModalKalenderLibur({
     setActiveTab("tambah");
   };
 
+  const notifyHolidayChanged = () => {
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const bcAuth = new BroadcastChannel("smkn21_auth_channel");
+        bcAuth.postMessage({ type: "HOLIDAY_CHANGED" });
+        setTimeout(() => bcAuth.close(), 100);
+
+        const bcAbsensi = new BroadcastChannel("smkn21_absensi_channel");
+        bcAbsensi.postMessage({ type: "HOLIDAY_CHANGED" });
+        setTimeout(() => bcAbsensi.close(), 100);
+      }
+    } catch (e) {}
+  };
+
   const handleSubmitForm = async (e) => {
     e.preventDefault();
     if (!formNama.trim() || !formTglMulai) {
@@ -273,6 +284,7 @@ export default function ModalKalenderLibur({
       resetForm();
       setActiveTab("daftar");
       fetchAllData();
+      notifyHolidayChanged();
       if (onRefreshStatus) onRefreshStatus();
     } catch (err) {
       const msg =
@@ -293,6 +305,7 @@ export default function ModalKalenderLibur({
       });
       setDeletingItem(null);
       fetchAllData();
+      notifyHolidayChanged();
       if (onRefreshStatus) onRefreshStatus();
     } catch (err) {
       setNotification({
@@ -318,6 +331,7 @@ export default function ModalKalenderLibur({
       setOverrideNama("");
       setOverrideKet("");
       fetchAllData();
+      notifyHolidayChanged();
       if (onRefreshStatus) onRefreshStatus();
     } catch (err) {
       setNotification({
@@ -342,6 +356,7 @@ export default function ModalKalenderLibur({
         message: "Status hari ini telah dikembalikan ke kalender normal.",
       });
       fetchAllData();
+      notifyHolidayChanged();
       if (onRefreshStatus) onRefreshStatus();
     } catch (err) {
       setNotification({
@@ -440,6 +455,7 @@ export default function ModalKalenderLibur({
         });
         setImportFileObj(null);
         await fetchAllData();
+        notifyHolidayChanged();
         if (onRefreshStatus) onRefreshStatus();
       } else {
         setImportStats(res);
@@ -468,17 +484,6 @@ export default function ModalKalenderLibur({
     }
   };
 
-  const handleDownloadTemplate = async () => {
-    try {
-      await liburService.downloadTemplate();
-    } catch (err) {
-      setNotification({
-        type: "error",
-        message: "Gagal mengunduh template Excel.",
-      });
-    }
-  };
-
   const filteredList = useMemo(() => {
     return liburList.filter((item) => {
       const q = searchTerm.toLowerCase();
@@ -498,16 +503,12 @@ export default function ModalKalenderLibur({
         {/* Header Modal */}
         <div className="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-purple-300 shrink-0">
-              <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
             <div className="min-w-0">
               <h2 className="text-base sm:text-xl font-bold tracking-tight truncate">
                 Kalender Akademik & Hari Libur Sekolah
               </h2>
               <p className="text-xs text-purple-200 truncate">
-                Kelola libur semester, tanggal merah, upacara khusus, & override
-                presensi
+                Kelola libur semester, tanggal merah, dan agenda khusus sekolah
               </p>
             </div>
           </div>
@@ -548,84 +549,6 @@ export default function ModalKalenderLibur({
           </div>
         )}
 
-        {/* Banner Status Hari Ini & Quick Override Bar */}
-        <div className="p-4 sm:p-5 bg-slate-50 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              className={`w-3.5 h-3.5 rounded-full shrink-0 animate-pulse ${
-                statusToday?.is_holiday
-                  ? "bg-rose-500 ring-4 ring-rose-100"
-                  : statusToday?.is_special_school_day
-                    ? "bg-blue-500 ring-4 ring-blue-100"
-                    : statusToday?.is_weekend
-                      ? "bg-amber-500 ring-4 ring-amber-100"
-                      : "bg-emerald-500 ring-4 ring-emerald-100"
-              }`}
-            />
-            <div className="min-w-0">
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Status Presensi Hari Ini ({statusToday?.nama_hari || "Hari Ini"}
-                )
-              </div>
-              <div className="text-sm font-bold text-slate-800 truncate">
-                {statusToday?.is_holiday
-                  ? `🔴 Libur: ${statusToday?.holiday_event?.nama || "Libur Sekolah"}`
-                  : statusToday?.is_special_school_day
-                    ? `🔵 Wajib Masuk Khusus: ${statusToday?.holiday_event?.nama}`
-                    : statusToday?.is_weekend
-                      ? `🟡 Libur Akhir Pekan (${statusToday?.nama_hari})`
-                      : "🟢 Hari Sekolah Aktif (Presensi Buka)"}
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Override Buttons */}
-          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setOverrideAction("libur");
-                setOverrideNama("Diliburkan Khusus Hari Ini");
-                setOverrideKet("");
-                setShowOverrideModal(true);
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-              title="Liburkan sekolah hari ini secara mendadak"
-            >
-              <Sun className="w-3.5 h-3.5 text-rose-600" />
-              <span>Liburkan Hari Ini</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOverrideAction("masuk_khusus");
-                setOverrideNama("Wajib Masuk Khusus Hari Ini");
-                setOverrideKet("");
-                setShowOverrideModal(true);
-              }}
-              className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-              title="Wajibkan masuk & buka presensi hari ini (meski tgl merah/weekend)"
-            >
-              <Flag className="w-3.5 h-3.5 text-blue-600" />
-              <span>Wajibkan Masuk</span>
-            </button>
-
-            {statusToday?.holiday_event?.kategori === "khusus" && (
-              <button
-                type="button"
-                onClick={handleResetOverride}
-                disabled={submitting}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
-                title="Batalkan override dan kembalikan ke jadwal kalender normal"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset</span>
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Tab Selector Nav */}
         <div className="px-4 sm:px-6 pt-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
@@ -641,7 +564,6 @@ export default function ModalKalenderLibur({
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <CalendarDays className="w-4 h-4" />
               <span>Daftar Libur</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-600">
                 {liburList.length}
@@ -657,8 +579,7 @@ export default function ModalKalenderLibur({
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-              <span>📥 Import Excel/CSV</span>
+              <span>Import Excel/CSV</span>
             </button>
 
             <button
@@ -673,8 +594,7 @@ export default function ModalKalenderLibur({
                   : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
             >
-              <Plus className="w-4 h-4" />
-              <span>{editingId ? "Edit Jadwal Libur" : "Tambah Manual"}</span>
+              <span>{editingId ? "Edit Jadwal Libur" : "Tambah Jadwal"}</span>
             </button>
           </div>
 
@@ -696,58 +616,38 @@ export default function ModalKalenderLibur({
               </select>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setOverrideAction("masuk_khusus");
+              setOverrideNama("Wajib Masuk Khusus Hari Ini");
+              setOverrideKet("");
+              setShowOverrideModal(true);
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+            title="Wajibkan masuk & buka presensi hari ini (meski tgl merah/weekend)"
+          >
+            <span>Wajibkan Masuk</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOverrideAction("libur");
+              setOverrideNama("Diliburkan Khusus Hari Ini");
+              setOverrideKet("");
+              setShowOverrideModal(true);
+            }}
+            className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold transition-all cursor-pointer inline-flex items-center gap-1 shadow-2xs"
+            title="Liburkan sekolah hari ini secara mendadak"
+          >
+            <span>Liburkan Hari Ini</span>
+          </button>
         </div>
 
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {activeTab === "daftar" && (
             <>
-              {/* Automation Quick Actions Banner */}
-              <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-emerald-50 border border-emerald-200/80 rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-2.5">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <h4 className="text-xs sm:text-sm font-bold text-emerald-950 flex items-center gap-1.5">
-                        🟢 Kalender Libur Nasional Otomatis Aktif (2024 - 2030+)
-                      </h4>
-                    </div>
-                    <p className="text-[11px] text-emerald-800/80 leading-relaxed max-w-xl">
-                      Seluruh tanggal merah resmi SKB 3 Menteri sudah otomatis
-                      terintegrasi dan aktif untuk tahun {selectedTahun} tanpa
-                      perlu klik atau sinkron manual.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("import_file")}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
-                      title="Upload file spreadsheet jadwal libur dari TU/Dinas"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>📥 Upload Excel / CSV</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSyncAcademic}
-                      disabled={syncing}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                      title="Impor rentang libur semester ganjil, genap, dan awal puasa"
-                    >
-                      {syncing ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <BookOpen className="w-3.5 h-3.5" />
-                      )}
-                      <span>📚 Impor Libur Semester</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* Search Bar */}
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -770,7 +670,7 @@ export default function ModalKalenderLibur({
               ) : filteredList.length === 0 ? (
                 <div className="py-12 px-4 text-center bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-3xl space-y-3.5">
                   <div className="w-12 h-12 mx-auto rounded-2xl bg-purple-100 flex items-center justify-center text-purple-600 shadow-xs">
-                    <Calendar className="w-6 h-6" />
+                    <CalendarClock className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
                     <div className="text-sm font-bold text-slate-800">
@@ -781,34 +681,6 @@ export default function ModalKalenderLibur({
                       Gunakan fitur di bawah untuk mengimpor jadwal libur
                       semester atau unggah spreadsheet kalender sekolah.
                     </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("import_file")}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>📥 Upload Excel / CSV</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleSyncAcademic}
-                      disabled={syncing}
-                      className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      <span>📚 Impor Libur Semester & Kenaikan</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("tambah")}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Tambah Manual</span>
-                    </button>
                   </div>
                 </div>
               ) : (
@@ -934,42 +806,6 @@ export default function ModalKalenderLibur({
           {/* TAB 2: Impor File Excel / CSV Kaldik */}
           {activeTab === "import_file" && (
             <div className="max-w-2xl mx-auto space-y-4">
-              <div className="bg-indigo-50/70 border border-indigo-200/80 p-4 rounded-2xl flex items-start gap-3">
-                <FileSpreadsheet className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider">
-                    Impor File Kalender Akademik SMKN 21
-                  </h4>
-                  <p className="text-xs text-indigo-900/80 leading-relaxed">
-                    Punya rekap jadwal libur tahunan dari Tata Usaha (TU) atau
-                    Waka Kurikulum? Unggah file Excel (.xlsx) atau CSV (.csv)
-                    untuk memasukkan seluruh agenda libur 1 tahun ajaran secara
-                    otomatis tanpa input satu per satu.
-                  </p>
-                </div>
-              </div>
-
-              {/* Download Template Bar */}
-              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <p className="text-xs font-bold text-slate-800">
-                    Belum punya format tabel yang sesuai?
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Unduh template resmi SMKN 21 yang sudah dilengkapi contoh
-                    pengisian.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplate}
-                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-indigo-700 text-xs font-bold shadow-2xs transition-all cursor-pointer shrink-0"
-                >
-                  <Download className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Unduh Template (.xlsx)</span>
-                </button>
-              </div>
-
               {/* Upload Drop Zone Form */}
               <form onSubmit={handleUploadFile} className="space-y-4">
                 <div className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 rounded-3xl p-6 sm:p-8 text-center transition-all">
@@ -1049,10 +885,10 @@ export default function ModalKalenderLibur({
                     {!importStats.isError && (
                       <div className="text-[11px] text-emerald-800 flex gap-4 pl-7">
                         <span>
-                          ✅ Ditambahkan: <strong>{importStats.added}</strong>
+                          Ditambahkan <strong>{importStats.added}</strong>
                         </span>
                         <span>
-                          ℹ️ Dilewati (Sudah Ada):{" "}
+                          Dilewati (Sudah Ada):{" "}
                           <strong>{importStats.skipped}</strong>
                         </span>
                       </div>
@@ -1077,33 +913,6 @@ export default function ModalKalenderLibur({
                     )}
                   </div>
                 )}
-
-                {/* Submit Button */}
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImportFileObj(null);
-                      setImportStats(null);
-                      setActiveTab("daftar");
-                    }}
-                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!importFileObj || importLoading}
-                    className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs sm:text-sm font-bold shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-                  >
-                    {importLoading ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Upload className="w-4 h-4" />
-                    )}
-                    <span>Unggah & Impor Kalender</span>
-                  </button>
-                </div>
               </form>
             </div>
           )}
@@ -1114,25 +923,12 @@ export default function ModalKalenderLibur({
               onSubmit={handleSubmitForm}
               className="max-w-2xl mx-auto space-y-4"
             >
-              <div className="bg-purple-50/50 border border-purple-200/70 p-4 rounded-2xl flex items-center gap-3">
-                <Sparkles className="w-5 h-5 text-purple-600 shrink-0" />
-                <p className="text-xs text-purple-900 leading-relaxed">
-                  Jadwal libur yang didaftarkan di sini akan otomatis menutup
-                  scanner presensi dari hari Senin sampai Jumat, membekukan
-                  auto-alpa, dan mengecualikannya dari hari efektif belajar.
-                </p>
-              </div>
-
               {/* Pintasan Template Presets (Hanya tampil saat mode Tambah, bukan Edit) */}
               {!editingId && (
                 <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                      Pintasan Template Cepat (1-Klik Isi Form):
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Klik untuk isi formulir otomatis
+                      Preset Template Libur & Kegiatan
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -1203,10 +999,10 @@ export default function ModalKalenderLibur({
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm focus:ring-2 focus:ring-purple-400 focus:outline-hidden bg-white"
                   >
                     <option value="libur">
-                      🔴 Liburkan Sekolah (Tutup Presensi)
+                      Liburkan Sekolah (Tutup Presensi)
                     </option>
                     <option value="masuk_khusus">
-                      🔵 Wajib Masuk Khusus (Upacara / Presensi Tetap Buka)
+                      Wajib Masuk Khusus (Upacara / Presensi Tetap Buka)
                     </option>
                   </select>
                 </div>
@@ -1267,7 +1063,6 @@ export default function ModalKalenderLibur({
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Paperclip className="w-3.5 h-3.5 text-purple-600" />
                     7. Lampiran Berkas Surat Edaran (Opsional)
                   </span>
                   <span className="text-[10px] text-slate-400 font-normal lowercase">
@@ -1328,8 +1123,7 @@ export default function ModalKalenderLibur({
                           {formFileSurat.name}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {(formFileSurat.size / 1024).toFixed(1)} KB • Siap
-                          diunggah saat simpan
+                          {(formFileSurat.size / 1024).toFixed(1)} KB
                         </p>
                       </div>
                     </div>

@@ -137,6 +137,10 @@ export default function PortalPiket() {
       }
       if (resLibur.status === "fulfilled" && resLibur.value?.success) {
         setLiburStatus(resLibur.value);
+        if (!isAdmin && !resLibur.value.is_school_day) {
+          navigate("/libur", { replace: true });
+          return;
+        }
       }
     } catch (err) {
       // Fallback silent
@@ -169,7 +173,12 @@ export default function PortalPiket() {
         liburService
           .getStatusToday()
           .then((res) => {
-            if (res?.success) setLiburStatus(res);
+            if (res?.success) {
+              setLiburStatus(res);
+              if (!isAdmin && !res.is_school_day) {
+                navigate("/libur", { replace: true });
+              }
+            }
           })
           .catch(() => {});
       }
@@ -266,9 +275,6 @@ export default function PortalPiket() {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/25 border border-blue-400/30 text-[10px] sm:text-[11px] font-bold tracking-wide uppercase text-blue-200 mb-1">
-                Guru Piket SMKN 21
-              </span>
               <h1 className="text-lg sm:text-2xl font-extrabold tracking-tight truncate sm:whitespace-normal">
                 {user?.nama || "Bapak / Ibu Guru Piket"}
               </h1>
@@ -412,7 +418,7 @@ export default function PortalPiket() {
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0 self-start sm:self-auto"
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>📄 Lihat Surat Edaran Resmi</span>
+              <span> Lihat Surat Edaran Resmi</span>
             </button>
           )}
         </div>
@@ -719,10 +725,10 @@ export default function PortalPiket() {
           <div className="py-12 text-center text-slate-400 space-y-2">
             <ClipboardCheck className="w-10 h-10 mx-auto text-slate-300" />
             <p className="text-xs font-semibold text-slate-500">
-              Belum ada surat izin yang diterbitkan hari ini.
+              Belum ada surat izin yang diterbitkan hari ini
             </p>
             <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
-              Mencatat siswa yang terlambat atau meminta izin keluar kelas.
+              Mencatat siswa yang terlambat atau meminta izin keluar kelas
             </p>
           </div>
         )}

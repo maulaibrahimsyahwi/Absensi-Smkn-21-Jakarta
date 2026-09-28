@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import api from "../services/api";
+import { liburService } from "../services/liburService";
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,33 @@ export function AuthProvider({ children }) {
   });
 
   const [loadingAuth, setLoadingAuth] = useState(false);
+  const [todayStatus, setTodayStatus] = useState(null);
+  const [loadingTodayStatus, setLoadingTodayStatus] = useState(true);
+
+  const refreshTodayStatus = useCallback(async () => {
+    try {
+      const data = await liburService.getStatusToday();
+      if (data && data.success) {
+        setTodayStatus(data);
+        return data;
+      }
+    } catch (err) {
+      console.warn("Gagal mengecek status operasional sekolah:", err);
+    } finally {
+      setLoadingTodayStatus(false);
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    refreshTodayStatus();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshTodayStatus();
+      }
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [refreshTodayStatus]);
 
   // Simpan perubahan user ke localStorage
   useEffect(() => {
@@ -36,7 +64,9 @@ export function AuthProvider({ children }) {
         bc = new BroadcastChannel("smkn21_auth_channel");
         bc.onmessage = (event) => {
           const evtType = event.data?.type;
-          if (evtType === "FORCE_LOGOUT") {
+          if (evtType === "HOLIDAY_CHANGED" || evtType === "LIBUR_UPDATED") {
+            refreshTodayStatus();
+          } else if (evtType === "FORCE_LOGOUT") {
             setUser(null);
             if (!window.location.pathname.includes("/login")) {
               const reason =
@@ -320,6 +350,9 @@ export function AuthProvider({ children }) {
         updateUserProfile,
         updateName,
         loadingAuth,
+        todayStatus,
+        loadingTodayStatus,
+        refreshTodayStatus,
       }}
     >
       {children}

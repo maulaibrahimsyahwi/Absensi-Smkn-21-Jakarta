@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { liburService } from "../services/liburService";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -33,15 +34,9 @@ export default function Login() {
   // Jika sudah pernah login (sesi aktif), langsung arahkan ke portal masing-masing
   useEffect(() => {
     if (!loadingAuth && user) {
-      const targetPortal =
-        user.role === "siswa"
-          ? "/portal-siswa"
-          : user.role === "piket"
-            ? "/portal-piket"
-            : "/portal-admin";
-      navigate(targetPortal, { replace: true });
+      handleRedirect(user);
     }
-  }, [user, loadingAuth, navigate]);
+  }, [user, loadingAuth]);
 
   // Tangani query param redirect (akun dihapus atau sesi berakhir)
   useEffect(() => {
@@ -110,13 +105,27 @@ export default function Login() {
     }
   };
 
-  const handleRedirect = (user) => {
+  const handleRedirect = async (user) => {
+    if (user.role === "admin") {
+      navigate("/portal-admin", { replace: true });
+      return;
+    }
+
+    // Cek apakah hari ini sedang libur untuk siswa dan guru piket
+    try {
+      const statusToday = await liburService.getStatusToday();
+      if (statusToday && !statusToday.is_school_day) {
+        navigate("/libur", { replace: true });
+        return;
+      }
+    } catch (err) {
+      console.warn("Gagal mengecek status libur saat login:", err);
+    }
+
     const defaultPortal =
       user.role === "siswa"
         ? "/portal-siswa"
-        : user.role === "piket"
-          ? "/portal-piket"
-          : "/portal-admin";
+        : "/portal-piket";
 
     navigate(defaultPortal, { replace: true });
   };

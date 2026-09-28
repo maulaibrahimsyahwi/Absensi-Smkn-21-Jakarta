@@ -22,6 +22,7 @@ const PortalSiswa = React.lazy(() => import("./pages/PortalSiswa"));
 const PortalPiket = React.lazy(() => import("./pages/PortalPiket"));
 const PortalAdmin = React.lazy(() => import("./pages/PortalAdmin"));
 const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
+const HalamanLibur = React.lazy(() => import("./pages/HalamanLibur"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 import RouteAwareSkeleton from "./components/common/Skeleton";
@@ -33,6 +34,8 @@ function AppLayout() {
   // Mode kiosk layar penuh untuk kamera absensi (tanpa navbar & tanpa footer)
   const isKioskMode =
     location.pathname === "/harian" || location.pathname === "/perpus";
+  // Halaman mandiri khusus (kiosk kamera dan halaman libur mandiri)
+  const isStandalonePage = isKioskMode || location.pathname === "/libur";
 
   return (
     <div
@@ -43,7 +46,7 @@ function AppLayout() {
       }`}
     >
       <OfflineBanner />
-      {!isKioskMode && <Navbar />}
+      {!isStandalonePage && <Navbar />}
 
       <main
         className={
@@ -162,13 +165,26 @@ function AppLayout() {
               }
             />
 
+            {/* Rute Khusus Pengumuman Libur Sekolah (Siswa, Guru Piket, Admin) */}
+            <Route
+              path="/libur"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["siswa", "piket", "admin"]}
+                  allowOnHoliday={true}
+                >
+                  <HalamanLibur />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Rute Catch-All 404 Not Found */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </main>
 
-      {!isKioskMode && (
+      {!isStandalonePage && (
         <footer className="py-6 border-t border-slate-200 bg-white/80 text-center text-xs text-slate-500">
           <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
             <p className="font-medium text-slate-600">
@@ -179,7 +195,7 @@ function AppLayout() {
         </footer>
       )}
 
-      {!isKioskMode && <PwaInstallPrompt />}
+      {!isStandalonePage && <PwaInstallPrompt />}
     </div>
   );
 }

@@ -630,17 +630,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
 
         {/* Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-shrink-0">
-          <div className="text-xs text-slate-500">
-            {isActive ? (
-              <span className="font-semibold text-indigo-700">
-                Mode Daring Aktif
-              </span>
-            ) : (
-              <span>Seluruh kelas masuk normal</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 justify-between w-full">
             <button
               type="button"
               onClick={onClose}
@@ -666,7 +656,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
               </button>
             ) : (
               <span className="text-xs text-amber-600 font-semibold px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">
-                Mode Lihat (Khusus Admin)
+                Mode Lihat
               </span>
             )}
           </div>

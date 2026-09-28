@@ -166,7 +166,6 @@ def get_hari_libur_list():
 
 
 @libur_bp.route('/api/hari_libur/status_today', methods=['GET'])
-@token_required
 def check_status_today():
     """
     Mengambil status operasional sekolah untuk hari ini (apakah libur semester,

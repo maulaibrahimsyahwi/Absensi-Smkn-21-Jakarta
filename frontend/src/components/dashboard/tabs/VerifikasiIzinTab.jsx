@@ -371,7 +371,6 @@ export default function VerifikasiIzinTab({
                   >
                     <td className="py-4 px-5 text-slate-500 font-medium whitespace-nowrap text-xs">
                       <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
                         <span>{item.created_at}</span>
                       </div>
                     </td>

@@ -1007,7 +1007,7 @@ export default function Dashboard() {
                   </span>{" "}
                   dari{" "}
                   <span className="font-bold text-slate-800">{totalItems}</span>{" "}
-                  total entri data
+                  total data
                 </>
               )}
             </p>

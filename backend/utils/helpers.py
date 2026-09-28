@@ -141,7 +141,7 @@ def get_holiday_status(dt=None):
                 "is_weekend": is_weekend_cal,
                 "nama_hari": nama_hari,
                 "holiday_event": holiday.to_dict(),
-                "message": f"Hari ini adalah hari libur sekolah: {holiday.nama} ({holiday.keterangan or 'Presensi Ditutup'})."
+                "message": f"Hari ini adalah hari libur sekolah {holiday.nama} ({holiday.keterangan or 'Presensi Ditutup'})."
             }
     except Exception:
         # Fallback jika query DB gagal / belum inisialisasi
@@ -171,7 +171,7 @@ def get_holiday_status(dt=None):
                     "lampiran_surat": None,
                     "nama_file_surat": None,
                 },
-                "message": f"Hari ini adalah hari libur nasional: {nat_holiday['nama']}."
+                "message": f"Hari ini adalah hari libur nasional {nat_holiday['nama']}."
             }
     except Exception:
         pass
