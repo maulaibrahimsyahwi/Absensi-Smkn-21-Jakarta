@@ -3,6 +3,8 @@ from datetime import datetime, time, date
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket, PelanggaranSiswa, PengaturanPJJ
 from utils.helpers import validate_siswa_input, invalidate_face_cache, is_kelas_pjj, is_school_day, is_presensi_open
 from utils.auth_middleware import token_required, role_required
+from utils.audit_trail import record_audit_log
+from utils.realtime_bus import notify_data_changed
 
 siswa_bp = Blueprint('siswa', __name__)
 
@@ -13,7 +15,10 @@ siswa_bp = Blueprint('siswa', __name__)
 @role_required(['admin', 'piket'])
 def get_siswa():
     status_filter = request.args.get('status')
+    include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
     query = Siswa.query
+    if not include_deleted:
+        query = query.filter((Siswa.is_deleted == False) | (Siswa.is_deleted == None))
     if status_filter and status_filter != 'ALL':
         query = query.filter(Siswa.status == status_filter)
     siswa_list = query.order_by(Siswa.nama.asc()).all()
@@ -26,6 +31,7 @@ def get_siswa():
 def add_siswa():
     data = request.json or {}
     nis = str(data.get('nis', '')).strip()
+    nisn = str(data.get('nisn', '')).strip() or None
     nama = str(data.get('nama', '')).strip()
     kelas = str(data.get('kelas', '')).strip().upper()
 
@@ -40,16 +46,17 @@ def add_siswa():
             return jsonify({"success": False, "message": f"NIS {nis} sudah digunakan oleh {existing.nama} ({existing.kelas})"}), 400
 
         status_input = str(data.get('status', 'Aktif')).strip()
-        if status_input not in ["Aktif", "Alumni"]:
+        if status_input not in ["Aktif", "Alumni", "Mutasi"]:
             status_input = "Aktif"
 
         jenis_kelamin_input = str(data.get('jenis_kelamin', 'Laki-laki')).strip()
         if jenis_kelamin_input not in ["Laki-laki", "Perempuan"]:
             jenis_kelamin_input = "Laki-laki"
 
-        baru = Siswa(nis=nis, nama=nama, kelas=kelas, status=status_input, jenis_kelamin=jenis_kelamin_input)
+        baru = Siswa(nis=nis, nisn=nisn, nama=nama, kelas=kelas, status=status_input, jenis_kelamin=jenis_kelamin_input)
         db.session.add(baru)
         db.session.commit()
+        notify_data_changed("siswa")
         gender_label = "Siswi" if jenis_kelamin_input == "Perempuan" else "Siswa"
         return jsonify({"success": True, "message": f"{gender_label} {nama} ({kelas}) berhasil didaftarkan", "id": baru.id})
     except Exception as e:
@@ -84,6 +91,7 @@ def batch_import_siswa():
     try:
         for idx, item in enumerate(students):
             nis = str(item.get('nis', '')).strip()
+            nisn = str(item.get('nisn', '')).strip() or None
             nama = str(item.get('nama', '')).strip()
             kelas = str(item.get('kelas', '')).strip().upper()
             jk_raw = str(item.get('jenis_kelamin', '')).strip().lower()
@@ -111,12 +119,15 @@ def batch_import_siswa():
                     if kelas:
                         target.kelas = kelas
                     target.jenis_kelamin = jenis_kelamin
+                    if nisn:
+                        target.nisn = nisn
                     updated_count += 1
                 else:
                     skipped_count += 1
             else:
                 baru = Siswa(
                     nis=nis,
+                    nisn=nisn,
                     nama=nama,
                     kelas=kelas if kelas else "UMUM",
                     status="Aktif",
@@ -128,6 +139,7 @@ def batch_import_siswa():
 
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
 
         msg = f"Import selesai {added_count} siswa baru ditambahkan, {updated_count} diperbarui"
         if skipped_count > 0:
@@ -161,6 +173,7 @@ def update_siswa(id):
     nis = str(data.get('nis', siswa.nis)).strip()
     nama = str(data.get('nama', siswa.nama)).strip()
     kelas = str(data.get('kelas', siswa.kelas)).strip().upper()
+    nisn = data.get('nisn')
     status_input = data.get('status')
     jenis_kelamin_input = data.get('jenis_kelamin')
 
@@ -176,16 +189,23 @@ def update_siswa(id):
             siswa.nis = nis
         siswa.nama = nama
         siswa.kelas = kelas
+        if nisn is not None:
+            siswa.nisn = str(nisn).strip() or None
         if jenis_kelamin_input and jenis_kelamin_input in ["Laki-laki", "Perempuan"]:
             siswa.jenis_kelamin = jenis_kelamin_input
-        if status_input and status_input in ["Aktif", "Alumni"]:
+        if status_input and status_input in ["Aktif", "Alumni", "Mutasi"]:
             siswa.status = status_input
             if status_input == "Alumni" and not siswa.tanggal_lulus:
                 siswa.tanggal_lulus = datetime.now()
-            elif status_input == "Aktif":
+            elif status_input in ["Aktif", "Mutasi"]:
                 siswa.tanggal_lulus = None
+            if status_input == "Mutasi":
+                siswa.is_deleted = True
+            elif status_input == "Aktif":
+                siswa.is_deleted = False
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
         return jsonify({"success": True, "message": f"Data {siswa.nama} berhasil diperbarui", "siswa": siswa.to_dict()})
     except Exception as e:
         db.session.rollback()
@@ -211,6 +231,7 @@ def update_siswa_status(id):
             siswa.tanggal_lulus = None
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
             "success": True,
@@ -246,6 +267,7 @@ def bulk_update_siswa_status():
                 s.tanggal_lulus = None
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
         updated_count = len(target_records)
         status_label = "Alumni / Lulus" if new_status == "Alumni" else "Aktif"
         return jsonify({
@@ -289,6 +311,7 @@ def luluskan_tingkat():
             
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
         return jsonify({
             "success": True,
             "count": target_count,
@@ -310,20 +333,20 @@ def bulk_delete_siswa():
         return jsonify({"success": False, "message": "Daftar siswa_ids wajib disertakan."}), 400
 
     try:
-        # Hapus riwayat absensi, perpustakaan, pengajuan izin, izin piket, dan pelanggaran siswa terkait
-        AbsensiHarian.query.filter(AbsensiHarian.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
-        AbsensiPerpustakaan.query.filter(AbsensiPerpustakaan.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
-        PengajuanIzin.query.filter(PengajuanIzin.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
-        IzinPiket.query.filter(IzinPiket.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
-        PelanggaranSiswa.query.filter(PelanggaranSiswa.siswa_id.in_(siswa_ids)).delete(synchronize_session=False)
-        
-        deleted_count = Siswa.query.filter(Siswa.id.in_(siswa_ids)).delete(synchronize_session=False)
+        # Soft delete massal untuk audit Dapodik: tandai is_deleted = True & status = 'Mutasi'
+        # Riwayat absensi dan pelanggaran siswa tetap diarsipkan utuh
+        target_records = Siswa.query.filter(Siswa.id.in_(siswa_ids)).all()
+        for s in target_records:
+            s.is_deleted = True
+            s.status = 'Mutasi'
+        deleted_count = len(target_records)
         db.session.commit()
         invalidate_face_cache()
+        notify_data_changed("siswa")
         return jsonify({
             "success": True,
             "count": deleted_count,
-            "message": f"{deleted_count} data siswa dan seluruh riwayat presensinya berhasil dihapus dari database."
+            "message": f"{deleted_count} data siswa berhasil diarsipkan (Status: Mutasi / Terhapus). Seluruh riwayat presensi tetap aman dalam arsip Dapodik."
         })
     except Exception as e:
         db.session.rollback()
@@ -339,16 +362,14 @@ def delete_siswa(id):
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
     try:
         nama_siswa = siswa.nama
-        # Hapus seluruh riwayat terkait termasuk pelanggaran siswa
-        AbsensiHarian.query.filter_by(siswa_id=id).delete()
-        AbsensiPerpustakaan.query.filter_by(siswa_id=id).delete()
-        PengajuanIzin.query.filter_by(siswa_id=id).delete()
-        IzinPiket.query.filter_by(siswa_id=id).delete()
-        PelanggaranSiswa.query.filter_by(siswa_id=id).delete()
-        db.session.delete(siswa)
+        # Soft delete: tandai is_deleted = True dan status = 'Mutasi'
+        # Riwayat absensi dan pelanggaran tetap diarsipkan untuk kepatuhan audit Dapodik
+        siswa.is_deleted = True
+        siswa.status = 'Mutasi'
         db.session.commit()
         invalidate_face_cache()
-        return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil dihapus dari database."})
+        notify_data_changed("siswa")
+        return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil diarsipkan (Status: Mutasi / Terhapus). Riwayat tetap tersimpan untuk audit Dapodik."})
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -359,18 +380,19 @@ def delete_siswa(id):
 def cek_siswa_nis(nis):
     nis = str(nis or '').strip()
     siswa = Siswa.query.filter_by(nis=nis).first()
-    if not siswa:
-        return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan."}), 404
-    if getattr(siswa, 'status', 'Aktif') == 'Alumni':
+    if not siswa or siswa.is_deleted:
+        return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan atau sudah dimutasi."}), 404
+    if getattr(siswa, 'status', 'Aktif') in ['Alumni', 'Mutasi']:
         return jsonify({
             "success": False,
-            "message": f"Siswa {siswa.nama} ({siswa.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat melakukan presensi atau perizinan."
+            "message": f"Siswa {siswa.nama} ({siswa.kelas}) sudah berstatus {siswa.status} dan tidak dapat melakukan presensi atau perizinan."
         }), 400
     return jsonify({
         "success": True,
         "siswa": {
             "id": siswa.id,
             "nis": siswa.nis,
+            "nisn": siswa.nisn,
             "nama": siswa.nama,
             "kelas": siswa.kelas,
             "status": siswa.status or "Aktif"
@@ -607,4 +629,134 @@ def get_siswa_notifikasi():
         "total": len(notifikasi),
         "notifikasi": notifikasi
     })
+
+
+# ================= KENAIKAN KELAS MASSAL & DISPENSASI MEDIS BIOMETRIK =================
+
+@siswa_bp.route('/api/siswa/naik_kelas_massal', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def naik_kelas_massal():
+    """
+    Endpoint Kenaikan Kelas Massal & Pergantian Tahun Ajaran (Bulk Grade Promotion / Rollover).
+    Memungkinkan admin menaikkan kelas seluruh siswa dalam satu rombel sekaligus (misal X PPLG 1 -> XI PPLG 1),
+    atau meluluskan tingkat XII menjadi Alumni secara massal.
+    """
+    data = request.json or {}
+    kelas_asal = str(data.get('kelas_asal', '')).strip().upper()
+    kelas_tujuan = str(data.get('kelas_tujuan', '')).strip().upper()
+    siswa_ids = data.get('siswa_ids', [])
+    aksi = str(data.get('aksi', 'naik')).strip().lower()  # 'naik' atau 'lulus'
+
+    if not kelas_asal:
+        return jsonify({"success": False, "message": "Kelas asal wajib dipilih."}), 400
+
+    if aksi == 'naik' and not kelas_tujuan:
+        return jsonify({"success": False, "message": "Kelas tujuan kenaikan kelas wajib diisi."}), 400
+
+    try:
+        query = Siswa.query.filter(
+            Siswa.kelas == kelas_asal,
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None),
+            Siswa.status == 'Aktif'
+        )
+
+        # Jika diberikan filter daftar siswa terpilih (misal mengecualikan siswa yang tinggal kelas)
+        if siswa_ids and isinstance(siswa_ids, list) and len(siswa_ids) > 0:
+            query = query.filter(Siswa.id.in_(siswa_ids))
+
+        target_students = query.all()
+        if not target_students:
+            return jsonify({
+                "success": False,
+                "message": f"Tidak ditemukan siswa aktif di kelas {kelas_asal} untuk diproses."
+            }), 404
+
+        count = len(target_students)
+        now_dt = datetime.now()
+
+        for s in target_students:
+            if aksi == 'lulus' or kelas_tujuan == 'ALUMNI':
+                s.status = 'Alumni'
+                s.tanggal_lulus = now_dt
+            else:
+                s.kelas = kelas_tujuan
+
+        db.session.commit()
+        invalidate_face_cache()
+        notify_data_changed("siswa")
+
+        current_u = getattr(request, 'current_user', {})
+        aksi_desc = f"Kelulusan ({count} siswa menjadi Alumni)" if (aksi == 'lulus' or kelas_tujuan == 'ALUMNI') else f"Kenaikan kelas dari {kelas_asal} ke {kelas_tujuan} ({count} siswa)"
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='KENAIKAN_KELAS_MASSAL',
+            target_type='Siswa',
+            target_id=f"ROMBEL_{kelas_asal}",
+            keterangan=f"Memproses {aksi_desc}"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"Berhasil memproses {aksi_desc}.",
+            "updated_count": count
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@siswa_bp.route('/api/siswa/<int:id>/medical_exemption', methods=['POST'])
+@token_required
+@role_required(['admin', 'piket'])
+def set_medical_exemption(id):
+    """
+    Endpoint Pengecualian Medis Khusus Biometrik (Medical Exemption Pass).
+    Digunakan untuk siswa dengan kondisi medis (misal: perban luka bakar, pasca operasi wajah/rahang)
+    yang untuk sementara waktu tidak dapat dideteksi oleh algoritma face recognition.
+    """
+    siswa = Siswa.query.get(id)
+    if not siswa:
+        return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+
+    data = request.json or {}
+    exempt_until_str = data.get('exempt_until')  # "YYYY-MM-DD" or None to clear
+    alasan = str(data.get('alasan', '')).strip()
+
+    try:
+        if exempt_until_str:
+            exempt_date = datetime.strptime(exempt_until_str, "%Y-%m-%d").date()
+            siswa.medical_exemption_until = exempt_date
+            siswa.medical_exemption_alasan = alasan or "Dispensasi medis biometrik wajah disetujui sekolah"
+            status_msg = f"Dispensasi medis wajah aktif hingga {exempt_date.strftime('%d/%m/%Y')}."
+        else:
+            siswa.medical_exemption_until = None
+            siswa.medical_exemption_alasan = None
+            status_msg = "Dispensasi medis wajah berhasil dinonaktifkan."
+
+        db.session.commit()
+        notify_data_changed("siswa")
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=current_u.get('identifier', 'Petugas'),
+            action='DISPENSASI_MEDIS_BIOMETRIK',
+            target_type='Siswa',
+            target_id=str(siswa.id),
+            keterangan=f"Mengatur dispensasi medis wajah siswa {siswa.nama} ({siswa.nis}): {status_msg}"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"{status_msg} ({siswa.nama} - {siswa.kelas})",
+            "data": siswa.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+
 

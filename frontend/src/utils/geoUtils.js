@@ -137,7 +137,7 @@ export function detectMockGps(currentPos, prevPos = lastGpsSample) {
     if (accuracy > 0 && accuracy < 1.8) {
       return {
         isMock: true,
-        reason: `Akurasi sensor GPS mencurigakan (${accuracy}m). Terindikasi aplikasi Fake GPS / emulator.`,
+        reason: `Akurasi sensor Lokasi mencurigakan (${accuracy}m). Terindikasi aplikasi Fake GPS`,
       };
     }
   }
@@ -157,8 +157,7 @@ export function detectMockGps(currentPos, prevPos = lastGpsSample) {
       if (latDiff < 1e-7 && lngDiff < 1e-7) {
         return {
           isMock: true,
-          reason:
-            "Koordinat Lokasi tidak wajar. Terindikasi aplikasi Fake GPS.",
+          reason: "Lokasi Koordinat Anda tidak wajar",
         };
       }
     }

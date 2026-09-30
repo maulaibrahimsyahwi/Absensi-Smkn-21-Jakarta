@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
   ArrowLeft,
-  RefreshCw,
   CheckCircle2,
   AlertCircle,
   Info,
@@ -20,7 +19,11 @@ import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
 import LuluskanModal from "../components/registrasi/LuluskanModal";
 import ResetSiswaModals from "../components/registrasi/ResetSiswaModals";
 import ModalImportDapodik from "../components/registrasi/ModalImportDapodik";
+import KenaikanKelasModal from "../components/registrasi/KenaikanKelasModal";
+import MedicalExemptionModal from "../components/registrasi/MedicalExemptionModal";
 import ToastNotification from "../components/common/ToastNotification";
+import RealtimeBadge from "../components/common/RealtimeBadge";
+import { useRealtimeSubscription } from "../services/realtimeService";
 import { downloadDapodikTemplate } from "../utils/dapodikUtils";
 
 import {
@@ -79,7 +82,12 @@ export default function RegistrasiSiswa() {
   const [resettingPasswordSiswa, setResettingPasswordSiswa] = useState(null);
   const [resettingFaceSiswa, setResettingFaceSiswa] = useState(null);
   const [resettingSignatureSiswa, setResettingSignatureSiswa] = useState(null);
+  const [resetting2faSiswa, setResetting2faSiswa] = useState(null);
   const [resettingLoading, setResettingLoading] = useState(false);
+
+  // Kenaikan Kelas Massal & Medical Exemption Modals State
+  const [isKenaikanModalOpen, setIsKenaikanModalOpen] = useState(false);
+  const [medicalExemptionSiswa, setMedicalExemptionSiswa] = useState(null);
 
   const fetchSiswa = async (isManual = false) => {
     setLoadingList(true);
@@ -112,6 +120,11 @@ export default function RegistrasiSiswa() {
   useEffect(() => {
     fetchSiswa();
   }, []);
+
+  // Sinkronisasi realtime otomatis data registrasi siswa
+  useRealtimeSubscription(["siswa"], () => {
+    fetchSiswa(false);
+  });
 
   // Auto-dismiss floating toast notification setelah 5 detik
   useEffect(() => {
@@ -580,6 +593,29 @@ export default function RegistrasiSiswa() {
     }
   };
 
+  const handleReset2faConfirm = async () => {
+    if (!resetting2faSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(`/siswa/${resetting2faSiswa.id}/reset_2fa`);
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Autentikasi 2FA ${resetting2faSiswa.nama} berhasil dinonaktifkan.`,
+      });
+      setResetting2faSiswa(null);
+      fetchSiswa();
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mereset 2FA siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
   // Perhitungan Data & Filter
   const totalAktif = siswaList.filter(
     (s) => (s.status || "Aktif") === "Aktif",
@@ -681,18 +717,7 @@ export default function RegistrasiSiswa() {
             <span>Import Dapodik</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => fetchSiswa(true)}
-            disabled={loadingList}
-            className="inline-flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-            title="Segarkan data siswa"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${loadingList ? "animate-spin text-blue-600" : ""}`}
-            />
-            <span>{loadingList ? "Menyegarkan..." : "Refresh"}</span>
-          </button>
+          <RealtimeBadge />
         </div>
       </div>
 
@@ -749,6 +774,8 @@ export default function RegistrasiSiswa() {
           totalAlumni={totalAlumni}
           totalKelasXIIAktif={totalKelasXIIAktif}
           onLuluskanTingkatXII={handleLuluskanTingkatXII}
+          onKenaikanKelasMassal={() => setIsKenaikanModalOpen(true)}
+          onMedicalExemption={(s) => setMedicalExemptionSiswa(s)}
           onLuluskanSelected={handleLuluskanSelected}
           onLuluskanSingle={handleLuluskanSingle}
           onAktifkanSingle={handleAktifkanSingle}
@@ -767,6 +794,7 @@ export default function RegistrasiSiswa() {
           onResetPassword={(s) => setResettingPasswordSiswa(s)}
           onResetFace={(s) => setResettingFaceSiswa(s)}
           onResetSignature={(s) => setResettingSignatureSiswa(s)}
+          onReset2fa={(s) => setResetting2faSiswa(s)}
           onBulkDelete={() => setBulkDeleting(true)}
           loading={loadingList}
         />
@@ -810,7 +838,7 @@ export default function RegistrasiSiswa() {
         siswaList={siswaList}
       />
 
-      {/* Modal Konfirmasi Reset Password, Wajah, dan TTD Siswa */}
+      {/* Modal Konfirmasi Reset Password, Wajah, TTD, dan 2FA Siswa */}
       <ResetSiswaModals
         resettingPasswordSiswa={resettingPasswordSiswa}
         setResettingPasswordSiswa={setResettingPasswordSiswa}
@@ -821,6 +849,9 @@ export default function RegistrasiSiswa() {
         resettingSignatureSiswa={resettingSignatureSiswa}
         setResettingSignatureSiswa={setResettingSignatureSiswa}
         handleResetSignatureConfirm={handleResetSignatureConfirm}
+        resetting2faSiswa={resetting2faSiswa}
+        setResetting2faSiswa={setResetting2faSiswa}
+        handleReset2faConfirm={handleReset2faConfirm}
         loading={resettingLoading}
       />
 
@@ -884,6 +915,27 @@ export default function RegistrasiSiswa() {
           fetchSiswa(true);
         }}
         existingSiswaList={siswaList}
+      />
+
+      {/* Modal Kenaikan Kelas Massal */}
+      <KenaikanKelasModal
+        isOpen={isKenaikanModalOpen}
+        onClose={() => setIsKenaikanModalOpen(false)}
+        onSuccess={(msg) => {
+          fetchSiswa(true);
+          setNotification({ type: "success", message: msg });
+        }}
+      />
+
+      {/* Modal Dispensasi Medis Biometrik Wajah */}
+      <MedicalExemptionModal
+        isOpen={Boolean(medicalExemptionSiswa)}
+        targetSiswa={medicalExemptionSiswa}
+        onClose={() => setMedicalExemptionSiswa(null)}
+        onSuccess={(msg) => {
+          fetchSiswa(true);
+          setNotification({ type: "success", message: msg });
+        }}
       />
     </div>
   );

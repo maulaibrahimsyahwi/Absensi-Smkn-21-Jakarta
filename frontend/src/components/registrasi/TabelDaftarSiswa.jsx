@@ -16,6 +16,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ShieldOff,
+  Activity,
 } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
 import { getJurusanInfo } from "../../constants/schoolData";
@@ -40,6 +42,8 @@ export default function TabelDaftarSiswa({
   totalAlumni,
   totalKelasXIIAktif,
   onLuluskanTingkatXII,
+  onKenaikanKelasMassal,
+  onMedicalExemption,
   onLuluskanSelected,
   onLuluskanSingle,
   onAktifkanSingle,
@@ -49,6 +53,7 @@ export default function TabelDaftarSiswa({
   onResetPassword,
   onResetFace,
   onResetSignature,
+  onReset2fa,
   onBulkDelete,
   loading = false,
 }) {
@@ -168,6 +173,16 @@ export default function TabelDaftarSiswa({
 
           <button
             type="button"
+            onClick={onKenaikanKelasMassal}
+            title="Kenaikan Kelas Massal & Rollover Tahun Ajaran"
+            className="py-2 px-3 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap flex-shrink-0"
+          >
+            <span className="hidden sm:inline">Kenaikan Kelas Massal</span>
+            <span className="sm:hidden">Naik Kelas</span>
+          </button>
+
+          <button
+            type="button"
             onClick={onLuluskanTingkatXII}
             disabled={totalKelasXIIAktif === 0}
             title={
@@ -282,6 +297,18 @@ export default function TabelDaftarSiswa({
                           <span>Aktif</span>
                         </span>
                       )}
+
+                      {s.medical_exemption_until &&
+                        new Date(s.medical_exemption_until) >=
+                          new Date(new Date().toDateString()) && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-200"
+                            title={`Dispensasi Medis s/d ${s.medical_exemption_until}: ${s.medical_exemption_alasan || "Pengecualian biometrik"}`}
+                          >
+                            <Activity className="w-2.5 h-2.5 text-teal-600" />
+                            <span>Dispensasi Medis</span>
+                          </span>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -326,6 +353,16 @@ export default function TabelDaftarSiswa({
                       <span>Luluskan</span>
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => onMedicalExemption && onMedicalExemption(s)}
+                    className="py-1.5 px-2 rounded-lg text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Dispensasi Medis Biometrik"
+                  >
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Dispensasi Medis</span>
+                  </button>
 
                   <button
                     type="button"
@@ -378,6 +415,16 @@ export default function TabelDaftarSiswa({
                       <span>Reset TTD</span>
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => onReset2fa && onReset2fa(s)}
+                    className="py-1.5 px-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Reset 2FA Authenticator"
+                  >
+                    <ShieldOff className="w-3.5 h-3.5" />
+                    <span>Reset 2FA</span>
+                  </button>
 
                   <button
                     type="button"
@@ -499,6 +546,17 @@ export default function TabelDaftarSiswa({
                     <td className="p-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-bold text-slate-900">{s.nama}</p>
+                        {s.medical_exemption_until &&
+                          new Date(s.medical_exemption_until) >=
+                            new Date(new Date().toDateString()) && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-200"
+                              title={`Dispensasi Medis s/d ${s.medical_exemption_until}: ${s.medical_exemption_alasan || "Pengecualian biometrik"}`}
+                            >
+                              <Activity className="w-2.5 h-2.5 text-teal-600" />
+                              <span>Dispensasi Medis</span>
+                            </span>
+                          )}
                       </div>
                       <p className="text-[11px] text-slate-400 font-mono">
                         NIS {s.nis}
@@ -594,6 +652,24 @@ export default function TabelDaftarSiswa({
                             <PenTool className="w-3.5 h-3.5" />
                           </button>
                         )}
+
+                        <button
+                          title={`Dispensasi Medis Biometrik ${s.nama}`}
+                          onClick={() =>
+                            onMedicalExemption && onMedicalExemption(s)
+                          }
+                          className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors border border-teal-200 cursor-pointer"
+                        >
+                          <Activity className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          title={`Reset 2FA Authenticator ${s.nama}`}
+                          onClick={() => onReset2fa && onReset2fa(s)}
+                          className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors border border-rose-200 cursor-pointer"
+                        >
+                          <ShieldOff className="w-3.5 h-3.5" />
+                        </button>
 
                         <button
                           title="Hapus Permanen dari Database"

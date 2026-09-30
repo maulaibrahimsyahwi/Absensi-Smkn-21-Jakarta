@@ -5,6 +5,8 @@ html {
   overflow-x: hidden;
   max-width: 100vw;
   width: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -21,6 +23,33 @@ body {
   overflow-x: hidden;
   max-width: 100vw;
   width: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimalisasi Input Mobile: Mencegah iOS Safari auto-zoom paksa saat fokus pada input */
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch momentum scroll untuk peramban mobile */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area insets untuk smartphone berponi (Notch / Dynamic Island / Gesture Bar) */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+.safe-area-bottom-nav {
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
 }
 
 @keyframes scanline {

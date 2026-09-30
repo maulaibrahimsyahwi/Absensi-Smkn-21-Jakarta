@@ -4,9 +4,10 @@ from datetime import datetime, timezone, timedelta
 from flask import request, jsonify, current_app
 from config import JWT_SECRET_KEY
 
-def generate_token(user_id, role, identifier, expires_in_hours=24):
+def generate_token(user_id, role, identifier, expires_in_hours=24, session_token=None):
     """
-    Menghasilkan token JWT HS256 yang ditandatangani secara kriptografis.
+    Menghasilkan token JWT HS256 yang ditandatangani secara kriptografis
+    beserta pelacakan session_token untuk Single Active Device.
     """
     secret = current_app.config.get('JWT_SECRET_KEY') or JWT_SECRET_KEY
     now = datetime.now(timezone.utc)
@@ -15,6 +16,7 @@ def generate_token(user_id, role, identifier, expires_in_hours=24):
         'user_id': user_id,
         'role': role.lower() if role else 'siswa',
         'identifier': str(identifier),
+        'session_token': str(session_token) if session_token else None,
         'iat': now,
         'exp': now + timedelta(hours=expires_in_hours)
     }
@@ -107,6 +109,17 @@ def token_required(f):
                     }), 401
             
             request.current_user_obj = user_account
+
+            # ================= MULTI-DEVICE / SINGLE ACTIVE SESSION ENFORCEMENT =================
+            # Jika akun sudah login di perangkat lain, sesi di perangkat lama langsung ditolak
+            session_token = payload.get('session_token')
+            if user_account and hasattr(user_account, 'active_session_token') and user_account.active_session_token:
+                if session_token and session_token != user_account.active_session_token:
+                    return jsonify({
+                        'status': 'error',
+                        'error_code': 'SESSION_TERMINATED',
+                        'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda.'
+                    }), 401
         except Exception as db_err:
             # Jika terjadi error koneksi database, log dan izinkan payload yang valid tetap berjalan agar tidak memblokir sementara
             current_app.logger.warning(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")

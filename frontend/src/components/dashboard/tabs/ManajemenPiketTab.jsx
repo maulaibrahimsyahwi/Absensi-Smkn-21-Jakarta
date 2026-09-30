@@ -15,13 +15,14 @@ import {
   Loader2,
   X,
   Search,
-  RefreshCw,
   Lock,
   Calendar,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
+import RealtimeBadge from "../../common/RealtimeBadge";
+import { useRealtimeSubscription } from "../../../services/realtimeService";
 
 export default function ManajemenPiketTab() {
   const [stafList, setStafList] = useState([]);
@@ -80,6 +81,11 @@ export default function ManajemenPiketTab() {
   useEffect(() => {
     fetchStafList();
   }, []);
+
+  // Sinkronisasi realtime otomatis saat data staf/piket diperbarui
+  useRealtimeSubscription(["piket", "siswa"], () => {
+    fetchStafList();
+  });
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -392,7 +398,7 @@ export default function ManajemenPiketTab() {
         </div>
       </div>
 
-      {/* Toolbar Pencarian & Refresh */}
+      {/* Toolbar Pencarian & Realtime Status */}
       <div className="flex items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -405,18 +411,7 @@ export default function ManajemenPiketTab() {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={fetchStafList}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer disabled:opacity-50 flex-shrink-0"
-          title="Segarkan daftar"
-        >
-          <RefreshCw
-            className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`}
-          />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
+        <RealtimeBadge />
       </div>
 
       {/* Tabel & Kartu Data Staf / Guru Piket */}
@@ -773,7 +768,7 @@ export default function ManajemenPiketTab() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
               {/* Header */}
-              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 text-white flex items-center justify-between">
+              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 text-white flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div>
                     <h4 className="text-base font-bold">
@@ -794,7 +789,7 @@ export default function ManajemenPiketTab() {
               </div>
 
               {/* Form Body */}
-              <form onSubmit={handleCreateStaf} className="p-5 space-y-4">
+              <form onSubmit={handleCreateStaf} className="p-5 space-y-3">
                 {addError && (
                   <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -833,9 +828,6 @@ export default function ManajemenPiketTab() {
                     className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
                     required
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Pendaftaran guru piket cukup menggunakan NIP.
-                  </p>
                 </div>
 
                 <div>
@@ -855,7 +847,7 @@ export default function ManajemenPiketTab() {
                   />
                   <p className="text-[11px] text-blue-600 mt-1 font-medium">
                     * Kata sandi awal otomatis sama seperti NIP guru jika
-                    dikosongkan.
+                    dikosongkan
                   </p>
                 </div>
 
@@ -994,7 +986,7 @@ export default function ManajemenPiketTab() {
         createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
             <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              <div className="p-5 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
+              <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
                 <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700">
                   <KeyRound className="w-5 h-5" />
                 </div>
@@ -1009,7 +1001,7 @@ export default function ManajemenPiketTab() {
               <form onSubmit={handleResetPassword} className="p-5 space-y-4">
                 <p className="text-xs text-slate-600">
                   Atur ulang kata sandi akun guru piket ini agar guru dapat
-                  login kembali jika lupa kata sandinya.
+                  login kembali jika lupa kata sandinya
                 </p>
 
                 <div>

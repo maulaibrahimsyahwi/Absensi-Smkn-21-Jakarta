@@ -17,7 +17,6 @@ import {
   Printer,
   FileText,
   AlertTriangle,
-  RotateCcw,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -36,9 +35,10 @@ import {
 import DashboardPagination from "../DashboardPagination";
 import CustomDropdown from "../../CustomDropdown";
 import CustomDatePicker from "../../CustomDatePicker";
-import { Skeleton } from "../../common/Skeleton";
 import ToastNotification from "../../common/ToastNotification";
+import RealtimeBadge from "../../common/RealtimeBadge";
 import { useAuth } from "../../../context/AuthContext";
+import { useRealtimeSubscription } from "../../../services/realtimeService";
 
 export default function BukuPelanggaranTab({
   selectedBulan,
@@ -161,6 +161,11 @@ export default function BukuPelanggaranTab({
   useEffect(() => {
     fetchData();
   }, [kelasFilter, tanggalFilter, selectedBulan, selectedTahun, periodeMode]);
+
+  // Sinkronisasi realtime otomatis data buku pelanggaran & reward prestasi
+  useRealtimeSubscription(["pelanggaran", "siswa"], () => {
+    fetchData();
+  });
 
   // Handle Export Direct dari Tab Buku Pelanggaran
   const handleExportDirect = async (format = "pdf") => {
@@ -527,17 +532,7 @@ export default function BukuPelanggaranTab({
           <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
             Daftar Catatan Pelanggaran ({records.length})
           </h4>
-          <button
-            type="button"
-            onClick={fetchData}
-            disabled={loading}
-            className="text-xs text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
-          >
-            <RotateCcw
-              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
-            />
-            <span>Refresh</span>
-          </button>
+          <RealtimeBadge label="Realtime" />
         </div>
 
         {/* Slider Batas Data & Navigasi Halaman Atas */}
@@ -564,13 +559,30 @@ export default function BukuPelanggaranTab({
               >
                 {/* Baris Atas: Tanggal/Waktu & Poin Badge */}
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-mono text-slate-500 font-medium">
-                    {r.tanggal_waktu_formatted}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] font-mono text-slate-500 font-medium">
+                      {r.tanggal_waktu_formatted}
+                    </span>
+                    {r.kategori === "Prestasi" ? (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Prestasi
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
+                        Pelanggaran
+                      </span>
+                    )}
+                  </div>
                   <span
-                    className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${kat.badge}`}
+                    className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
+                      r.kategori === "Prestasi"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : kat.badge
+                    }`}
                   >
-                    {r.poin} Poin
+                    {r.kategori === "Prestasi"
+                      ? `+${r.poin} Poin`
+                      : `${r.poin} Poin`}
                   </span>
                 </div>
 
@@ -589,10 +601,12 @@ export default function BukuPelanggaranTab({
                   </span>
                 </div>
 
-                {/* Jenis Pelanggaran */}
+                {/* Jenis Pelanggaran / Prestasi */}
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                    Pelanggaran
+                    {r.kategori === "Prestasi"
+                      ? "Bentuk Prestasi / Reward"
+                      : "Pelanggaran"}
                   </span>
                   <p className="font-semibold text-slate-800 line-clamp-2 leading-relaxed">
                     {r.jenis_pelanggaran}
@@ -796,6 +810,17 @@ export default function BukuPelanggaranTab({
                       {r.kelas}
                     </td>
                     <td className="px-4 py-3 max-w-xs">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {r.kategori === "Prestasi" ? (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                            Prestasi
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider">
+                            Pelanggaran
+                          </span>
+                        )}
+                      </div>
                       <p
                         className="font-semibold text-slate-800 line-clamp-2"
                         title={r.jenis_pelanggaran}
@@ -805,9 +830,13 @@ export default function BukuPelanggaranTab({
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${kat.badge}`}
+                        className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
+                          r.kategori === "Prestasi"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : kat.badge
+                        }`}
                       >
-                        {r.poin}
+                        {r.kategori === "Prestasi" ? `+${r.poin}` : r.poin}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
@@ -1016,9 +1045,24 @@ export default function BukuPelanggaranTab({
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 flex-shrink-0">
-                    {item.total_poin} Poin
-                  </span>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-900 text-white shadow-xs">
+                      Bersih: {item.poin_bersih ?? item.total_poin} Poin
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                      <span className="text-rose-600 font-bold">
+                        P:{" "}
+                        {item.total_poin_pelanggaran ??
+                          item.total_pelanggaran ??
+                          item.total_poin}
+                      </span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-emerald-600 font-bold">
+                        R: +
+                        {item.total_poin_prestasi ?? item.total_prestasi ?? 0}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
@@ -1047,7 +1091,7 @@ export default function BukuPelanggaranTab({
 
         {/* 2. Desktop & Tablet Table View (>= md) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[650px]">
+          <table className="w-full text-left text-xs min-w-[750px]">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="px-4 py-3 text-center w-12">No</th>
@@ -1105,31 +1149,19 @@ export default function BukuPelanggaranTab({
                     )}
                   </div>
                 </th>
+                <th className="px-4 py-3 text-center text-rose-600">
+                  Poin Pelanggaran
+                </th>
+                <th className="px-4 py-3 text-center text-emerald-600">
+                  Poin Prestasi
+                </th>
                 <th
-                  onClick={() => handleSortRekap("jumlah_pelanggaran")}
+                  onClick={() => handleSortRekap("total_poin")}
                   className="px-4 py-3 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Jumlah Kasus"
+                  title="Urutkan Poin Bersih"
                 >
                   <div className="flex items-center justify-center gap-1">
-                    <span>Jumlah Kasus</span>
-                    {sortKeyRekap === "jumlah_pelanggaran" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSortRekap("total_poin")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Total Poin"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Total Poin</span>
+                    <span>Poin Bersih</span>
                     {sortKeyRekap === "total_poin" ? (
                       sortDirectionRekap === "asc" ? (
                         <ArrowUp className="w-3 h-3 text-rose-600" />
@@ -1141,29 +1173,13 @@ export default function BukuPelanggaranTab({
                     )}
                   </div>
                 </th>
-                <th
-                  onClick={() => handleSortRekap("total_poin")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Status Pembinaan"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Status Pembinaan</span>
-                    {sortKeyRekap === "total_poin" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
+                <th className="px-4 py-3">Status Pembinaan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {paginatedRekapSiswa.map((item, idx) => {
-                const statusInfo = getStatusPembinaan(item.total_poin);
+                const poinBersih = item.poin_bersih ?? item.total_poin ?? 0;
+                const statusInfo = getStatusPembinaan(poinBersih);
                 const actualNo = startIndexRekap + idx + 1;
                 return (
                   <tr
@@ -1182,11 +1198,18 @@ export default function BukuPelanggaranTab({
                     <td className="px-4 py-3 font-medium text-slate-700">
                       {item.kelas}
                     </td>
-                    <td className="px-4 py-3 text-center font-bold text-slate-700">
-                      {item.jumlah_pelanggaran}
+                    <td className="px-4 py-3 text-center font-bold text-rose-600">
+                      {item.total_poin_pelanggaran ??
+                        item.total_pelanggaran ??
+                        item.total_poin}
                     </td>
-                    <td className="px-4 py-3 font-black text-rose-600 text-sm">
-                      {item.total_poin} Poin
+                    <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                      +{item.total_poin_prestasi ?? item.total_prestasi ?? 0}
+                    </td>
+                    <td className="px-4 py-3 text-center font-black text-slate-900 text-sm">
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200">
+                        {poinBersih} Poin
+                      </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
@@ -1202,7 +1225,7 @@ export default function BukuPelanggaranTab({
               {rekapSiswaList.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-slate-400"
                   >
                     Belum ada akumulasi poin tercatat.

@@ -16,7 +16,6 @@ import {
   MapPin,
   Navigation,
   AlertTriangle,
-  RefreshCw,
   GraduationCap,
   Laptop,
   Users,
@@ -24,6 +23,11 @@ import {
   Flag,
   Calendar,
   FileText,
+  Volume2,
+  VolumeX,
+  ShieldAlert,
+  CloudOff,
+  Wifi,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
@@ -31,6 +35,21 @@ import { SMKN21_COORDINATES, formatDistance } from "../utils/geoUtils";
 import { useAudioFeedback, useLivenessDetector } from "../hooks/useFaceScanner";
 import useGeofence from "../hooks/useGeofence";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
+import { getDeviceId } from "../utils/deviceFingerprint";
+import {
+  speakAttendanceSuccess,
+  speakMismatchWarning,
+  speakTimeTamperedWarning,
+  speakProxyWarning,
+  speakIndonesian,
+  isVoiceMuted,
+  toggleVoiceMuted,
+} from "../utils/voiceFeedback";
+import {
+  enqueueOfflineAttendance,
+  getOfflineQueue,
+  syncOfflineQueueToServer,
+} from "../services/offlineQueue";
 
 export default function AbsensiHarian() {
   const { user, isSiswa, isPiket, isAdmin } = useAuth();
@@ -50,6 +69,12 @@ export default function AbsensiHarian() {
   const [isPjjActive, setIsPjjActive] = useState(false);
   const [pjjKeterangan, setPjjKeterangan] = useState("");
   const [showSuratPreview, setShowSuratPreview] = useState(false);
+  const [mutedVoice, setMutedVoice] = useState(isVoiceMuted());
+  const [offlineQueueCount, setOfflineQueueCount] = useState(
+    getOfflineQueue().length,
+  );
+  const [isTimeTampered, setIsTimeTampered] = useState(false);
+  const [timeDriftSeconds, setTimeDriftSeconds] = useState(0);
 
   const { playSound } = useAudioFeedback();
 
@@ -64,6 +89,18 @@ export default function AbsensiHarian() {
         const res = await api.get("/presensi/status_today", { params });
         if (res.data) {
           setAttendanceToday(res.data);
+          if (res.data.server_timestamp) {
+            const serverMs = new Date(res.data.server_timestamp).getTime();
+            const localMs = Date.now();
+            const driftSec = Math.abs(localMs - serverMs) / 1000;
+            if (driftSec > 120) {
+              setIsTimeTampered(true);
+              setTimeDriftSeconds(Math.round(driftSec));
+              speakTimeTamperedWarning();
+            } else {
+              setIsTimeTampered(false);
+            }
+          }
         }
       } catch (err) {
         // Lanjutkan jika ada kendala jaringan sesaat
@@ -178,6 +215,14 @@ export default function AbsensiHarian() {
     if (isAttendanceClosed) return;
     if (!effectiveGpsValid) return;
     if (isSiswa && attendanceToday?.already_attended) return;
+    if (isTimeTampered) {
+      speakTimeTamperedWarning();
+      setResult({
+        success: false,
+        message: `⚠️ Presensi Ditolak: Jam HP Anda tidak akurat (selisih ~${timeDriftSeconds}s). Aktifkan 'Set Waktu Otomatis' (NTP) di pengaturan HP Anda.`,
+      });
+      return;
+    }
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) {
@@ -198,6 +243,8 @@ export default function AbsensiHarian() {
         is_mock: geoState.isMock,
         expected_siswa_id: isSiswa ? user?.id : null,
         liveness_token: verifiedTokenRef.current || livenessToken,
+        device_id: getDeviceId(),
+        client_timestamp: Date.now(),
       };
 
       const res = await api.post("/verify_harian", payload);
@@ -209,8 +256,17 @@ export default function AbsensiHarian() {
         ? `(${res.data.siswa.kelas})`
         : "";
 
+      if (res.data?.is_flagged_proxy) {
+        speakProxyWarning();
+      } else {
+        speakAttendanceSuccess(studentName, res.data?.status || "Tepat Waktu");
+      }
+
       setResult({
         success: true,
+        is_flagged_proxy: res.data?.is_flagged_proxy,
+        proxy_note: res.data?.proxy_note,
+        is_medical_exempt: res.data?.is_medical_exempt,
         message: !isSiswa
           ? `Presensi Berhasil: ${studentName} ${studentKelas}. Silakan siswa berikutnya.`
           : res.data?.message || "Presensi berhasil dicatat!",
@@ -221,7 +277,7 @@ export default function AbsensiHarian() {
           already_attended: true,
           data: {
             waktu: new Date().toLocaleTimeString("id-ID"),
-            status: "Hadir",
+            status: res.data?.status || "Hadir",
             nama: user?.nama,
           },
         });
@@ -236,6 +292,42 @@ export default function AbsensiHarian() {
       }, 3500);
     } catch (err) {
       playSound("error");
+
+      // Deteksi Kegagalan Jaringan / Listrik Padam (Offline Emergency Buffer)
+      const isNetworkOffline =
+        !navigator.onLine || err.code === "ERR_NETWORK" || !err.response;
+      if (isNetworkOffline) {
+        enqueueOfflineAttendance({
+          siswa_id: isSiswa ? user?.id : null,
+          nis: user?.nis || "OFFLINE_TEMP",
+          nama: user?.nama || "Siswa SMKN 21",
+          status: "Tepat Waktu",
+          device_id: getDeviceId(),
+        });
+        setOfflineQueueCount(getOfflineQueue().length);
+        speakIndonesian(
+          "Koneksi terputus. Presensi tersimpan di buffer offline kiosk.",
+        );
+        setResult({
+          success: true,
+          isOfflineBuffer: true,
+          message:
+            "⚠️ Jaringan Offline / Terputus: Presensi tersimpan di Buffer Darurat Kiosk. Akan otomatis disinkronkan ke server saat jaringan pulih.",
+        });
+        setTimeout(() => {
+          setResult(null);
+          setCountdown(3);
+          resetLiveness();
+        }, 3500);
+        return;
+      }
+
+      if (err.response?.data?.time_tampered) {
+        speakTimeTamperedWarning();
+      } else {
+        speakMismatchWarning();
+      }
+
       if (err.response?.data?.already_attended) {
         const studentInfo =
           err.response.data.siswa?.nama || err.response.data.nama || "";
@@ -284,6 +376,8 @@ export default function AbsensiHarian() {
     attendanceToday,
     playSound,
     resetLiveness,
+    isTimeTampered,
+    timeDriftSeconds,
   ]);
 
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
@@ -453,8 +547,8 @@ export default function AbsensiHarian() {
         screenshotFormat="image/jpeg"
         videoConstraints={{
           facingMode: "user",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         }}
         className="w-full h-full object-cover"
       />
@@ -472,13 +566,13 @@ export default function AbsensiHarian() {
         eyeState={eyeState}
       />
 
-      {/* 4. Top Floating Bar */}
-      <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
+      {/* 4. Top Floating Bar (Safe Area Notch / Dynamic Island Aware) */}
+      <div className="absolute top-2 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <Link
           to={backTarget}
           title="Kembali ke Beranda"
           aria-label="Kembali ke Beranda"
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
+          className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
         >
           <ArrowLeft
             className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-0.5"
@@ -488,6 +582,57 @@ export default function AbsensiHarian() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {/* Tombol Suara Konfirmasi (Web Speech API) */}
+          <button
+            type="button"
+            onClick={() => {
+              const nextMuted = toggleVoiceMuted();
+              setMutedVoice(nextMuted);
+            }}
+            title={
+              mutedVoice
+                ? "Suara konfirmasi dimatikan (Klik untuk aktifkan)"
+                : "Suara konfirmasi gerbang aktif (Klik untuk matikan)"
+            }
+            className={`p-2 rounded-xl sm:rounded-2xl border backdrop-blur-md transition-all shadow-md active:scale-95 text-xs font-bold ${
+              mutedVoice
+                ? "bg-rose-950/70 border-rose-500/40 text-rose-300"
+                : "bg-blue-950/70 border-blue-500/40 text-blue-300"
+            }`}
+          >
+            {mutedVoice ? (
+              <VolumeX className="w-4 h-4" />
+            ) : (
+              <Volume2 className="w-4 h-4 animate-pulse" />
+            )}
+          </button>
+
+          {/* Tombol Sync Antrean Offline Kiosk Buffer jika ada data */}
+          {offlineQueueCount > 0 && (
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await syncOfflineQueueToServer();
+                if (res.success) {
+                  setOfflineQueueCount(getOfflineQueue().length);
+                  alert(
+                    `Berhasil menyinkronkan ${res.count} presensi offline ke server!`,
+                  );
+                } else {
+                  alert(
+                    res.message ||
+                      "Gagal sinkronisasi offline. Periksa jaringan.",
+                  );
+                }
+              }}
+              title="Ada presensi darurat tersimpan di buffer lokal kiosk. Klik untuk sinkronkan."
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse"
+            >
+              <CloudOff className="w-3.5 h-3.5" />
+              <span>Sync Buffer ({offlineQueueCount})</span>
+            </button>
+          )}
+
           <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
             <span>05:00 - 06:30 WIB</span>
@@ -500,6 +645,19 @@ export default function AbsensiHarian() {
           </div>
         </div>
       </div>
+
+      {/* Banner Peringatan Manipulasi Jam HP (Anti-NTP Time Drift) */}
+      {isTimeTampered && (
+        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-30 flex justify-center animate-in fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-600/95 border border-rose-400 text-white font-bold text-xs shadow-2xl backdrop-blur-md max-w-md text-center">
+            <ShieldAlert className="w-5 h-5 text-white shrink-0 animate-bounce" />
+            <span>
+              ⚠️ Jam HP Tidak Sinkron ({timeDriftSeconds} detik)! Harap aktifkan
+              "Waktu Otomatis" di setelan HP sebelum presensi.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Banner Notifikasi Khusus jika Hari Masuk Khusus (Upacara / Event Sekolah) */}
       {isSpecialSchoolDay && !result && (
@@ -548,6 +706,20 @@ export default function AbsensiHarian() {
               <p className="text-xs sm:text-sm mt-1 opacity-90 break-words">
                 {result.message}
               </p>
+              {result.is_medical_exempt && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
+                  <span>🩺 Pengecualian Medis Biometrik Aktif</span>
+                </div>
+              )}
+              {result.is_flagged_proxy && (
+                <div className="mt-2 p-2 rounded-lg bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/40">
+                  <span>
+                    🚩{" "}
+                    {result.proxy_note ||
+                      "Peringatan: 1 HP terdeteksi bergantian"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -770,7 +942,7 @@ export default function AbsensiHarian() {
       )}
 
       {/* 8. Floating Bottom Button: Pindai Langsung */}
-      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center z-20 pointer-events-auto px-4">
+      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
         <button
           onClick={() => {
             if (!isLiveVerified) return;
@@ -778,9 +950,9 @@ export default function AbsensiHarian() {
             captureAndVerify();
           }}
           disabled={loading || !effectiveGpsValid || !isLiveVerified}
-          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2 sm:gap-2.5 shadow-2xl shadow-blue-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
+          className="px-6 py-3 min-h-[48px] rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-blue-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
         >
-          <Camera className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+          <Camera className="w-5 h-5 flex-shrink-0" />
           <span className="truncate">
             {isGpsWaiting && !isPjjActive
               ? "Menunggu GPS..."

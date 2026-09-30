@@ -90,7 +90,6 @@ export default function FaceSilhouetteGuide({
             )
           ) : (
             <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold bg-black/75 border border-white/20 text-slate-200 backdrop-blur-md shadow-lg">
-              <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-blue-400 animate-ping flex-shrink-0"></span>
               <span className="truncate">Arahkan wajah ke dalam siluet</span>
             </span>
           )}

@@ -6,7 +6,6 @@ import {
   AlertCircle,
   Camera,
   FileText,
-  RefreshCw,
   ChevronRight,
   ShieldAlert,
   PlusCircle,
@@ -29,6 +28,8 @@ import ProfileModal from "../components/ProfileModal";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { playNotificationSound } from "../utils/audioUtils";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
+import { useRealtimeSubscription } from "../services/realtimeService";
+import RealtimeBadge from "../components/common/RealtimeBadge";
 
 export default function PortalSiswa() {
   const navigate = useNavigate();
@@ -187,60 +188,12 @@ export default function PortalSiswa() {
   // Real-time synchronization: polling berkala, broadcast channel, dan window focus
   useEffect(() => {
     fetchPersonalData(false);
-
-    // 1. Silent polling setiap 5 detik saat tab aktif
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        fetchPersonalData(true);
-      }
-    }, 5000);
-
-    // 2. BroadcastChannel listener (instant sync antar-tab)
-    let bc = null;
-    try {
-      if (typeof BroadcastChannel !== "undefined") {
-        bc = new BroadcastChannel("smkn21_absensi_channel");
-        bc.onmessage = (event) => {
-          if (
-            event.data?.type === "IZIN_VERIFIED" ||
-            event.data?.type === "PJJ_UPDATED" ||
-            event.data?.type === "PELANGGARAN_RECORDED" ||
-            event.data?.type === "PIKET_ISSUED"
-          ) {
-            fetchPersonalData(true);
-          }
-        };
-      }
-    } catch {
-      // ignore
-    }
-
-    // 3. Storage event listener (sync jika tab guru verifikasi di browser yang sama)
-    const handleStorage = (e) => {
-      if (
-        e.key === "smkn21_last_izin_update" ||
-        e.key === "smkn21_pjj_updated" ||
-        e.key === "smkn21_last_pelanggaran_update" ||
-        e.key === "smkn21_last_piket_update"
-      ) {
-        fetchPersonalData(true);
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-
-    // 4. Focus listener (refresh instan saat siswa berpindah kembali ke tab ini)
-    const handleFocus = () => {
-      fetchPersonalData(true);
-    };
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      clearInterval(intervalId);
-      if (bc) bc.close();
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("focus", handleFocus);
-    };
   }, [user]);
+
+  // Sinkronisasi data otomatis secara realtime lintas tab & perangkat
+  useRealtimeSubscription(["presensi", "izin", "pelanggaran", "piket", "siswa", "pjj", "libur"], () => {
+    fetchPersonalData(true);
+  });
 
   const totalPoinPelanggaran = useMemo(() => {
     return pelanggaranList.reduce(
@@ -432,13 +385,13 @@ export default function PortalSiswa() {
             </div>
           </div>
 
-          {/* Sisi Kanan / Bawah pada mobile: Tombol Profil Pengguna & Dropdown Notifikasi */}
+          {/* Sisi Kanan: Dropdown Notifikasi & Profil (Desktop) */}
           <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
             <button
               type="button"
               onClick={() => openProfile("profil")}
               title="Profil Pengguna & Pengaturan Akun"
-              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
             >
               {user?.foto_profil ? (
                 <img
@@ -659,9 +612,9 @@ export default function PortalSiswa() {
         </div>
       )}
 
-      {/* Tombol Aksi Cepat (HANYA MUNCUL UNTUK SISWA AKTIF) */}
+      {/* Tombol Aksi Cepat (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
       {!isAlumni && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+        <div className="hidden md:grid md:grid-cols-3 gap-3 sm:gap-4">
           {user?.terdaftar ? (
             <Link
               to="/harian"
@@ -794,16 +747,7 @@ export default function PortalSiswa() {
               Akumulasi presensi Anda selama terdaftar di SMKN 21
             </p>
           </div>
-          <button
-            type="button"
-            onClick={fetchPersonalData}
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`}
-            />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
+          <RealtimeBadge />
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">

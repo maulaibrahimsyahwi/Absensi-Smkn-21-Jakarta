@@ -35,6 +35,14 @@ export const presensiService = {
     const res = await api.get("/sekolah/lokasi");
     return res.data;
   },
+
+  /**
+   * Sinkronisasi massal antrean presensi darurat offline dari Kiosk ke server.
+   */
+  syncOffline: async (records) => {
+    const res = await api.post("/presensi/sync_offline", { records });
+    return res.data;
+  },
 };
 
 export default presensiService;

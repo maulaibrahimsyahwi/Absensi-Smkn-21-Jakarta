@@ -19,7 +19,6 @@ import {
   ShieldAlert,
   LogIn,
   LogOut,
-  RefreshCw,
   Sparkles,
   Filter,
   Info,
@@ -36,6 +35,8 @@ import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import DeleteIzinModal from "../components/piket/DeleteIzinModal";
 import SignaturePadModal from "../components/SignaturePadModal";
 import ToastNotification from "../components/common/ToastNotification";
+import { useRealtimeSubscription } from "../services/realtimeService";
+import RealtimeBadge from "../components/common/RealtimeBadge";
 
 const NAMA_HARI_MAP = [
   "Minggu",
@@ -313,6 +314,11 @@ export default function GuruPiket() {
   useEffect(() => {
     fetchRiwayat();
   }, [filterTanggalMode, filterTanggalCustom, riwayatSearch]);
+
+  // Sinkronisasi data realtime otomatis saat ada izin piket atau perubahan presensi baru
+  useRealtimeSubscription(["piket", "presensi", "siswa"], () => {
+    fetchRiwayat();
+  });
 
   // Autocomplete Siswa Search
   const filteredSiswaOptions = useMemo(() => {
@@ -885,20 +891,7 @@ export default function GuruPiket() {
               </span>
             </div>
 
-            {/* Tombol Refresh */}
-            <button
-              type="button"
-              onClick={fetchRiwayat}
-              disabled={loadingRiwayat}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer self-start sm:self-auto"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${
-                  loadingRiwayat ? "animate-spin text-blue-600" : ""
-                }`}
-              />
-              <span>Refresh</span>
-            </button>
+            <RealtimeBadge />
           </div>
 
           {/* Filter Bar Tanggal & Search */}

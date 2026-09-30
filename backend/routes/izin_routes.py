@@ -7,6 +7,8 @@ from config import BASE_DIR
 from models import db, Siswa, AbsensiHarian, PengajuanIzin
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
+from utils.helpers import is_school_day
+from utils.realtime_bus import notify_data_changed
 
 izin_bp = Blueprint('izin', __name__)
 
@@ -102,8 +104,8 @@ def submit_pengajuan_izin():
             "message": "Pengajuan izin ditolak: Akun Anda belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
         }), 403
 
-    if jenis not in ["Sakit", "Izin"]:
-        return jsonify({"success": False, "message": "Jenis pengajuan harus 'Sakit' atau 'Izin'."}), 400
+    if jenis not in ["Sakit", "Izin", "Dispensasi"]:
+        return jsonify({"success": False, "message": "Jenis pengajuan harus 'Sakit', 'Izin', atau 'Dispensasi'."}), 400
 
     if not tgl_mulai_str or not tgl_selesai_str:
         return jsonify({"success": False, "message": "Tanggal mulai dan selesai harus diisi."}), 400
@@ -171,6 +173,7 @@ def submit_pengajuan_izin():
         )
         db.session.add(pengajuan)
         db.session.commit()
+        notify_data_changed("izin")
         return jsonify({
             "success": True,
             "message": f"Pengajuan {jenis} atas nama {siswa.nama} ({siswa.kelas}) berhasil dikirim dan sedang menunggu verifikasi guru.",
@@ -212,33 +215,37 @@ def verifikasi_pengajuan_izin(id):
         pengajuan.status_pengajuan = aksi
         pengajuan.catatan_guru = catatan
 
-        # Jika disetujui, generasikan rekaman AbsensiHarian untuk rentang tanggal tersebut
+        # Jika disetujui, generasikan rekaman AbsensiHarian untuk rentang tanggal tersebut (HANYA pada hari sekolah aktif)
         if aksi == "Disetujui":
             curr = pengajuan.tanggal_mulai
             while curr <= pengajuan.tanggal_selesai:
-                start_day = datetime.combine(curr, time.min)
-                end_day = datetime.combine(curr, time.max)
-                
-                # Cek apakah sudah ada presensi harian untuk siswa di hari ini
-                existing = AbsensiHarian.query.filter(
-                    AbsensiHarian.siswa_id == pengajuan.siswa_id,
-                    AbsensiHarian.waktu >= start_day,
-                    AbsensiHarian.waktu <= end_day
-                ).first()
+                # Validasi: Akhir pekan (Sabtu/Minggu) dan Hari Libur Nasional TIDAK digenerate presensi
+                if is_school_day(curr):
+                    start_day = datetime.combine(curr, time.min)
+                    end_day = datetime.combine(curr, time.max)
+                    
+                    # Cek apakah sudah ada presensi harian untuk siswa di hari ini
+                    existing = AbsensiHarian.query.filter(
+                        AbsensiHarian.siswa_id == pengajuan.siswa_id,
+                        AbsensiHarian.waktu >= start_day,
+                        AbsensiHarian.waktu <= end_day
+                    ).first()
 
-                if existing:
-                    existing.status = pengajuan.jenis
-                else:
-                    absensi_baru = AbsensiHarian(
-                        siswa_id=pengajuan.siswa_id,
-                        waktu=datetime.combine(curr, time(7, 0, 0)),
-                        status=pengajuan.jenis
-                    )
-                    db.session.add(absensi_baru)
+                    if existing:
+                        existing.status = pengajuan.jenis
+                    else:
+                        absensi_baru = AbsensiHarian(
+                            siswa_id=pengajuan.siswa_id,
+                            waktu=datetime.combine(curr, time(7, 0, 0)),
+                            status=pengajuan.jenis
+                        )
+                        db.session.add(absensi_baru)
                 
                 curr += timedelta(days=1)
 
         db.session.commit()
+        notify_data_changed("izin")
+        notify_data_changed("presensi")
 
         # Catat jejak audit aktivitas verifikasi izin
         current_u = getattr(request, 'current_user', {})
@@ -268,28 +275,78 @@ def verifikasi_pengajuan_izin(id):
 @token_required
 def get_dokumen_surat(filename):
     """
-    Endpoint terproteksi untuk mengambil dan melihat berkas surat izin dokter/orang tua.
-    Hanya dapat diakses oleh:
-    1. Admin / Guru Piket
-    2. Siswa yang bersangkutan (pemilik surat izin)
-    Mencegah akses publik tak terotorisasi terhadap rekam medis/surat izin siswa.
+    Endpoint terproteksi untuk mengambil berkas surat izin dokter/orang tua (UU PDP).
+    Hanya dapat diakses oleh Admin/Piket atau Siswa pemilik surat.
     """
     current_u = getattr(request, 'current_user', {})
     role = str(current_u.get('role', '')).lower()
 
+    response = None
     if role in ['admin', 'piket', 'staf']:
-        return send_from_directory(UPLOAD_SURAT_DIR, filename)
-
-    if role == 'siswa':
+        response = send_from_directory(UPLOAD_SURAT_DIR, filename)
+    elif role == 'siswa':
         siswa_id = current_u.get('user_id')
         owned = PengajuanIzin.query.filter(
             PengajuanIzin.siswa_id == siswa_id,
             PengajuanIzin.surat_bukti.like(f"%{filename}%")
         ).first()
         if owned:
-            return send_from_directory(UPLOAD_SURAT_DIR, filename)
-        return jsonify({"success": False, "message": "Akses ditolak: Anda tidak memiliki wewenang melihat dokumen ini."}), 403
+            response = send_from_directory(UPLOAD_SURAT_DIR, filename)
+        else:
+            return jsonify({
+                "success": False,
+                "message": "Akses ditolak: Dokumen medis/kesehatan ini dilindungi UU PDP dan hanya dapat dilihat oleh pemilik atau pihak sekolah berwenang."
+            }), 403
+    else:
+        return jsonify({"success": False, "message": "Akses ditolak."}), 403
 
-    return jsonify({"success": False, "message": "Akses ditolak."}), 403
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Security-Policy'] = "default-src 'none'"
+    response.headers['Cache-Control'] = 'private, no-cache, no-store, must-revalidate'
+    return response
+
+
+@izin_bp.route('/api/izin/<int:id>/lampiran', methods=['GET'])
+@izin_bp.route('/api/pengajuan_izin/<int:id>/lampiran', methods=['GET'])
+@token_required
+def get_lampiran_izin(id):
+    """
+    Endpoint Akses Lampiran Medis / Surat Dokter Resmi Berbasis ID Pengajuan (Kepatuhan UU PDP No. 27/2022).
+    Mencegah kebocoran data kesehatan siswa ke pihak ketiga atau siswa lain.
+    """
+    pengajuan = PengajuanIzin.query.get(id)
+    if not pengajuan:
+        return jsonify({"success": False, "message": "Data pengajuan izin tidak ditemukan."}), 404
+
+    if not pengajuan.surat_bukti:
+        return jsonify({"success": False, "message": "Surat bukti lampiran tidak tersedia."}), 404
+
+    current_u = getattr(request, 'current_user', {})
+    role = str(current_u.get('role', '')).lower()
+    user_id = current_u.get('user_id')
+
+    # Validasi Hak Akses (Prinsip Need-to-Know UU PDP)
+    is_authorized = (role in ['admin', 'piket', 'staf']) or (role == 'siswa' and user_id == pengajuan.siswa_id)
+    if not is_authorized:
+        return jsonify({
+            "success": False,
+            "message": "Akses Ditolak: Dokumen medis dan surat dokter ini diklasifikasikan sebagai data pribadi spesifik kesehatan yang dilindungi UU Perlindungan Data Pribadi (UU PDP)."
+        }), 403
+
+    # Jika file fisik tersimpan di disk
+    surat_str = str(pengajuan.surat_bukti).strip()
+    if surat_str.startswith('/static/uploads/surat/'):
+        fname = os.path.basename(surat_str)
+        resp = send_from_directory(UPLOAD_SURAT_DIR, fname)
+        resp.headers['X-Content-Type-Options'] = 'nosniff'
+        resp.headers['Content-Security-Policy'] = "default-src 'none'"
+        resp.headers['Cache-Control'] = 'private, no-cache, no-store, must-revalidate'
+        return resp
+
+    # Jika base64 data uri
+    return jsonify({
+        "success": True,
+        "surat_bukti": surat_str
+    })
 
 

@@ -2,6 +2,60 @@
  * Master Data 44 Butir Pelanggaran Siswa/i SMKN 21 Jakarta & Bobot Poin Baku
  */
 
+// Master Data Prestasi & Poin Penghargaan Siswa (Restorative Justice / Reward Points)
+export const MASTER_PRESTASI = [
+  {
+    id: 101,
+    nama: "Juara LKS / Lomba Kejuruan (Tingkat Kota / Provinsi / Nasional)",
+    poin_default: 25,
+    kategori: "Prestasi",
+  },
+  {
+    id: 102,
+    nama: "Juara Lomba Akademik / Non-Akademik / Olahraga / Seni",
+    poin_default: 15,
+    kategori: "Prestasi",
+  },
+  {
+    id: 103,
+    nama: "Petugas Upacara / Pasukan Pengibar Bendera (Paskibra) Teladan",
+    poin_default: 5,
+    kategori: "Prestasi",
+  },
+  {
+    id: 104,
+    nama: "Pengurus OSIS / MPK / Ekstrakurikuler Aktif & Berdedikasi",
+    poin_default: 10,
+    kategori: "Prestasi",
+  },
+  {
+    id: 105,
+    nama: "Duta Literasi / Kunjungan Perpustakaan Terajin",
+    poin_default: 10,
+    kategori: "Prestasi",
+  },
+  {
+    id: 106,
+    nama: "Aksi Nyata Kebersihan Lingkungan Sekolah / Relawan 7K",
+    poin_default: 5,
+    kategori: "Prestasi",
+  },
+  {
+    id: 107,
+    nama: "Tindakan Kejujuran (Menyerahkan Barang Temuan Berharga)",
+    poin_default: 10,
+    kategori: "Prestasi",
+  },
+  {
+    id: 108,
+    nama: "Inisiatif Restoratif Khusus / Perbaikan Sikap Terpuji",
+    poin_default: 10,
+    kategori: "Prestasi",
+  },
+];
+
+export const ALLOWED_POIN_PRESTASI = [5, 10, 15, 20, 25, 50];
+
 export const MASTER_PELANGGARAN = [
   // --- Poin 2 (Ringan) ---
   {

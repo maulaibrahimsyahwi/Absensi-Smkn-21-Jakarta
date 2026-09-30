@@ -1,7 +1,7 @@
 import re
 import math
 import json
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import Siswa
 
@@ -209,26 +209,80 @@ def is_school_day(dt=None):
     return status["is_school_day"]
 
 
+def get_active_schedule(dt=None):
+    """
+    Mengambil konfigurasi jadwal jam operasional presensi yang aktif secara dinamis dari database.
+    Mendukung penyesuaian khusus (Normal, Puasa, Ujian, Hari Jumat)
+    dan Mode Darurat Jaringan dengan toleransi keterlambatan.
+    """
+    now = dt if dt is not None else datetime.now()
+    w_mulai = WAKTU_MULAI_MASUK
+    w_batas = WAKTU_BATAS_MASUK
+    mode_darurat = False
+    toleransi = 0
+    keterangan = "Normal"
+
+    try:
+        from models import PengaturanJadwal
+        cfg = PengaturanJadwal.query.first()
+        if cfg:
+            # Parse waktu mulai masuk
+            if cfg.jam_mulai_masuk:
+                parts = [int(p) for p in cfg.jam_mulai_masuk.split(':')]
+                w_mulai = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+
+            # Jika hari Jumat (weekday 4), gunakan jam batas Jumat jika disetel
+            is_jumat = now.weekday() == 4
+            target_batas_str = cfg.jam_batas_jumat if (is_jumat and cfg.jam_batas_jumat) else cfg.jam_batas_masuk
+
+            if target_batas_str:
+                parts = [int(p) for p in target_batas_str.split(':')]
+                w_batas = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+
+            mode_darurat = bool(cfg.mode_darurat_jaringan)
+            toleransi = int(cfg.toleransi_darurat_menit or 0)
+            keterangan = cfg.keterangan or "Jadwal Dinamis"
+
+            # Jika Mode Darurat Jaringan aktif, tambahkan toleransi menit ke jam batas masuk
+            if mode_darurat and toleransi > 0:
+                base_dt = datetime.combine(now.date(), w_batas)
+                extended_dt = base_dt + timedelta(minutes=toleransi)
+                w_batas = extended_dt.time()
+                keterangan += f" (Mode Darurat Jaringan: +{toleransi}m)"
+    except Exception:
+        pass
+
+    return {
+        "waktu_mulai": w_mulai,
+        "waktu_batas": w_batas,
+        "jam_buka": w_mulai,
+        "jam_batas": w_batas,
+        "mode_darurat": mode_darurat,
+        "toleransi_menit": toleransi,
+        "keterangan": keterangan
+    }
+
+
 def is_presensi_open(dt=None):
     """
-    Mengecek apakah presensi harian sudah dibuka (mulai pukul 05:00 WIB pada hari sekolah aktif).
-    Jika akhir pekan (Sabtu/Minggu) atau sebelum pukul 05:00 WIB, presensi belum dibuka.
+    Mengecek apakah presensi harian sudah dibuka pada hari sekolah aktif.
+    Menggunakan konfigurasi jam mulai dinamis dari database.
     """
     now = dt if dt is not None else datetime.now()
     if not is_school_day(now):
         return False
-    return now.time() >= WAKTU_MULAI_MASUK
+    sched = get_active_schedule(now)
+    return now.time() >= sched["waktu_mulai"]
 
 
 def check_status_kehadiran(dt=None):
     """
     Menentukan status kehadiran harian siswa ('Tepat Waktu' atau 'Terlambat')
-    berdasarkan batas jam masuk SMKN 21:
-    - 05:00 - 06:30 WIB: Tepat Waktu
-    - Lewat 06:30 WIB: Terlambat
+    berdasarkan batas jam masuk dinamis (termasuk toleransi Mode Darurat Jaringan jika aktif).
     """
     now = dt if dt is not None else datetime.now()
-    if now.time() <= WAKTU_BATAS_MASUK:
+    sched = get_active_schedule(now)
+    if now.time() <= sched["waktu_batas"]:
         return "Tepat Waktu"
     return "Terlambat"
 

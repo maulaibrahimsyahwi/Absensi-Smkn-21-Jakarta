@@ -1,8 +1,12 @@
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
-from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa
+from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa, PengaturanJadwal
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from utils.auth_middleware import token_required, role_required
+from utils.audit_trail import record_audit_log
+from config import SEKOLAH_POLYGON, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH
+from utils.helpers import is_point_in_polygon, calculate_distance_meters
+from utils.realtime_bus import notify_data_changed
 
 piket_bp = Blueprint('piket', __name__)
 
@@ -81,6 +85,23 @@ def create_izin_piket():
             "message": "Guru Piket wajib menyertakan tanda tangan digital sebelum menerbitkan surat izin."
         }), 400
 
+    # Validasi Geofence Guru Piket: Hanya boleh diterbitkan jika perangkat piket berada di lingkungan SMKN 21
+    latitude = data.get('latitude')
+    longitude = data.get('longitude')
+    if latitude is not None and longitude is not None:
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+            in_poly = is_point_in_polygon(lat, lon, SEKOLAH_POLYGON)
+            dist = calculate_distance_meters(lat, lon, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+            if not (in_poly or (dist is not None and dist <= MAX_RADIUS_SEKOLAH)):
+                return jsonify({
+                    "success": False,
+                    "message": f"Penerbitan surat izin piket ditolak! Perangkat Guru Piket terdeteksi di luar area resmi SMKN 21 Jakarta (jarak ~{dist}m dari sekolah). Surat izin hanya dapat diterbitkan di meja piket sekolah."
+                }), 403
+        except (ValueError, TypeError):
+            pass
+
     try:
         baru = IzinPiket(
             siswa_id=siswa.id,
@@ -108,6 +129,7 @@ def create_izin_piket():
             )
 
         db.session.commit()
+        notify_data_changed("piket")
         return jsonify({
             "success": True,
             "message": f"Surat {tipe} untuk {siswa.nama} ({siswa.kelas}) berhasil diterbitkan.",
@@ -157,6 +179,7 @@ def delete_izin_piket(id):
     try:
         db.session.delete(izin)
         db.session.commit()
+        notify_data_changed("piket")
         return jsonify({"success": True, "message": "Surat izin piket berhasil dihapus."})
     except Exception as e:
         db.session.rollback()
@@ -320,5 +343,124 @@ def get_piket_notifikasi():
         "total": len(notifikasi),
         "notifikasi": notifikasi
     })
+
+
+# ================= MODE DARURAT JARINGAN & PENGATURAN JADWAL OPERASIONAL =================
+
+@piket_bp.route('/api/piket/mode_darurat', methods=['GET'])
+@token_required
+def get_mode_darurat():
+    """Mengambil status Mode Darurat Jaringan terkini."""
+    cfg = PengaturanJadwal.query.first()
+    if not cfg:
+        cfg = PengaturanJadwal()
+        db.session.add(cfg)
+        db.session.commit()
+    return jsonify({
+        "success": True,
+        "data": cfg.to_dict()
+    })
+
+
+@piket_bp.route('/api/piket/mode_darurat', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def toggle_mode_darurat():
+    """
+    Mengaktifkan atau menonaktifkan Mode Darurat Jaringan oleh Guru Piket / Admin.
+    Memberikan toleransi waktu keterlambatan otomatis (default +15 menit).
+    """
+    data = request.json or {}
+    aktif = data.get('status', data.get('aktif', True))
+    toleransi = data.get('toleransi_menit', 15)
+
+    cfg = PengaturanJadwal.query.first()
+    if not cfg:
+        cfg = PengaturanJadwal()
+        db.session.add(cfg)
+
+    cfg.mode_darurat_jaringan = bool(aktif)
+    if toleransi is not None:
+        try:
+            cfg.toleransi_darurat_menit = max(5, min(60, int(toleransi)))
+        except (ValueError, TypeError):
+            pass
+
+    current_u = getattr(request, 'current_user', {})
+    cfg.updated_by = current_u.get('identifier', 'Guru Piket')
+    db.session.commit()
+    notify_data_changed("piket")
+    notify_data_changed("presensi")
+
+    status_str = f"diaktifkan (+{cfg.toleransi_darurat_menit} menit toleransi)" if cfg.mode_darurat_jaringan else "dinonaktifkan"
+    record_audit_log(
+        user_id=current_u.get('user_id'),
+        role=current_u.get('role', 'piket'),
+        user_name=current_u.get('identifier', 'Guru Piket'),
+        action='MODE_DARURAT_JARINGAN',
+        target_type='PengaturanJadwal',
+        target_id=cfg.id,
+        keterangan=f"Mode Darurat Jaringan {status_str}"
+    )
+
+    return jsonify({
+        "success": True,
+        "message": f"Mode Darurat Jaringan berhasil {status_str}.",
+        "mode_darurat": cfg.mode_darurat_jaringan,
+        "toleransi_menit": cfg.toleransi_darurat_menit,
+        "data": cfg.to_dict()
+    })
+
+
+@piket_bp.route('/api/jadwal', methods=['GET'])
+def get_jadwal():
+    """Mengambil konfigurasi jadwal operasional sekolah."""
+    cfg = PengaturanJadwal.query.first()
+    if not cfg:
+        cfg = PengaturanJadwal()
+        db.session.add(cfg)
+        db.session.commit()
+    return jsonify({
+        "success": True,
+        "data": cfg.to_dict()
+    })
+
+
+@piket_bp.route('/api/jadwal', methods=['PUT'])
+@token_required
+@role_required(['admin'])
+def update_jadwal():
+    """Memperbarui jam masuk operasional sekolah (Normal, Ramadhan, Ujian, Jumat)."""
+    data = request.json or {}
+    cfg = PengaturanJadwal.query.first()
+    if not cfg:
+        cfg = PengaturanJadwal()
+        db.session.add(cfg)
+
+    if data.get('jam_mulai_masuk'):
+        cfg.jam_mulai_masuk = str(data['jam_mulai_masuk']).strip()
+    if data.get('jam_batas_masuk'):
+        cfg.jam_batas_masuk = str(data['jam_batas_masuk']).strip()
+    if data.get('jam_batas_jumat'):
+        cfg.jam_batas_jumat = str(data['jam_batas_jumat']).strip()
+    if data.get('keterangan'):
+        cfg.keterangan = str(data['keterangan']).strip()
+    if data.get('tahun_ajaran'):
+        cfg.tahun_ajaran = str(data['tahun_ajaran']).strip()
+    if data.get('semester'):
+        cfg.semester = str(data['semester']).strip()
+
+    current_u = getattr(request, 'current_user', {})
+    cfg.updated_by = current_u.get('identifier', 'Admin')
+    db.session.commit()
+    notify_data_changed("piket")
+    notify_data_changed("presensi")
+
+    return jsonify({
+        "success": True,
+        "message": "Pengaturan jadwal operasional & tahun ajaran presensi berhasil diperbarui!",
+        "data": cfg.to_dict()
+    })
+
 
 

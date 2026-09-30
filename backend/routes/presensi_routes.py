@@ -1,7 +1,7 @@
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from flask import Blueprint, request, jsonify
 from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_POLYGON, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengaturanJadwal
 from face_utils import verify_face
 from utils.helpers import (
     calculate_distance_meters,
@@ -12,10 +12,13 @@ from utils.helpers import (
     is_kelas_pjj,
     get_flattened_known_faces,
     get_holiday_status,
+    get_active_schedule,
 )
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from routes.biometrik_routes import verify_liveness_token
 from utils.auth_middleware import token_required
+from utils.audit_trail import record_audit_log
+from utils.realtime_bus import notify_data_changed
 
 presensi_bp = Blueprint('presensi', __name__)
 
@@ -26,12 +29,22 @@ presensi_bp = Blueprint('presensi', __name__)
 def get_status_today():
     """
     Memeriksa apakah siswa sudah melakukan presensi harian pada hari ini.
+    Menyertakan server_timestamp untuk sinkronisasi Anti-NTP serta info Tahun Ajaran dan Semester aktif.
     """
     siswa_id = request.args.get('siswa_id')
     now_dt = datetime.now()
     h_status = get_holiday_status(now_dt)
     nama_hari = h_status["nama_hari"]
     is_school_day_today = h_status["is_school_day"]
+
+    active_sched = get_active_schedule(now_dt)
+    jam_buka_str = f"{active_sched['jam_buka'].strftime('%H:%M')} WIB"
+    jam_batas_str = f"{active_sched['jam_batas'].strftime('%H:%M')} WIB"
+    is_darurat = active_sched.get("mode_darurat", False)
+
+    cfg = PengaturanJadwal.query.first()
+    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
     if not is_school_day_today:
         h_event = h_status["holiday_event"]
@@ -47,8 +60,13 @@ def get_status_today():
             "pjj_info": "",
             "is_presensi_open": False,
             "hari": nama_hari,
-            "jam_buka": "05:00 WIB",
-            "jam_batas": "06:30 WIB",
+            "jam_buka": jam_buka_str,
+            "jam_batas": jam_batas_str,
+            "mode_darurat": is_darurat,
+            "server_timestamp": now_dt.isoformat(),
+            "server_epoch_ms": int(now_dt.timestamp() * 1000),
+            "tahun_ajaran": curr_ta,
+            "semester": curr_sem,
             "message": h_status["message"],
             "data": None
         })
@@ -69,8 +87,13 @@ def get_status_today():
             "pjj_info": "",
             "is_presensi_open": is_presensi_open(now_dt),
             "hari": nama_hari,
-            "jam_buka": "05:00 WIB",
-            "jam_batas": "06:30 WIB",
+            "jam_buka": jam_buka_str,
+            "jam_batas": jam_batas_str,
+            "mode_darurat": is_darurat,
+            "server_timestamp": now_dt.isoformat(),
+            "server_epoch_ms": int(now_dt.timestamp() * 1000),
+            "tahun_ajaran": curr_ta,
+            "semester": curr_sem,
             "message": h_status["message"],
             "data": None
         })
@@ -105,8 +128,13 @@ def get_status_today():
             "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
             "hari": nama_hari,
-            "jam_buka": "05:00 WIB",
-            "jam_batas": "06:30 WIB",
+            "jam_buka": jam_buka_str,
+            "jam_batas": jam_batas_str,
+            "mode_darurat": is_darurat,
+            "server_timestamp": now_dt.isoformat(),
+            "server_epoch_ms": int(now_dt.timestamp() * 1000),
+            "tahun_ajaran": curr_ta,
+            "semester": curr_sem,
             "message": h_status["message"],
             "data": {
                 "id": absen_today.id,
@@ -129,8 +157,13 @@ def get_status_today():
             "pjj_info": pjj_info,
             "is_presensi_open": is_presensi_open(now_dt),
             "hari": nama_hari,
-            "jam_buka": "05:00 WIB",
-            "jam_batas": "06:30 WIB",
+            "jam_buka": jam_buka_str,
+            "jam_batas": jam_batas_str,
+            "mode_darurat": is_darurat,
+            "server_timestamp": now_dt.isoformat(),
+            "server_epoch_ms": int(now_dt.timestamp() * 1000),
+            "tahun_ajaran": curr_ta,
+            "semester": curr_sem,
             "message": h_status["message"],
             "data": None
         })
@@ -148,6 +181,31 @@ def verify_harian():
     is_mock = data.get('is_mock', False)
     simulated = data.get('simulated', False)
     expected_siswa_id = data.get('expected_siswa_id')
+    device_id = str(data.get('device_id', '')).strip()
+    client_timestamp = data.get('client_timestamp')
+
+    now_dt = datetime.now()
+
+    # Validasi Anti-NTP Time Tampering (Mendeteksi manipulasi jam HP)
+    if client_timestamp is not None:
+        try:
+            client_epoch = None
+            if isinstance(client_timestamp, (int, float)):
+                client_epoch = float(client_timestamp) / 1000.0 if client_timestamp > 1e11 else float(client_timestamp)
+            elif isinstance(client_timestamp, str):
+                client_epoch = datetime.fromisoformat(client_timestamp.replace('Z', '+00:00')).timestamp()
+
+            if client_epoch is not None:
+                drift_sec = abs(now_dt.timestamp() - client_epoch)
+                if drift_sec > 120:  # Selisih jam lebih dari 2 menit
+                    return jsonify({
+                        "success": False,
+                        "time_tampered": True,
+                        "drift_seconds": int(drift_sec),
+                        "message": f"Presensi ditolak! Terdeteksi selisih waktu jam perangkat Anda ({int(drift_sec)} detik) dari jam resmi server SMKN 21. Silakan aktifkan 'Setel Waktu Otomatis' (NTP) di setelan HP Anda sebelum presensi."
+                    }), 403
+        except Exception:
+            pass
 
     current_user = getattr(request, 'current_user', {})
     user_role = current_user.get('role')
@@ -165,7 +223,10 @@ def verify_harian():
             return jsonify({"success": False, "message": "Akun siswa tidak ditemukan."}), 404
         if getattr(target_siswa, 'status', 'Aktif') == 'Alumni':
             return jsonify({"success": False, "message": f"Siswa {target_siswa.nama} sudah berstatus Alumni/Lulus."}), 403
-        if not target_siswa.face_encoding:
+
+        # Jika belum punya encoding wajah, periksa apakah ada dispensasi medis aktif
+        is_med_pass = bool(target_siswa.medical_exemption_until and target_siswa.medical_exemption_until >= date.today())
+        if not target_siswa.face_encoding and not is_med_pass:
             return jsonify({
                 "success": False,
                 "message": f"Presensi ditolak: Akun Anda ({target_siswa.nama}) belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
@@ -178,7 +239,6 @@ def verify_harian():
             expected_siswa_id = None
 
     # Validasi Hari Operasional: Presensi hanya aktif pada hari sekolah
-    now_dt = datetime.now()
     h_status = get_holiday_status(now_dt)
     if not h_status["is_school_day"]:
         return jsonify({
@@ -188,11 +248,14 @@ def verify_harian():
             "message": f"Presensi harian ditolak! {h_status['message']}"
         }), 400
 
-    # Validasi Jam Operasional: Presensi baru dibuka mulai pukul 05:00 WIB
+    # Validasi Jam Operasional: Presensi baru dibuka sesuai jadwal aktif
     if not is_presensi_open(now_dt):
+        active_sched = get_active_schedule(now_dt)
+        jam_buka_s = active_sched['jam_buka'].strftime('%H:%M')
+        jam_batas_s = active_sched['jam_batas'].strftime('%H:%M')
         return jsonify({
             "success": False,
-            "message": f"Presensi harian belum dibuka! Presensi kehadiran SMKN 21 dibuka mulai pukul 05:00 WIB (05:00 - 06:30 WIB Tepat Waktu, lewat 06:30 WIB Terlambat). Jam saat ini: {now_dt.strftime('%H:%M:%S')} WIB."
+            "message": f"Presensi harian belum dibuka! Presensi kehadiran SMKN 21 dibuka mulai pukul {jam_buka_s} WIB ({jam_buka_s} - {jam_batas_s} WIB Tepat Waktu, lewat {jam_batas_s} WIB Terlambat). Jam saat ini: {now_dt.strftime('%H:%M:%S')} WIB."
         }), 400
 
     # Validasi Anti-Fake GPS: Tolak jika terindikasi mock location
@@ -249,6 +312,12 @@ def verify_harian():
     today_end = datetime.combine(date.today(), time.max)
 
     # 1. Jika Presensi Mandiri Siswa (expected_siswa_id ditentukan)
+    is_medical_exempt = bool(
+        target_siswa and 
+        target_siswa.medical_exemption_until and 
+        target_siswa.medical_exemption_until >= date.today()
+    )
+
     if expected_siswa_id:
         # Cek apakah siswa sudah presensi hari ini
         sudah_absen = AbsensiHarian.query.filter(
@@ -267,23 +336,30 @@ def verify_harian():
             }), 400
 
         # Ambil sampel biometrik wajah khusus siswa ini
-        if not target_siswa.face_encoding:
+        if not target_siswa.face_encoding and not is_medical_exempt:
             return jsonify({
                 "success": False,
                 "message": f"Presensi ditolak: Akun Anda ({target_siswa.nama}) belum terdaftar biometrik wajah resmi. Perekaman biometrik wajah wajib dilakukan melalui Administrator / Tata Usaha Sekolah terlebih dahulu."
             }), 403
 
         try:
-            stored_encodings = json.loads(target_siswa.face_encoding)
+            stored_encodings = json.loads(target_siswa.face_encoding) if target_siswa.face_encoding else []
             if not isinstance(stored_encodings, list) or len(stored_encodings) == 0:
-                raise ValueError("Encoding kosong")
-            encodings = stored_encodings
-            siswa_ids = [target_siswa.id] * len(stored_encodings)
+                if not is_medical_exempt:
+                    raise ValueError("Encoding kosong")
+                encodings = []
+                siswa_ids = []
+            else:
+                encodings = stored_encodings
+                siswa_ids = [target_siswa.id] * len(stored_encodings)
         except Exception:
-            return jsonify({
-                "success": False,
-                "message": "Data biometrik wajah Anda tidak valid. Silakan hubungi Admin Sekolah untuk melakukan reset wajah."
-            }), 400
+            if not is_medical_exempt:
+                return jsonify({
+                    "success": False,
+                    "message": "Data biometrik wajah Anda tidak valid. Silakan hubungi Admin Sekolah untuk melakukan reset wajah."
+                }), 400
+            encodings = []
+            siswa_ids = []
     else:
         # 2. Mode Kiosk / Guru Piket (Pemindaian seluruh siswa aktif)
         encodings, siswa_ids = get_flattened_known_faces()
@@ -291,7 +367,15 @@ def verify_harian():
             return jsonify({"success": False, "message": "Belum ada data wajah siswa yang terdaftar di sistem."}), 400
 
     try:
-        result = verify_face(image_data, encodings, siswa_ids)
+        result = verify_face(image_data, encodings, siswa_ids) if encodings else {"success": False, "message": "Biometrik wajah dibypass"}
+        medical_bypass_applied = False
+
+        # Pengecualian Medis Khusus Biometrik (Medical Exemption Pass)
+        if not result.get('success') and is_medical_exempt and expected_siswa_id:
+            result['success'] = True
+            result['siswa_id'] = target_siswa.id
+            medical_bypass_applied = True
+
         if result['success']:
             siswa_id = result['siswa_id']
             siswa = Siswa.query.get(siswa_id)
@@ -327,31 +411,88 @@ def verify_harian():
                     "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi hari ini pada pukul {sudah_absen.waktu.strftime('%H:%M:%S')} WIB ({sudah_absen.status}). Presensi harian hanya diizinkan 1 kali per hari."
                 }), 400
 
-            now_dt = datetime.now()
+            # Deteksi Titip Absen / 1 HP Bergantian (Proxy Detection & Hardware Binding)
+            is_flagged_proxy = False
+            proxy_note = None
+            if device_id:
+                ten_mins_ago = now_dt - timedelta(minutes=10)
+                prev_proxy = AbsensiHarian.query.filter(
+                    AbsensiHarian.device_id == device_id,
+                    AbsensiHarian.siswa_id != siswa_id,
+                    AbsensiHarian.waktu >= ten_mins_ago
+                ).order_by(AbsensiHarian.waktu.desc()).first()
+
+                if prev_proxy:
+                    is_flagged_proxy = True
+                    delta_sec = int((now_dt - prev_proxy.waktu).total_seconds())
+                    proxy_note = f"Peringatan: 1 HP terdeteksi bergantian dengan {prev_proxy.nis} ({prev_proxy.nama}) selang {delta_sec} detik lalu."
+                    record_audit_log(
+                        user_id=siswa_id,
+                        role='siswa',
+                        user_name=f"{siswa.nama} ({siswa.nis})",
+                        action='FLAG_PROXY_DEVICE',
+                        target_type='AbsensiHarian',
+                        target_id=str(device_id),
+                        keterangan=f"Terdeteksi titip absen / 1 HP bergantian: {proxy_note}"
+                    )
+
+            cfg = PengaturanJadwal.query.first()
+            curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+            curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
             pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, now_dt)
             base_status = check_status_kehadiran(now_dt)
-            status = f"{base_status} (PJJ)" if pjj_active else base_status
+            is_pkl = pjj_active and "PKL" in (pjj_info or "").upper()
 
-            absen = AbsensiHarian(siswa_id=siswa_id, status=status, waktu=now_dt)
+            if medical_bypass_applied:
+                status = f"{base_status} (Dispensasi Medis)"
+            elif is_pkl:
+                status = f"{base_status} (PKL)"
+            elif pjj_active:
+                status = f"{base_status} (PJJ)"
+            else:
+                status = base_status
+
+            absen = AbsensiHarian(
+                siswa_id=siswa_id,
+                status=status,
+                waktu=now_dt,
+                device_id=device_id or None,
+                is_flagged_proxy=is_flagged_proxy,
+                proxy_note=proxy_note,
+                tahun_ajaran=curr_ta,
+                semester=curr_sem
+            )
             db.session.add(absen)
 
             # Jika siswa terlambat, otomatis catat ke Buku Saku Pelanggaran Siswa (+5 poin)
             if "Terlambat" in status:
+                active_sched = get_active_schedule(now_dt)
+                jam_batas_s = active_sched['jam_batas'].strftime('%H:%M')
                 catat_pelanggaran_terlambat(
                     siswa=siswa,
                     waktu=now_dt,
-                    sumber=f"Presensi Harian {'(PJJ)' if pjj_active else '(Wajah & GPS)'}",
+                    sumber=f"Presensi Harian {'(Dispensasi Medis)' if medical_bypass_applied else ('(PKL)' if is_pkl else ('(PJJ)' if pjj_active else '(Wajah & GPS)'))}",
                     petugas="Sistem Presensi SMKN 21",
-                    alasan=f"Presensi mandiri {'PJJ ' if pjj_active else ''}tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: 06:30 WIB)"
+                    alasan=f"Presensi mandiri tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: {jam_batas_s} WIB)"
                 )
 
             db.session.commit()
+            notify_data_changed("presensi")
 
-            confidence_text = f" kecocokan {result.get('confidence', 95)}%" if 'confidence' in result else ""
+            confidence_text = f" kecocokan {result.get('confidence', 95)}%" if ('confidence' in result and not medical_bypass_applied) else ""
+            if medical_bypass_applied:
+                pesan_sukses = f"Berhasil Absen: {siswa.nama} ({siswa.kelas}) - {status} [Pengecualian Medis Biometrik Aktif: {siswa.medical_exemption_alasan or 'Kondisi Medis'}]"
+            else:
+                pesan_sukses = f"Berhasil Absen: {siswa.nama} ({siswa.kelas}) - {status}{confidence_text}"
+
             return jsonify({
                 "success": True,
                 "is_pjj": pjj_active,
                 "pjj_info": pjj_info,
+                "is_medical_exempt": medical_bypass_applied,
+                "is_flagged_proxy": is_flagged_proxy,
+                "proxy_note": proxy_note,
                 "siswa": {
                     "id": siswa.id,
                     "nama": siswa.nama,
@@ -360,7 +501,7 @@ def verify_harian():
                 },
                 "status": status,
                 "waktu": now_dt.strftime("%H:%M:%S"),
-                "message": f"Berhasil Absen: {siswa.nama} ({siswa.kelas}) - {status}{confidence_text}"
+                "message": pesan_sukses
             })
         else:
             if expected_siswa_id:
@@ -434,6 +575,7 @@ def verify_perpus():
             kunjungan = AbsensiPerpustakaan(siswa_id=siswa_id, keperluan=keperluan)
             db.session.add(kunjungan)
             db.session.commit()
+            notify_data_changed("presensi")
             
             siswa = Siswa.query.get(siswa_id)
             return jsonify({
@@ -450,4 +592,106 @@ def verify_perpus():
 @presensi_bp.route('/api/sekolah/lokasi', methods=['GET'])
 def get_sekolah_lokasi():
     return jsonify(SEKOLAH_INFO)
+
+
+@presensi_bp.route('/api/presensi/sync_offline', methods=['POST'])
+@token_required
+def sync_offline():
+    """
+    Endpoint Buffer Darurat Pemadaman Internet & Listrik Total (Offline Emergency Kiosk Sync).
+    Menerima batch transaksi presensi lokal yang tersimpan di browser kiosk saat offline dan menyinkronkannya ke server.
+    """
+    data = request.json or {}
+    records = data.get('records', [])
+    if not isinstance(records, list) or len(records) == 0:
+        return jsonify({"success": False, "message": "Tidak ada data antrean presensi offline yang dikirim."}), 400
+
+    cfg = PengaturanJadwal.query.first()
+    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
+    synced_count = 0
+    duplicate_count = 0
+    failed_count = 0
+
+    for item in records:
+        try:
+            siswa_id = item.get('siswa_id')
+            nis = item.get('nis')
+            device_id = item.get('device_id')
+            waktu_str = item.get('waktu') or item.get('captured_at')
+            raw_status = item.get('status', 'Tepat Waktu')
+
+            siswa = None
+            if siswa_id:
+                siswa = Siswa.query.get(siswa_id)
+            elif nis:
+                siswa = Siswa.query.filter_by(nis=str(nis).strip()).first()
+
+            if not siswa:
+                failed_count += 1
+                continue
+
+            try:
+                record_dt = datetime.strptime(waktu_str, "%Y-%m-%d %H:%M:%S")
+            except Exception:
+                try:
+                    record_dt = datetime.fromisoformat(waktu_str.replace('Z', '+00:00'))
+                except Exception:
+                    record_dt = datetime.now()
+
+            rec_date = record_dt.date()
+            t_start = datetime.combine(rec_date, time.min)
+            t_end = datetime.combine(rec_date, time.max)
+
+            # Cek apakah sudah pernah presensi pada tanggal tersebut
+            existing = AbsensiHarian.query.filter(
+                AbsensiHarian.siswa_id == siswa.id,
+                AbsensiHarian.waktu >= t_start,
+                AbsensiHarian.waktu <= t_end
+            ).first()
+
+            if existing:
+                duplicate_count += 1
+                continue
+
+            clean_status = "Terlambat" if "Terlambat" in raw_status else "Tepat Waktu"
+            absen = AbsensiHarian(
+                siswa_id=siswa.id,
+                status=clean_status,
+                waktu=record_dt,
+                device_id=device_id or None,
+                is_flagged_proxy=False,
+                proxy_note="(Sync Offline Kiosk)",
+                tahun_ajaran=curr_ta,
+                semester=curr_sem
+            )
+            db.session.add(absen)
+
+            if "Terlambat" in clean_status:
+                catat_pelanggaran_terlambat(
+                    siswa=siswa,
+                    waktu=record_dt,
+                    sumber="Sync Offline Kiosk",
+                    petugas="Sistem Kiosk Offline SMKN 21",
+                    alasan=f"Presensi offline tersinkronisasi ({record_dt.strftime('%H:%M:%S')} WIB)"
+                )
+
+            synced_count += 1
+        except Exception:
+            failed_count += 1
+
+    try:
+        db.session.commit()
+        notify_data_changed("presensi")
+        return jsonify({
+            "success": True,
+            "synced": synced_count,
+            "duplicates": duplicate_count,
+            "failed": failed_count,
+            "message": f"Sinkronisasi Buffer Kiosk Selesai: {synced_count} berhasil disimpan, {duplicate_count} sudah ada (duplikat), {failed_count} gagal."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal memproses sinkronisasi offline: {str(e)}"}), 500
 

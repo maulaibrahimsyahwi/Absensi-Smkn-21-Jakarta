@@ -20,7 +20,7 @@ import {
   ShieldCheck,
   Info,
   MapPin,
-  RefreshCw,
+  Navigation,
   PenTool,
   Lock,
   GraduationCap,
@@ -31,6 +31,7 @@ import CustomDatePicker, {
   formatTanggalIndo,
 } from "../components/CustomDatePicker";
 import SignaturePadModal from "../components/SignaturePadModal";
+import { realtimeService } from "../services/realtimeService";
 
 export default function PengajuanIzin() {
   const { user, isSiswa, isPiket, isAdmin, saveSignature } = useAuth();
@@ -294,7 +295,7 @@ export default function PengajuanIzin() {
 
     if (!geoLoc.latitude || !geoLoc.longitude) {
       setErrorMsg(
-        "Titik lokasi GPS wajib terdeteksi saat mengajukan izin / sakit. Harap aktifkan izin GPS browser Anda dan klik 'Refresh'.",
+        "Titik lokasi GPS wajib terdeteksi saat mengajukan izin / sakit. Harap aktifkan izin GPS browser Anda dan klik 'Deteksi GPS'.",
       );
       return;
     }
@@ -325,6 +326,7 @@ export default function PengajuanIzin() {
       });
 
       if (res.data && res.data.success) {
+        realtimeService.notifyLocalMutation(["izin", "presensi"]);
         setSubmittedData({
           ...res.data.data,
           latitude: geoLoc.latitude,
@@ -545,12 +547,6 @@ export default function PengajuanIzin() {
                   Nomor Induk Siswa (NIS){" "}
                   <span className="text-rose-500">*</span>
                 </label>
-                {isSiswa && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs">
-                    <Lock className="w-3 h-3 text-blue-600" />
-                    <span>Terkunci</span>
-                  </span>
-                )}
               </div>
               <div className="relative">
                 <input
@@ -914,7 +910,7 @@ export default function PengajuanIzin() {
                                 : "Lokasi Valid"
                             }`
                           : geoLoc.error ||
-                            "Sensor GPS tidak aktif atau izin ditolak oleh browser."}
+                            "Lokasi tidak aktif atau izin ditolak oleh browser"}
                     </p>
                   </div>
                 </div>
@@ -930,10 +926,10 @@ export default function PengajuanIzin() {
                     disabled={geoLoc.loading}
                     className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs flex-shrink-0 transition-colors flex items-center gap-1 shadow-xs cursor-pointer disabled:opacity-50"
                   >
-                    <RefreshCw
+                    <Navigation
                       className={`w-3 h-3 ${geoLoc.loading ? "animate-spin" : ""}`}
                     />
-                    <span>{geoLoc.loading ? "Mencari..." : "Refresh"}</span>
+                    <span>{geoLoc.loading ? "Mencari..." : "Deteksi GPS"}</span>
                   </button>
                 )}
               </div>

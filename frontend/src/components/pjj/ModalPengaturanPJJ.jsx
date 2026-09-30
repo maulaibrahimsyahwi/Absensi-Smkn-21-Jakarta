@@ -387,7 +387,9 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
             <div className="p-4 bg-amber-50/90 border border-amber-200 text-amber-950 rounded-2xl text-xs space-y-1.5 shadow-2xs">
               <div className="flex items-center gap-2 font-bold text-amber-800">
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Hari Libur Sekolah Terdeteksi ({holidayStatus.tanggal})</span>
+                <span>
+                  Hari Libur Sekolah Terdeteksi ({holidayStatus.tanggal})
+                </span>
               </div>
               <p className="text-[11px] text-amber-800 leading-relaxed">
                 Hari ini berstatus:{" "}
@@ -397,7 +399,9 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                       ? `Libur Akhir Pekan (${holidayStatus.nama_hari})`
                       : "Hari Libur Sekolah")}
                 </strong>
-                . Seluruh kegiatan presensi dan operasional belajar tatap muka maupun daring diliburkan penuh. Mode PJJ dinonaktifkan otomatis selama masa libur.
+                . Seluruh kegiatan presensi dan operasional belajar tatap muka
+                maupun daring diliburkan penuh. Mode PJJ dinonaktifkan otomatis
+                selama masa libur.
               </p>
             </div>
           )}
@@ -408,7 +412,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
               <p className="text-xs">Memuat konfigurasi PJJ...</p>
             </div>
           ) : (
-            <form id="pjj-form" onSubmit={handleSubmit} className="space-y-5">
+            <form id="pjj-form" onSubmit={handleSubmit} className="space-y-3">
               {/* STATUS TOGGLE MASTER */}
               <div
                 className={`p-4 rounded-2xl border transition-colors flex items-center justify-between gap-4 ${
@@ -598,14 +602,11 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                                       onClick={() => toggleKelas(kelas)}
                                       className={`py-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-between border transition-all cursor-pointer ${
                                         isSelected
-                                          ? "bg-indigo-50 text-indigo-800 border-indigo-200 font-bold"
+                                          ? "bg-indigo-500 text-white border-indigo-500 font-bold"
                                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                                       }`}
                                     >
                                       <span>{kelas}</span>
-                                      {isSelected && (
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                                      )}
                                     </button>
                                   );
                                 })}
@@ -618,7 +619,7 @@ export default function ModalPengaturanPJJ({ isOpen, onClose, onUpdated }) {
                   </div>
 
                   {/* 3. PERIODE WAKTU & KETERANGAN ALASAN PJJ */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block text-xs font-bold text-slate-700">

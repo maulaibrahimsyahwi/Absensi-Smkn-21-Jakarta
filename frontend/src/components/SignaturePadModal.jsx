@@ -175,7 +175,7 @@ export default function SignaturePadModal({
           <button
             type="button"
             onClick={handleClear}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-all cursor-pointer shadow-2xs active:scale-95"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
             <span>Bersihkan</span>
@@ -185,7 +185,7 @@ export default function SignaturePadModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer"
+              className="px-4 py-2 min-h-[40px] text-xs font-semibold text-slate-600 hover:text-slate-800 rounded-xl hover:bg-slate-200/60 transition-colors cursor-pointer active:scale-95"
             >
               Batal
             </button>
@@ -193,9 +193,9 @@ export default function SignaturePadModal({
               type="button"
               onClick={handleSave}
               disabled={!hasDrawn}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-sm shadow-blue-600/30 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 min-h-[40px] text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-sm shadow-blue-600/30 cursor-pointer active:scale-95"
             >
-              <span>Simpan TTD </span>
+              <span>Simpan TTD</span>
             </button>
           </div>
         </div>

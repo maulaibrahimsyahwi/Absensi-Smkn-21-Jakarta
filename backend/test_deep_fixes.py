@@ -42,18 +42,28 @@ def run_tests():
     print("[TEST] RUNNING DEEP SECURITY & PERFORMANCE VERIFICATIONS")
     print("=========================================================")
 
-    # 1. Siswa dilarang mencatat pelanggaran (POST /api/pelanggaran) -> 403
+    # 1. Siswa diperbolehkan lapor mandiri pelanggaran, namun identitas terkunci ke akun sendiri & status Menunggu Konfirmasi
     res = client.post('/api/pelanggaran', json={
-        "nis": "TEST002",
+        "nis": "TEST002", # mencoba kirim data orang lain
         "nama_siswa": "Siswa Penguji B",
         "kelas": "XII PPLG 2",
-        "jenis_pelanggaran": "Berkelahi dan tawuran",
-        "poin": 50,
+        "jenis_pelanggaran": "Terlambat masuk sekolah",
+        "poin": 50, # mencoba manipulasi poin
         "nama_penanggung_jawab": "Guru Palsu",
         "tanda_tangan_siswa": "data:image/png;base64,sample"
     }, headers=headers_siswa_a)
-    assert res.status_code == 403, f"Expected 403 for siswa create_pelanggaran, got {res.status_code}"
-    print("[OK] Siswa dilarang mencatat pelanggaran disiplin (HTTP 403)")
+    assert res.status_code == 201, f"Expected 201 for siswa self-report pelanggaran, got {res.status_code}"
+    res_data = res.get_json()
+    assert res_data['status_verifikasi'] == "Menunggu Konfirmasi"
+    assert res_data['data']['nis'] == "TEST001" # Terkunci ke akun siswa A
+    assert res_data['data']['poin'] == 5 # Terkunci ke master poin default resmi (bukan 50)
+    print("[OK] Lapor mandiri siswa terlindungi: identitas & poin terkunci resmi (HTTP 201 Menunggu Konfirmasi)")
+
+    # 1b. Siswa dilarang menghapus catatan pelanggaran -> 403
+    pel_id = res_data['data']['id']
+    res_del = client.delete(f'/api/pelanggaran/{pel_id}', headers=headers_siswa_a)
+    assert res_del.status_code == 403, f"Expected 403 for siswa delete_pelanggaran, got {res_del.status_code}"
+    print("[OK] Siswa dilarang menghapus pelanggaran (HTTP 403)")
 
     # 2. Siswa dilarang mengakses rekap pelanggaran sekolah -> 403
     res = client.get('/api/pelanggaran/rekap', headers=headers_siswa_a)

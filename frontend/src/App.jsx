@@ -28,6 +28,7 @@ const NotFound = React.lazy(() => import("./pages/NotFound"));
 import RouteAwareSkeleton from "./components/common/Skeleton";
 import OfflineBanner from "./components/common/OfflineBanner";
 import PwaInstallPrompt from "./components/common/PwaInstallPrompt";
+import BottomNav from "./components/BottomNav";
 
 function AppLayout() {
   const location = useLocation();
@@ -54,7 +55,7 @@ function AppLayout() {
         className={
           isKioskMode
             ? "h-screen w-screen overflow-hidden"
-            : "flex-1 flex flex-col w-full max-w-full overflow-x-hidden"
+            : "flex-1 flex flex-col w-full max-w-full overflow-x-hidden pb-20 md:pb-6"
         }
       >
         <Suspense fallback={<RouteAwareSkeleton />}>
@@ -186,17 +187,7 @@ function AppLayout() {
         </Suspense>
       </main>
 
-      {!hideFooter && (
-        <footer className="py-6 border-t border-slate-200 bg-white/80 text-center text-xs text-slate-500">
-          <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-2">
-            <p className="font-medium text-slate-600">
-              SMKN 21 Jakarta &copy; {new Date().getFullYear()} • Sistem
-              Presensi
-            </p>
-          </div>
-        </footer>
-      )}
-
+      {!hideNavbar && <BottomNav />}
       {!hideNavbar && <PwaInstallPrompt />}
     </div>
   );

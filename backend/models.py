@@ -18,6 +18,7 @@ class User(db.Model):
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil
     two_factor_secret = db.Column(db.String(64), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    active_session_token = db.Column(db.String(64), nullable=True)  # Single Active Session Token
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
@@ -51,6 +52,12 @@ class Siswa(db.Model):
     face_encoding = db.Column(db.Text, nullable=True)  # Stored as JSON string (single encoding or list of encodings)
     two_factor_secret = db.Column(db.String(64), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    active_session_token = db.Column(db.String(64), nullable=True)  # Single Active Session Token
+    must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force password change
+    nisn = db.Column(db.String(20), nullable=True, index=True)  # Nomor Induk Siswa Nasional (Dapodik)
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)  # Soft Delete untuk integritas arsip
+    medical_exemption_until = db.Column(db.Date, nullable=True)  # Tanggal dispensasi khusus medis biometrik
+    medical_exemption_alasan = db.Column(db.String(255), nullable=True)  # Alasan medis (misal: perban wajah, luka bakar, pasca operasi)
     
     def get_encoding(self):
         if self.face_encoding:
@@ -83,6 +90,7 @@ class Siswa(db.Model):
         return {
             "id": self.id,
             "nis": self.nis,
+            "nisn": self.nisn or "-",
             "nama": self.nama,
             "kelas": self.kelas,
             "jenis_kelamin": getattr(self, 'jenis_kelamin', 'Laki-laki') or "Laki-laki",
@@ -93,7 +101,11 @@ class Siswa(db.Model):
             "foto_profil": self.foto_profil,
             "terdaftar": bool(self.face_encoding),
             "sample_count": sample_count,
-            "two_factor_enabled": bool(self.two_factor_enabled)
+            "two_factor_enabled": bool(self.two_factor_enabled),
+            "must_change_password": bool(self.must_change_password),
+            "is_deleted": bool(self.is_deleted),
+            "medical_exemption_until": self.medical_exemption_until.strftime("%Y-%m-%d") if self.medical_exemption_until else None,
+            "medical_exemption_alasan": self.medical_exemption_alasan
         }
 
 
@@ -105,7 +117,12 @@ class AbsensiHarian(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
     waktu = db.Column(db.DateTime, default=datetime.now, index=True)
-    status = db.Column(db.String(20), nullable=False)  # "Tepat Waktu", "Terlambat", "Sakit", "Izin"
+    status = db.Column(db.String(20), nullable=False)  # "Tepat Waktu", "Terlambat", "Sakit", "Izin", "Hadir (Dispensasi Medis)"
+    device_id = db.Column(db.String(64), nullable=True, index=True)  # Fingerprint ID perangkat
+    is_flagged_proxy = db.Column(db.Boolean, default=False, nullable=False, index=True)  # Flag indikasi titip absen 1 HP bergantian
+    proxy_note = db.Column(db.String(255), nullable=True)  # Rincian peringatan proxy/titip absen
+    tahun_ajaran = db.Column(db.String(20), nullable=True, index=True)  # e.g., "2026/2027"
+    semester = db.Column(db.String(10), nullable=True, index=True)  # "Ganjil" atau "Genap"
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_harian', lazy=True))
 
@@ -129,7 +146,12 @@ class AbsensiHarian(db.Model):
             "nama": self.nama,
             "kelas": self.kelas,
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
-            "status": self.status
+            "status": self.status,
+            "device_id": self.device_id,
+            "is_flagged_proxy": bool(self.is_flagged_proxy),
+            "proxy_note": self.proxy_note,
+            "tahun_ajaran": self.tahun_ajaran or "2026/2027",
+            "semester": self.semester or "Ganjil"
         }
 
 
@@ -295,19 +317,21 @@ class PelanggaranSiswa(db.Model):
     tanggal_waktu = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
     jenis_pelanggaran = db.Column(db.String(255), nullable=False, index=True)
     poin = db.Column(db.Integer, nullable=False, default=5)
+    kategori = db.Column(db.String(20), default="Pelanggaran", nullable=False, index=True)  # "Pelanggaran" atau "Prestasi"
+    tahun_ajaran = db.Column(db.String(20), nullable=True, index=True)  # e.g., "2026/2027"
+    semester = db.Column(db.String(10), nullable=True, index=True)  # "Ganjil" atau "Genap"
     nama_penanggung_jawab = db.Column(db.String(150), nullable=False)
     tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature kanvas
+    status_verifikasi = db.Column(db.String(30), default="Disetujui", nullable=False, index=True)  # "Disetujui" (petugas) atau "Menunggu Konfirmasi" (lapor mandiri)
     keterangan = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.now, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('catatan_pelanggaran', lazy=True))
 
     def to_dict(self):
+        # Integritas Hukum: Tanda tangan pengakuan pelanggaran HANYA berasal dari kanvas saat pencatatan
         ttd = self.tanda_tangan_siswa
-        # Jika ttd kosong atau berisi cap teks SVG lama, gunakan tanda tangan profil siswa jika tersedia
-        if (not ttd or 'TERCATAT TERLAMBAT' in str(ttd)) and self.siswa and self.siswa.tanda_tangan:
-            ttd = self.siswa.tanda_tangan
-        elif not ttd or 'TERCATAT TERLAMBAT' in str(ttd):
+        if not ttd or 'TERCATAT TERLAMBAT' in str(ttd):
             ttd = None
 
         return {
@@ -320,8 +344,12 @@ class PelanggaranSiswa(db.Model):
             "tanggal_waktu_formatted": self.tanggal_waktu.strftime("%d-%b-%Y %H.%M"),
             "jenis_pelanggaran": self.jenis_pelanggaran,
             "poin": self.poin,
+            "kategori": self.kategori or "Pelanggaran",
+            "tahun_ajaran": self.tahun_ajaran or "2026/2027",
+            "semester": self.semester or "Ganjil",
             "nama_penanggung_jawab": self.nama_penanggung_jawab,
             "tanda_tangan_siswa": ttd,
+            "status_verifikasi": self.status_verifikasi or "Disetujui",
             "keterangan": self.keterangan,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
@@ -462,6 +490,41 @@ class HariLibur(db.Model):
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
             "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None
         }
+
+
+class PengaturanJadwal(db.Model):
+    """
+    Model Pengaturan Jam Operasional Presensi SMKN 21 (Dinamis: Normal, Puasa, Ujian, Hari Jumat).
+    Mendukung Mode Darurat Jaringan di Gerbang Sekolah.
+    """
+    __tablename__ = 'pengaturan_jadwal'
+    id = db.Column(db.Integer, primary_key=True)
+    jam_mulai_masuk = db.Column(db.String(10), default="05:00:00", nullable=False)
+    jam_batas_masuk = db.Column(db.String(10), default="06:30:00", nullable=False)
+    jam_batas_jumat = db.Column(db.String(10), default="06:30:00", nullable=False)
+    mode_darurat_jaringan = db.Column(db.Boolean, default=False, nullable=False)
+    toleransi_darurat_menit = db.Column(db.Integer, default=15, nullable=False)
+    keterangan = db.Column(db.String(150), default="Jadwal Normal SMKN 21", nullable=True)
+    tahun_ajaran = db.Column(db.String(20), default="2026/2027", nullable=False)  # e.g., "2026/2027"
+    semester = db.Column(db.String(10), default="Ganjil", nullable=False)  # "Ganjil" atau "Genap"
+    updated_by = db.Column(db.String(100), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "jam_mulai_masuk": self.jam_mulai_masuk,
+            "jam_batas_masuk": self.jam_batas_masuk,
+            "jam_batas_jumat": self.jam_batas_jumat,
+            "mode_darurat_jaringan": bool(self.mode_darurat_jaringan),
+            "toleransi_darurat_menit": self.toleransi_darurat_menit,
+            "keterangan": self.keterangan or "Jadwal Normal SMKN 21",
+            "tahun_ajaran": self.tahun_ajaran or "2026/2027",
+            "semester": self.semester or "Ganjil",
+            "updated_by": self.updated_by or "-",
+            "updated_at": self.updated_at.strftime("%Y-%m-%d %H:%M:%S") if self.updated_at else None
+        }
+
 
 
 

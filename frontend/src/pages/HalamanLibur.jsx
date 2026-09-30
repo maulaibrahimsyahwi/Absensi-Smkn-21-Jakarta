@@ -11,7 +11,6 @@ import {
   Clock,
   User,
   LogOut,
-  RefreshCw,
   AlertCircle,
   Info,
   CheckCircle2,
@@ -25,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { liburService } from "../services/liburService";
+import { useRealtimeSubscription } from "../services/realtimeService";
 import ProfileModal from "../components/ProfileModal";
 import logoSMKN21 from "../assets/Logo SMKN21.png";
 
@@ -34,7 +34,6 @@ export default function HalamanLibur() {
 
   const [statusData, setStatusData] = useState(todayStatus || null);
   const [loading, setLoading] = useState(!todayStatus);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalTab, setProfileModalTab] = useState("profil");
   const [currentTimeStr, setCurrentTimeStr] = useState("");
@@ -75,41 +74,41 @@ export default function HalamanLibur() {
   }, []);
 
   // Fetch status operasional hari ini
-  const fetchStatus = useCallback(
-    async (isManual = false) => {
-      if (isManual) setIsRefreshing(true);
-      try {
-        const data = await liburService.getStatusToday();
-        if (data && data.success) {
-          setStatusData(data);
-          if (refreshTodayStatus) {
-            refreshTodayStatus();
-          }
+  const fetchStatus = useCallback(async () => {
+    try {
+      const data = await liburService.getStatusToday();
+      if (data && data.success) {
+        setStatusData(data);
+        if (refreshTodayStatus) {
+          refreshTodayStatus();
+        }
 
-          // Jika ternyata hari ini sudah menjadi hari sekolah aktif (misal admin membatalkan libur)
-          if (data.is_school_day) {
-            if (role === "siswa") {
-              navigate("/portal-siswa", { replace: true });
-            } else if (role === "piket") {
-              navigate("/portal-piket", { replace: true });
-            } else if (role === "admin") {
-              navigate("/portal-admin", { replace: true });
-            }
+        // Jika ternyata hari ini sudah menjadi hari sekolah aktif (misal admin membatalkan libur)
+        if (data.is_school_day) {
+          if (role === "siswa") {
+            navigate("/portal-siswa", { replace: true });
+          } else if (role === "piket") {
+            navigate("/portal-piket", { replace: true });
+          } else if (role === "admin") {
+            navigate("/portal-admin", { replace: true });
           }
         }
-      } catch (err) {
-        console.warn("Gagal memperbarui status hari libur:", err);
-      } finally {
-        setLoading(false);
-        if (isManual) setIsRefreshing(false);
       }
-    },
-    [navigate, role, refreshTodayStatus],
-  );
+    } catch (err) {
+      console.warn("Gagal memperbarui status hari libur:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate, role, refreshTodayStatus]);
 
   useEffect(() => {
-    fetchStatus(false);
+    fetchStatus();
   }, [fetchStatus]);
+
+  // Sinkronisasi realtime otomatis saat status hari ini berubah di kalender admin
+  useRealtimeSubscription(["libur", "presensi"], () => {
+    fetchStatus();
+  });
 
   const handleLogout = () => {
     setShowLogoutConfirmModal(true);
@@ -293,7 +292,7 @@ export default function HalamanLibur() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-4">
         {/* Hero Notice Card */}
         <div className="bg-gradient-to-br from-indigo-900 via-purple-950 to-slate-950 text-white rounded-3xl p-6 sm:p-10 shadow-2xl shadow-indigo-950/20 relative overflow-hidden border border-indigo-800/40">
           {/* Subtle Ambient Background Orbs */}
@@ -339,17 +338,11 @@ export default function HalamanLibur() {
               className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between gap-3 border-b border-slate-800 cursor-pointer select-none transition-colors hover:bg-slate-850"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30 flex items-center justify-center shrink-0">
-                  <FileText className="w-5 h-5" />
-                </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm sm:text-base font-bold text-white truncate">
                       Surat Edaran Resmi Sekolah
                     </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      Resmi
-                    </span>
                   </div>
                   <p className="text-xs text-slate-400 truncate">
                     {namaFileSurat}
@@ -359,11 +352,6 @@ export default function HalamanLibur() {
 
               {/* Toggle Chevron & Label */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-slate-300 font-medium hidden sm:inline">
-                  {isPdfPreviewOpen
-                    ? "Sembunyikan Berkas"
-                    : "Lihat Berkas Surat"}
-                </span>
                 <div
                   className={`p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-transform duration-300 ${
                     isPdfPreviewOpen ? "rotate-180" : ""
@@ -380,17 +368,9 @@ export default function HalamanLibur() {
                 {isPdf ? (
                   <>
                     {/* Custom PDF Navigation Toolbar */}
-                    <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 text-white text-xs select-none">
-                      {/* Left: Indicator */}
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 font-bold text-[10px] uppercase tracking-wider border border-purple-500/30">
-                          PDF
-                        </span>
-                        <span className="font-semibold text-slate-300 truncate hidden md:inline text-xs">
-                          {namaFileSurat}
-                        </span>
-                      </div>
+                    <div className=""></div>
 
+                    <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 text-white text-xs select-none">
                       {/* Center: Custom Page Navigation [ < ] [ 1 ] / 3 [ > ] */}
                       <div className="flex items-center gap-1.5 sm:gap-2">
                         <button
@@ -407,9 +387,6 @@ export default function HalamanLibur() {
                         </button>
 
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 text-xs font-bold">
-                          <span className="text-[11px] text-slate-400 font-normal hidden sm:inline">
-                            Halaman
-                          </span>
                           <input
                             type="number"
                             min={1}

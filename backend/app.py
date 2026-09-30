@@ -27,6 +27,7 @@ from routes.rekap_routes import rekap_bp
 from routes.pelanggaran_routes import pelanggaran_bp
 from routes.pjj_routes import pjj_bp
 from routes.libur_routes import libur_bp
+from routes.realtime_routes import realtime_bp
 from utils.db_migrations import run_db_migrations
 
 # Inisialisasi Aplikasi Flask
@@ -105,10 +106,12 @@ app.register_blueprint(rekap_bp)
 app.register_blueprint(pelanggaran_bp)
 app.register_blueprint(pjj_bp)
 app.register_blueprint(libur_bp)
+app.register_blueprint(realtime_bp)
 
-# Bebaskan endpoint presensi dan biometrik agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
+# Bebaskan endpoint presensi, biometrik, dan realtime agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
 limiter.exempt(biometrik_bp)
 limiter.exempt(presensi_bp)
+limiter.exempt(realtime_bp)
 
 # Inisialisasi basis data, migrasi kolom dinamis, dan akun staf default
 run_db_migrations(app)

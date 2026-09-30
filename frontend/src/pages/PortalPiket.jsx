@@ -12,7 +12,6 @@ import {
   PenLine,
   PlusCircle,
   Printer,
-  RefreshCw,
   CheckCircle2,
   AlertCircle,
   ChevronRight,
@@ -25,6 +24,10 @@ import {
   Eye,
   Sun,
   Flag,
+  Wifi,
+  WifiOff,
+  Check,
+  X,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -35,6 +38,7 @@ import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { liburService } from "../services/liburService";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
+import { useRealtimeSubscription } from "../services/realtimeService";
 
 export default function PortalPiket() {
   const navigate = useNavigate();
@@ -59,6 +63,14 @@ export default function PortalPiket() {
   const [notification, setNotification] = useState(null);
   const [liburStatus, setLiburStatus] = useState(null);
   const [previewSuratData, setPreviewSuratData] = useState(null);
+
+  // State Mode Darurat Jaringan (+30 Menit Toleransi Presensi)
+  const [modeDarurat, setModeDarurat] = useState(false);
+  const [toleransiMenit, setToleransiMenit] = useState(30);
+  const [togglingDarurat, setTogglingDarurat] = useState(false);
+
+  // State Pelanggaran Menunggu Konfirmasi (Lapor Mandiri Siswa)
+  const [pendingPelanggaran, setPendingPelanggaran] = useState([]);
 
   // State Notifikasi Izin Siswa untuk Guru Piket
   const [pengajuanList, setPengajuanList] = useState([]);
@@ -115,11 +127,14 @@ export default function PortalPiket() {
   const fetchSummary = useCallback(async () => {
     setLoading(true);
     try {
-      const [resSummary, resNotif, resLibur] = await Promise.allSettled([
-        api.get("/piket/summary_today"),
-        api.get("/piket/notifikasi"),
-        liburService.getStatusToday(),
-      ]);
+      const [resSummary, resNotif, resLibur, resDarurat, resPelanggaran] =
+        await Promise.allSettled([
+          api.get("/piket/summary_today"),
+          api.get("/piket/notifikasi"),
+          liburService.getStatusToday(),
+          api.get("/piket/mode_darurat"),
+          api.get("/pelanggaran?status_verifikasi=Menunggu Konfirmasi"),
+        ]);
 
       if (
         resSummary.status === "fulfilled" &&
@@ -142,83 +157,34 @@ export default function PortalPiket() {
           return;
         }
       }
+      if (resDarurat.status === "fulfilled" && resDarurat.value.data?.success) {
+        setModeDarurat(Boolean(resDarurat.value.data.mode_darurat));
+        setToleransiMenit(resDarurat.value.data.toleransi_menit || 30);
+      }
+      if (
+        resPelanggaran.status === "fulfilled" &&
+        resPelanggaran.value.data?.success
+      ) {
+        setPendingPelanggaran(resPelanggaran.value.data.data || []);
+      }
     } catch (err) {
       // Fallback silent
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin, navigate]);
 
   useEffect(() => {
     fetchSummary();
-
-    // Polling silent setiap 6 detik saat tab aktif
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        api
-          .get("/piket/summary_today")
-          .then((res) => {
-            if (res.data?.success && res.data.data)
-              setSummaryData(res.data.data);
-          })
-          .catch(() => {});
-        api
-          .get("/piket/notifikasi")
-          .then((res) => {
-            if (res.data?.success && Array.isArray(res.data.notifikasi)) {
-              setPengajuanList(res.data.notifikasi);
-            }
-          })
-          .catch(() => {});
-        liburService
-          .getStatusToday()
-          .then((res) => {
-            if (res?.success) {
-              setLiburStatus(res);
-              if (!isAdmin && !res.is_school_day) {
-                navigate("/libur", { replace: true });
-              }
-            }
-          })
-          .catch(() => {});
-      }
-    }, 6000);
-
-    // Instant sync antar tab melalui BroadcastChannel
-    let bc = null;
-    try {
-      if (typeof BroadcastChannel !== "undefined") {
-        bc = new BroadcastChannel("smkn21_absensi_channel");
-        bc.onmessage = (event) => {
-          if (
-            event.data?.type === "IZIN_SUBMITTED" ||
-            event.data?.type === "IZIN_VERIFIED"
-          ) {
-            api
-              .get("/piket/summary_today")
-              .then((res) => {
-                if (res.data?.success && res.data.data)
-                  setSummaryData(res.data.data);
-              })
-              .catch(() => {});
-            api
-              .get("/piket/notifikasi")
-              .then((res) => {
-                if (res.data?.success && Array.isArray(res.data.notifikasi)) {
-                  setPengajuanList(res.data.notifikasi);
-                }
-              })
-              .catch(() => {});
-          }
-        };
-      }
-    } catch (e) {}
-
-    return () => {
-      clearInterval(intervalId);
-      if (bc) bc.close();
-    };
   }, [fetchSummary]);
+
+  // Sinkronisasi data otomatis secara realtime lintas tab & perangkat meja piket
+  useRealtimeSubscription(
+    ["piket", "presensi", "izin", "pelanggaran", "libur", "siswa"],
+    () => {
+      fetchSummary();
+    },
+  );
 
   // Handler Simpan Tanda Tangan
   const handleSaveSignature = async (dataUrl) => {
@@ -234,6 +200,73 @@ export default function PortalPiket() {
       setNotification({
         type: "error",
         message: "Gagal menyimpan tanda tangan digital.",
+      });
+    }
+  };
+
+  const handleToggleModeDarurat = async () => {
+    const nextStatus = !modeDarurat;
+    const confirmMsg = nextStatus
+      ? `Aktifkan Mode Darurat Jaringan? Siswa yang presensi akan diberikan toleransi keterlambatan tambahan ${toleransiMenit} menit.`
+      : "Nonaktifkan Mode Darurat Jaringan dan kembali ke jadwal presensi normal?";
+    if (!window.confirm(confirmMsg)) return;
+
+    setTogglingDarurat(true);
+    try {
+      const res = await api.post("/piket/mode_darurat", {
+        status: nextStatus,
+        toleransi_menit: toleransiMenit,
+        keterangan: nextStatus
+          ? "Diaktifkan oleh Guru Piket karena kendala jaringan di gerbang sekolah"
+          : "",
+      });
+      if (res.data?.success) {
+        setModeDarurat(nextStatus);
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            (nextStatus
+              ? "Mode Darurat Jaringan Aktif"
+              : "Mode Darurat Dinonaktifkan"),
+        });
+      } else {
+        setNotification({
+          type: "error",
+          message: res.data?.message || "Gagal mengubah status Mode Darurat.",
+        });
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mengubah mode darurat.",
+      });
+    } finally {
+      setTogglingDarurat(false);
+    }
+  };
+
+  const handleKonfirmasiPelanggaran = async (id, tindakan) => {
+    try {
+      const res = await api.post(`/pelanggaran/${id}/konfirmasi`, { tindakan });
+      if (res.data?.success) {
+        setNotification({
+          type: "success",
+          message: res.data.message,
+        });
+        setPendingPelanggaran((prev) => prev.filter((p) => p.id !== id));
+        fetchSummary();
+      } else {
+        setNotification({
+          type: "error",
+          message:
+            res.data?.message || "Gagal memproses verifikasi pelanggaran.",
+        });
+      }
+    } catch (err) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Terjadi kesalahan.",
       });
     }
   };
@@ -284,13 +317,13 @@ export default function PortalPiket() {
             </div>
           </div>
 
-          {/* Sisi Kanan / Bawah pada mobile: Tombol Profil Pengguna & Dropdown Notifikasi */}
+          {/* Sisi Kanan: Dropdown Notifikasi & Profil (Desktop) */}
           <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
             <button
               type="button"
               onClick={() => openProfile("profil")}
               title="Profil Pengguna & Pengaturan Akun"
-              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
             >
               {user?.foto_profil ? (
                 <img
@@ -318,6 +351,67 @@ export default function PortalPiket() {
         </div>
       </div>
 
+      {/* Mode Darurat Jaringan Toggle Card */}
+      <div
+        className={`rounded-3xl p-4 sm:p-5 border transition-all ${
+          modeDarurat
+            ? "bg-amber-500/10 border-amber-500/40 shadow-md shadow-amber-500/10"
+            : "bg-white border-slate-200/80 shadow-xs"
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div
+              className={`p-2.5 rounded-2xl flex-shrink-0 shadow-md ${
+                modeDarurat
+                  ? "bg-amber-600 text-white shadow-amber-600/20"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {modeDarurat ? (
+                <WifiOff className="w-5 h-5 sm:w-6 sm:h-6" />
+              ) : (
+                <Wifi className="w-5 h-5 sm:w-6 sm:h-6" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                  Mode Darurat Jaringan & Toleransi Presensi
+                </h3>
+              </div>
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                {modeDarurat
+                  ? `Sinyal gerbang sekolah sedang bermasalah. Siswa diberikan toleransi tambahan +${toleransiMenit} menit agar tidak langsung terkena sanksi keterlambatan.`
+                  : "Aktifkan jika sinyal internet operator / WiFi di gerbang sekolah mengalami gangguan mendadak sehingga siswa kesulitan presensi."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={togglingDarurat}
+            onClick={handleToggleModeDarurat}
+            className={`w-full sm:w-auto px-4 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+              modeDarurat
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "bg-amber-600 hover:bg-amber-700 text-white"
+            }`}
+          >
+            {togglingDarurat ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : modeDarurat ? (
+              <>
+                <span>Matikan</span>
+              </>
+            ) : (
+              <>
+                <span>Aktifkan</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Banner Peringatan Tanda Tangan Digital Guru Piket */}
       {!user?.tanda_tangan && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in shadow-xs">
@@ -337,7 +431,7 @@ export default function PortalPiket() {
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
                 Setiap lembar Surat Izin Masuk dan Izin Meninggalkan Kelas wajib
                 dibubuhi tanda tangan digital Guru Piket. Harap buat tanda
-                tangan sekarang agar penerbitan surat izin berjalan lancar.
+                tangan sekarang agar penerbitan surat izin berjalan lancar
               </p>
             </div>
           </div>
@@ -346,7 +440,6 @@ export default function PortalPiket() {
             onClick={() => setIsSignatureModalOpen(true)}
             className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
           >
-            <PenLine className="w-3.5 h-3.5" />
             <span> TTD Sekarang</span>
           </button>
         </div>
@@ -436,16 +529,6 @@ export default function PortalPiket() {
               hari ini
             </p>
           </div>
-          <button
-            type="button"
-            onClick={fetchSummary}
-            className="self-end sm:self-center p-2 sm:px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`}
-            />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
@@ -493,8 +576,8 @@ export default function PortalPiket() {
         </div>
       </div>
 
-      {/* Tombol Aksi Cepat Guru Piket */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* Tombol Aksi Cepat Guru Piket (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
+      <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Link
           to="/piket"
           className="group bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
@@ -575,6 +658,83 @@ export default function PortalPiket() {
           <ChevronRight className="w-5 h-5 shrink-0 group-hover:translate-x-1 transition-transform" />
         </Link>
       </div>
+
+      {/* Verifikasi Pelanggaran Siswa Lapor Mandiri */}
+      {pendingPelanggaran.length > 0 && (
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 border border-amber-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
+                    Konfirmasi Pelanggaran Siswa
+                  </h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
+                    {pendingPelanggaran.length} Menunggu
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Laporan pelanggaran yang dicatat mandiri oleh siswa
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+            {pendingPelanggaran.map((item) => (
+              <div
+                key={item.id}
+                className="p-4 bg-slate-50/50 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-sm text-slate-900">
+                      {item.nama_siswa}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      ({item.kelas} • NIS {item.nis})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                      {item.poin} Poin
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-slate-700 mt-1">
+                    {item.jenis_pelanggaran}
+                  </p>
+                  {item.keterangan && (
+                    <p className="text-[11px] text-slate-500 italic mt-0.5">
+                      &ldquo;{item.keterangan}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {item.tanggal_waktu_formatted}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleKonfirmasiPelanggaran(item.id, "tolak")
+                    }
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+                  >
+                    <span>Tolak</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleKonfirmasiPelanggaran(item.id, "setujui")
+                    }
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                  >
+                    <span>Setujui</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabel Ringkasan Surat Izin yang Diterbitkan Hari Ini */}
       <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 border border-slate-200/80 shadow-xs space-y-2">

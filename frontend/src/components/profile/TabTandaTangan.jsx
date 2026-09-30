@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-import {
-  PenLine,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-  RefreshCw,
-} from "lucide-react";
+import { PenLine, Lock, CheckCircle2, AlertCircle } from "lucide-react";
 import SignaturePadModal from "../SignaturePadModal";
 
 export default function TabTandaTangan({ user, isSiswa, saveSignature }) {

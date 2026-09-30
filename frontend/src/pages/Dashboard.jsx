@@ -25,6 +25,7 @@ import { useAuth } from "../context/AuthContext";
 import CustomDropdown from "../components/CustomDropdown";
 import { getJurusanInfo } from "../constants/schoolData";
 import SignaturePadModal from "../components/SignaturePadModal";
+import { useRealtimeSubscription } from "../services/realtimeService";
 
 // Modular Subcomponents
 import DashboardPeriodFilter from "../components/dashboard/DashboardPeriodFilter";
@@ -349,6 +350,14 @@ export default function Dashboard() {
   useEffect(() => {
     fetchData();
   }, [periodeMode, selectedBulan, selectedTahun]);
+
+  // Sinkronisasi data realtime otomatis lintas tab & perangkat dashboard
+  useRealtimeSubscription(
+    ["presensi", "izin", "pelanggaran", "piket", "siswa", "libur", "pjj"],
+    () => {
+      fetchData(false);
+    },
+  );
 
   // Filtered Rekap Siswa
   const filteredSiswa = useMemo(() => {

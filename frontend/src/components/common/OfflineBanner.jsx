@@ -44,10 +44,7 @@ export default function OfflineBanner() {
       <div className="fixed top-0 left-0 right-0 z-50 bg-emerald-600 text-white text-xs sm:text-sm font-medium py-2.5 px-4 shadow-md flex items-center justify-between animate-in slide-in-from-top duration-300">
         <div className="flex items-center gap-2 max-w-6xl mx-auto w-full justify-center">
           <Wifi className="w-4 h-4 animate-pulse shrink-0" />
-          <span>
-            Koneksi internet kembali aktif! Sistem siap melakukan sinkronisasi
-            presensi.
-          </span>
+          <span>Koneksi internet kembali aktif</span>
         </div>
       </div>
     );
@@ -65,8 +62,7 @@ export default function OfflineBanner() {
             <WifiOff className="w-3.5 h-3.5" />
           </div>
           <p className="leading-tight">
-            Anda sedang tidak terhubung ke internet. Presensi memerlukan koneksi
-            yang stabil
+            Anda sedang tidak terhubung ke internet
           </p>
         </div>
         <button

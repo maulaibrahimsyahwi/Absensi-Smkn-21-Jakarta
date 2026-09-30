@@ -40,25 +40,21 @@ const KATEGORI_OPTIONS = [
   {
     value: "libur_semester",
     label: "Libur Semester / Kenaikan Kelas",
-    sublabel: "Kalender Pendidikan Resmi Disdik",
     badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
   },
   {
     value: "libur_nasional",
     label: "Hari Libur Nasional",
-    sublabel: "SKB 3 Menteri Resmi",
     badgeColor: "bg-rose-100 text-rose-800 border-rose-200",
   },
   {
     value: "cuti_bersama",
     label: "Cuti Bersama Pemerintah",
-    sublabel: "Instruksi Pemerintah / Bersama",
     badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
   },
   {
     value: "khusus",
     label: "Libur Khusus / Kegiatan Sekolah",
-    sublabel: "Surat Edaran Internal SMKN 21",
     badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
   },
 ];
@@ -67,12 +63,10 @@ const DAMPAK_PRESENSI_OPTIONS = [
   {
     value: "libur",
     label: "Liburkan Sekolah (Tutup Presensi)",
-    sublabel: "Siswa & piket diliburkan otomatis",
   },
   {
     value: "masuk_khusus",
     label: "Wajib Masuk Khusus (Presensi Dibuka)",
-    sublabel: "Upacara / agenda wajib di tgl merah",
   },
 ];
 
@@ -940,38 +934,8 @@ export default function ModalKalenderLibur({
           {activeTab === "tambah" && (
             <form
               onSubmit={handleSubmitForm}
-              className="max-w-3xl mx-auto space-y-5 animate-in fade-in duration-200"
+              className="max-w-3xl mx-auto space-y-2 animate-in fade-in duration-200"
             >
-              {/* Header Title Card */}
-              <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-blue-50 border border-purple-100 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                    {editingId ? (
-                      <Edit2 className="w-5 h-5" />
-                    ) : (
-                      <CalendarClock className="w-5 h-5" />
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
-                      {editingId
-                        ? "Edit Agenda Kalender Sekolah"
-                        : "Tambah Agenda Kalender Sekolah"}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {editingId
-                        ? "Perbarui tanggal, dampak presensi, atau berkas surat edaran resmi."
-                        : "Konfigurasi jadwal libur semester, hari libur nasional, atau kegiatan masuk khusus."}
-                    </p>
-                  </div>
-                </div>
-                {editingId && (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
-                    Mode Edit
-                  </span>
-                )}
-              </div>
-
               {/* Card 1: Nama Agenda */}
               <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-2">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -988,16 +952,11 @@ export default function ModalKalenderLibur({
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm font-medium focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-hidden transition-all bg-white"
                   />
                 </div>
-                <p className="text-[11px] text-slate-400">
-                  Nama ini akan ditampilkan pada kalender akademik dan portal
-                  siswa/guru.
-                </p>
               </div>
 
               {/* Card 2: Tanggal Pelaksanaan (CustomDatePicker) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <CalendarDays className="w-4 h-4 text-purple-600 shrink-0" />
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex items-center gap-2 border-slate-100">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Rentang Waktu Pelaksanaan
                   </h4>
@@ -1022,7 +981,7 @@ export default function ModalKalenderLibur({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                      Tanggal Selesai (Opsional)
+                      Tanggal Selesai
                     </label>
                     <CustomDatePicker
                       value={formTglSelesai}
@@ -1030,17 +989,13 @@ export default function ModalKalenderLibur({
                       onChange={(val) => setFormTglSelesai(val)}
                       placeholder="Pilih tanggal selesai..."
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">
-                      *Samakan dengan tanggal mulai jika agenda hanya 1 hari.
-                    </p>
                   </div>
                 </div>
               </div>
 
               {/* Card 3: Klasifikasi & Dampak Presensi (CustomDropdown) */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
-                <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                  <Filter className="w-4 h-4 text-purple-600 shrink-0" />
+              <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="flex items-center gap-2 border-slate-100">
                   <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Klasifikasi & Kebijakan Presensi
                   </h4>
@@ -1091,9 +1046,8 @@ export default function ModalKalenderLibur({
               <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-3">
                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                   <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-purple-600 shrink-0" />
                     <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Lampiran Berkas Surat Edaran (Opsional)
+                      Lampiran Berkas Surat Edaran
                     </h4>
                   </div>
                   <span className="text-[10px] text-slate-400">
@@ -1158,8 +1112,7 @@ export default function ModalKalenderLibur({
                           {formFileSurat.name}
                         </p>
                         <p className="text-[10px] text-emerald-700">
-                          {(formFileSurat.size / 1024).toFixed(1)} KB (Siap
-                          diunggah)
+                          {(formFileSurat.size / 1024).toFixed(1)} KB
                         </p>
                       </div>
                     </div>
@@ -1206,8 +1159,8 @@ export default function ModalKalenderLibur({
                         Klik untuk memilih berkas Surat Edaran
                       </span>
                       <span className="text-[11px] text-slate-400">
-                        PDF atau Foto Dokumen resmi untuk pratinjau siswa dan guru
-                        (Maks. 10MB)
+                        PDF atau Foto Dokumen resmi untuk pratinjau siswa dan
+                        guru (Maks. 10MB)
                       </span>
                     </label>
                   </div>
@@ -1231,11 +1184,6 @@ export default function ModalKalenderLibur({
                   disabled={submitting}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
-                  {submitting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4" />
-                  )}
                   <span>
                     {editingId
                       ? "Simpan Perubahan Jadwal"

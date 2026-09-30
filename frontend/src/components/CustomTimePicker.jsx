@@ -278,7 +278,6 @@ export default function CustomTimePicker({
           {/* Header Popover & Tombol Cepat "Waktu Sekarang" */}
           <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
             <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-blue-600" />
               <span className="text-xs font-bold text-slate-800">
                 Pilih waktu kejadian
               </span>
@@ -287,9 +286,6 @@ export default function CustomTimePicker({
 
           {/* Quick Preset Buttons (Jadwal Operasional Sekolah SMKN 21) */}
           <div className="mb-3">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-              Preset Jam Sekolah
-            </p>
             <div className="grid grid-cols-3 gap-1.5">
               {schoolPresets.map((p) => {
                 const isSelected = value === p.time;

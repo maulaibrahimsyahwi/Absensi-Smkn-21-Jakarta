@@ -108,10 +108,10 @@ def get_rekap_siswa_periode():
     except Exception:
         bulan = datetime.now().month
 
-    # 1. Ambil kolom esensial data siswa tanpa memuat blob gambar Base64 ke memori
+    # 1. Ambil kolom esensial data siswa aktif (bukan soft-deleted)
     all_siswa = db.session.query(
         Siswa.id, Siswa.nis, Siswa.nama, Siswa.kelas, Siswa.status
-    ).order_by(Siswa.kelas.asc(), Siswa.nama.asc()).all()
+    ).filter(Siswa.is_deleted == False).order_by(Siswa.kelas.asc(), Siswa.nama.asc()).all()
 
     siswa_map = {}
     for s_id, s_nis, s_nama, s_kelas, s_status in all_siswa:
@@ -124,6 +124,8 @@ def get_rekap_siswa_periode():
             "tepat_waktu": 0,
             "terlambat": 0,
             "pjj": 0,
+            "pkl": 0,
+            "dispensasi": 0,
             "sakit": 0,
             "izin": 0,
             "alpa": 0,
@@ -144,9 +146,10 @@ def get_rekap_siswa_periode():
     total_tepat_waktu = 0
     total_terlambat = 0
     total_pjj = 0
+    total_pkl = 0
+    total_dispensasi = 0
     total_sakit = 0
     total_izin = 0
-    total_alpa = 0
     total_presensi_harian = 0
 
     for sid, status_str, count_val in harian_agg_results:
@@ -156,6 +159,9 @@ def get_rekap_siswa_periode():
             if "(PJJ)" in status_clean:
                 siswa_map[sid]["pjj"] += count_val
                 total_pjj += count_val
+            elif "(PKL)" in status_clean:
+                siswa_map[sid]["pkl"] += count_val
+                total_pkl += count_val
 
             if "Tepat Waktu" in status_clean:
                 siswa_map[sid]["tepat_waktu"] += count_val
@@ -165,6 +171,10 @@ def get_rekap_siswa_periode():
                 siswa_map[sid]["terlambat"] += count_val
                 siswa_map[sid]["total_hadir"] += count_val
                 total_terlambat += count_val
+            elif "Dispensasi" in status_clean:
+                siswa_map[sid]["dispensasi"] += count_val
+                siswa_map[sid]["total_hadir"] += count_val
+                total_dispensasi += count_val
             elif "Sakit" in status_clean:
                 siswa_map[sid]["sakit"] += count_val
                 total_sakit += count_val
@@ -173,7 +183,6 @@ def get_rekap_siswa_periode():
                 total_izin += count_val
             elif "Alpa" in status_clean:
                 siswa_map[sid]["alpa"] += count_val
-                total_alpa += count_val
 
     # 3. Agregasi kunjungan perpustakaan langsung di database via SQL GROUP BY
     q_perpus_agg = db.session.query(
@@ -190,18 +199,64 @@ def get_rekap_siswa_periode():
         if sid in siswa_map:
             siswa_map[sid]["kunjungan_perpus"] += count_val
 
+    # 4. Hitung Hari Sekolah Efektif untuk Mengkalkulasi Alpa Otomatis
+    from utils.helpers import is_school_day
+    import calendar
+
+    now = datetime.now()
+    today_date = now.date()
+    effective_school_days = 0
+
+    if mode == 'bulan':
+        _, num_days = calendar.monthrange(tahun, bulan)
+        # Jika bulan berjalan, hitung sampai hari ini
+        max_day = min(num_days, today_date.day) if (tahun == today_date.year and bulan == today_date.month) else num_days
+        if tahun > today_date.year or (tahun == today_date.year and bulan > today_date.month):
+            max_day = 0
+
+        for d in range(1, max_day + 1):
+            check_d = date(tahun, bulan, d)
+            if is_school_day(check_d):
+                effective_school_days += 1
+    else:
+        max_month = today_date.month if tahun == today_date.year else 12
+        if tahun > today_date.year:
+            max_month = 0
+
+        for m in range(1, max_month + 1):
+            _, num_days = calendar.monthrange(tahun, m)
+            max_d = min(num_days, today_date.day) if (tahun == today_date.year and m == today_date.month) else num_days
+            for d in range(1, max_d + 1):
+                check_d = date(tahun, m, d)
+                if is_school_day(check_d):
+                    effective_school_days += 1
+
+    # Kalkulasi Alpa otomatis untuk setiap siswa aktif:
+    # Alpa = Hari Sekolah Efektif - (Total Hadir + Sakit + Izin)
+    total_alpa = 0
+    for sid, sdata in siswa_map.items():
+        if sdata["status"] == "Aktif" and effective_school_days > 0:
+            total_accounted = sdata["total_hadir"] + sdata["sakit"] + sdata["izin"]
+            auto_alpa = max(0, effective_school_days - total_accounted)
+            sdata["alpa"] = max(sdata["alpa"], auto_alpa)
+        total_alpa += sdata["alpa"]
+
     daftar = list(siswa_map.values())
 
     return jsonify({
         "mode": mode,
         "bulan": bulan,
         "tahun": tahun,
+        "effective_school_days": effective_school_days,
         "statistik": {
             "total_siswa": len(all_siswa),
+            "effective_school_days": effective_school_days,
             "total_presensi_harian": total_presensi_harian,
             "total_tepat_waktu": total_tepat_waktu,
             "total_terlambat": total_terlambat,
             "total_pjj": total_pjj,
+            "total_pkl": total_pkl,
+            "total_dispensasi": total_dispensasi,
             "total_sakit": total_sakit,
             "total_izin": total_izin,
             "total_alpa": total_alpa,

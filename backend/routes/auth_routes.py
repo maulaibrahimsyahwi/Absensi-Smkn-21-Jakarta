@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
+import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
 from utils.totp_utils import generate_totp_secret, verify_totp, get_totp_uri, get_qr_url
@@ -22,7 +23,7 @@ from utils.audit_trail import record_audit_log
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
     data = request.json or {}
-    username = str(data.get('username', '')).strip()
+    username = str(data.get('username', data.get('nis', ''))).strip()
     password = str(data.get('password', '')).strip()
     role_requested = str(data.get('role', '')).strip().lower()
     totp_code = str(data.get('totp_code', '')).strip()
@@ -71,18 +72,32 @@ def login():
         is_alumni_user = getattr(siswa, 'status', 'Aktif') == 'Alumni'
         welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
 
-        token = generate_token(user_id=siswa.id, role="siswa", identifier=siswa.nis)
+        # Multi-Device / Single Active Session: Terbitkan session_token baru & invalidasi sesi HP lain
+        new_session = secrets.token_hex(16)
+        siswa.active_session_token = new_session
+
+        # Force Change Password: Wajib ganti password jika masih default (NIS atau password None)
+        must_change_pass = bool(getattr(siswa, 'must_change_password', False)) or (not siswa.password)
+        if verify_and_upgrade_password(siswa, siswa.nis, is_siswa=True):
+            must_change_pass = True
+
+        db.session.commit()
+
+        token = generate_token(user_id=siswa.id, role="siswa", identifier=siswa.nis, session_token=new_session)
 
         return jsonify({
             "success": True,
             "message": f"{welcome_prefix}, {siswa.nama}!",
             "token": token,
+            "session_token": new_session,
+            "must_change_password": must_change_pass,
             "user": {
                 "id": siswa.id,
                 "role": "siswa",
                 "username": siswa.nis,
                 "nama": siswa.nama,
                 "nis": siswa.nis,
+                "nisn": getattr(siswa, 'nisn', None) or "-",
                 "kelas": siswa.kelas,
                 "jenis_kelamin": getattr(siswa, 'jenis_kelamin', 'Laki-laki') or 'Laki-laki',
                 "status": siswa.status or "Aktif",
@@ -90,6 +105,7 @@ def login():
                 "tanda_tangan": siswa.tanda_tangan,
                 "foto_profil": siswa.foto_profil,
                 "two_factor_enabled": bool(siswa.two_factor_enabled),
+                "must_change_password": must_change_pass,
                 "terdaftar": bool(siswa.face_encoding)
             }
         })
@@ -121,12 +137,19 @@ def login():
                 }), 401
 
         role_label = "Administrator" if user.role == "admin" else "Guru Piket"
-        token = generate_token(user_id=user.id, role=user.role, identifier=user.username)
+
+        # Multi-Device / Single Active Session: Terbitkan session_token baru & invalidasi sesi HP lain
+        new_session = secrets.token_hex(16)
+        user.active_session_token = new_session
+        db.session.commit()
+
+        token = generate_token(user_id=user.id, role=user.role, identifier=user.username, session_token=new_session)
 
         return jsonify({
             "success": True,
             "message": f"Login berhasil sebagai {role_label} ({user.nama}).",
             "token": token,
+            "session_token": new_session,
             "user": {
                 "id": user.id,
                 "role": user.role,
@@ -528,6 +551,7 @@ def change_password():
                 return jsonify({"success": False, "message": "Kata sandi saat ini tidak cocok."}), 400
             
             siswa.password = generate_password_hash(new_password, method='scrypt')
+            siswa.must_change_password = False
             db.session.commit()
             return jsonify({
                 "success": True,
@@ -621,6 +645,79 @@ def reset_siswa_signature(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"Gagal mereset tanda tangan: {str(e)}"}), 500
+
+
+@auth_bp.route('/api/siswa/<int:id>/reset_2fa', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def reset_siswa_2fa(id):
+    """
+    Fitur khusus Admin: Mereset konfigurasi 2FA siswa jika HP siswa hilang atau rusak.
+    """
+    try:
+        siswa = Siswa.query.get(id)
+        if not siswa:
+            return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+        
+        siswa.two_factor_enabled = False
+        siswa.two_factor_secret = None
+        db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_2FA_SISWA',
+            target_type='Siswa',
+            target_id=siswa.id,
+            keterangan=f"Mereset 2FA siswa {siswa.nama} ({siswa.kelas})"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"2FA untuk {siswa.nama} ({siswa.kelas}) berhasil dinonaktifkan. Siswa dapat login kembali tanpa kode OTP."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal mereset 2FA: {str(e)}"}), 500
+
+
+@auth_bp.route('/api/staf/<int:id>/reset_2fa', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def reset_staf_2fa(id):
+    """
+    Fitur khusus Admin: Mereset konfigurasi 2FA staf/guru piket jika HP staf hilang.
+    """
+    try:
+        staf = User.query.get(id)
+        if not staf:
+            return jsonify({"success": False, "message": "Data staf tidak ditemukan."}), 404
+        
+        staf.two_factor_enabled = False
+        staf.two_factor_secret = None
+        db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_2FA_STAF',
+            target_type='User',
+            target_id=staf.id,
+            keterangan=f"Mereset 2FA staf/piket {staf.nama} ({staf.username})"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"2FA untuk {staf.nama} ({staf.username}) berhasil dinonaktifkan."
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal mereset 2FA: {str(e)}"}), 500
+
 
 
 

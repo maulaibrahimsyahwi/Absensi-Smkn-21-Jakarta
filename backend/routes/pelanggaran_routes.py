@@ -1,10 +1,23 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime
-from models import db, PelanggaranSiswa, Siswa
+from models import db, PelanggaranSiswa, Siswa, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
+from utils.realtime_bus import notify_data_changed
 
 pelanggaran_bp = Blueprint('pelanggaran_bp', __name__)
+
+# Master Data Prestasi & Poin Penghargaan Siswa (Restorative Justice / Reward Points)
+MASTER_PRESTASI = [
+    {"id": 101, "nama": "Juara LKS / Lomba Kejuruan (Tingkat Kota / Provinsi / Nasional)", "poin_default": 25, "kategori": "Prestasi"},
+    {"id": 102, "nama": "Juara Lomba Akademik / Non-Akademik / Olahraga / Seni", "poin_default": 15, "kategori": "Prestasi"},
+    {"id": 103, "nama": "Petugas Upacara / Pasukan Pengibar Bendera (Paskibra) Teladan", "poin_default": 5, "kategori": "Prestasi"},
+    {"id": 104, "nama": "Pengurus OSIS / MPK / Ekstrakurikuler Aktif & Berdedikasi", "poin_default": 10, "kategori": "Prestasi"},
+    {"id": 105, "nama": "Duta Literasi / Kunjungan Perpustakaan Terajin", "poin_default": 10, "kategori": "Prestasi"},
+    {"id": 106, "nama": "Aksi Nyata Kebersihan Lingkungan Sekolah / Relawan 7K", "poin_default": 5, "kategori": "Prestasi"},
+    {"id": 107, "nama": "Tindakan Kejujuran (Menyerahkan Barang Temuan Berharga)", "poin_default": 10, "kategori": "Prestasi"},
+    {"id": 108, "nama": "Inisiatif Restoratif Khusus / Perbaikan Sikap Terpuji", "poin_default": 10, "kategori": "Prestasi"}
+]
 
 # Master Data 44 Butir Pelanggaran Siswa/i SMKN 21 Jakarta (Diurutkan dari poin terkecil ke terbesar)
 MASTER_PELANGGARAN = [
@@ -98,6 +111,10 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
     else:
         ket += f" pada pukul {waktu_dt.strftime('%H:%M:%S')} WIB (Batas masuk: 06:30 WIB)"
 
+    cfg = PengaturanJadwal.query.first()
+    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
     record = PelanggaranSiswa(
         siswa_id=siswa.id,
         nis=siswa.nis,
@@ -106,6 +123,9 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
         tanggal_waktu=waktu_dt,
         jenis_pelanggaran="Terlambat masuk sekolah",
         poin=5,
+        kategori="Pelanggaran",
+        tahun_ajaran=curr_ta,
+        semester=curr_sem,
         nama_penanggung_jawab=petugas,
         tanda_tangan_siswa=ttd,
         keterangan=ket
@@ -145,6 +165,8 @@ def handle_sync_terlambat():
     """
     try:
         count = sync_terlambat_ke_pelanggaran()
+        if count > 0:
+            notify_data_changed("pelanggaran")
         return jsonify({
             "success": True,
             "message": f"Berhasil menyinkronkan {count} catatan keterlambatan ke buku saku poin kedisiplinan."
@@ -157,11 +179,12 @@ def handle_sync_terlambat():
 @pelanggaran_bp.route('/api/pelanggaran/master', methods=['GET'])
 def get_master_pelanggaran():
     """
-    Mengambil master data 44 jenis pelanggaran dan daftar pilihan poin.
+    Mengambil master data 44 jenis pelanggaran, daftar prestasi/reward restoratif, dan daftar pilihan poin.
     """
     return jsonify({
         "success": True,
         "data": MASTER_PELANGGARAN,
+        "prestasi": MASTER_PRESTASI,
         "poin_options": ALLOWED_POIN
     })
 
@@ -171,7 +194,7 @@ def get_master_pelanggaran():
 @role_required(['piket', 'admin', 'siswa'])
 def create_pelanggaran():
     """
-    Mencatat pelanggaran siswa baru.
+    Mencatat pelanggaran atau prestasi siswa baru (Restorative Justice / Reward Points).
     Mendukung pencatatan resmi oleh Guru Piket/Admin dan pencatatan mandiri (self-reporting) oleh Siswa.
     Jika diakses oleh Siswa, identitas siswa otomatis dikunci ke akun yang sedang login.
     """
@@ -204,6 +227,12 @@ def create_pelanggaran():
     keterangan = str(data.get('keterangan', '')).strip()
     tanggal_waktu_str = data.get('tanggal_waktu')
 
+    # Deteksi Kategori: "Pelanggaran" atau "Prestasi" (Reward Points)
+    kategori = str(data.get('kategori', '')).strip()
+    if not kategori:
+        is_prestasi = any(p['nama'].strip().lower() == jenis_pelanggaran.strip().lower() for p in MASTER_PRESTASI)
+        kategori = "Prestasi" if is_prestasi else "Pelanggaran"
+
     # Jika pemohon adalah Siswa (pencatatan mandiri antrean piket), kunci identitas ke akun siswa yang login
     siswa_obj = None
     if user_role == 'siswa':
@@ -213,7 +242,7 @@ def create_pelanggaran():
         if getattr(siswa_obj, 'status', 'Aktif') == 'Alumni':
             return jsonify({
                 "success": False,
-                "message": "Akun alumni tidak dapat mencatat pelanggaran sekolah."
+                "message": "Akun alumni tidak dapat mencatat pelanggaran/prestasi sekolah."
             }), 400
         siswa_id = siswa_obj.id
         nis = siswa_obj.nis
@@ -231,7 +260,7 @@ def create_pelanggaran():
             if getattr(siswa_obj, 'status', 'Aktif') == 'Alumni':
                 return jsonify({
                     "success": False,
-                    "message": f"Siswa {siswa_obj.nama} ({siswa_obj.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mencatat pelanggaran sekolah."
+                    "message": f"Siswa {siswa_obj.nama} ({siswa_obj.kelas}) sudah berstatus Alumni / Lulus dan tidak dapat mencatat kedisiplinan sekolah."
                 }), 400
             siswa_id = siswa_obj.id
             if not nama_siswa:
@@ -245,22 +274,37 @@ def create_pelanggaran():
     if not kelas:
         return jsonify({"success": False, "message": "Kelas siswa wajib dipilih."}), 400
     if not jenis_pelanggaran:
-        return jsonify({"success": False, "message": "Jenis pelanggaran wajib dipilih."}), 400
-    if poin is None:
-        return jsonify({"success": False, "message": "Poin pelanggaran wajib ditentukan."}), 400
-    
-    try:
-        poin = int(poin)
-    except (ValueError, TypeError):
-        return jsonify({"success": False, "message": "Poin pelanggaran tidak valid."}), 400
+        return jsonify({"success": False, "message": "Jenis pelanggaran / prestasi wajib dipilih."}), 400
 
-    if poin not in ALLOWED_POIN:
-        return jsonify({"success": False, "message": f"Poin pelanggaran harus salah satu dari: {ALLOWED_POIN}"}), 400
+    # Jika siswa lapor mandiri, kunci poin secara mutlak ke poin default master resmi (anti-manipulasi)
+    status_verifikasi = "Disetujui"
+    if user_role == 'siswa':
+        status_verifikasi = "Menunggu Konfirmasi"
+        if kategori == 'Prestasi':
+            matched = next((m for m in MASTER_PRESTASI if m['nama'].strip().lower() == jenis_pelanggaran.strip().lower()), None)
+            poin = matched['poin_default'] if matched else 10
+            nama_penanggung_jawab = "Klaim Mandiri Siswa (Menunggu Verifikasi Guru/Pembina)"
+        else:
+            matched = next((m for m in MASTER_PELANGGARAN if m['nama'].strip().lower() == jenis_pelanggaran.strip().lower()), None)
+            poin = matched['poin_default'] if matched else 5
+            nama_penanggung_jawab = "Lapor Mandiri Siswa (Menunggu Verifikasi Guru Piket)"
+    else:
+        if poin is None:
+            if kategori == 'Prestasi':
+                matched = next((m for m in MASTER_PRESTASI if m['nama'].strip().lower() == jenis_pelanggaran.strip().lower()), None)
+                poin = matched['poin_default'] if matched else 10
+            else:
+                return jsonify({"success": False, "message": "Poin wajib ditentukan."}), 400
+        try:
+            poin = int(poin)
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "message": "Poin tidak valid."}), 400
 
-    if not nama_penanggung_jawab:
-        return jsonify({"success": False, "message": "Nama Guru / Tendik penanggung jawab wajib diisi."}), 400
+        if not nama_penanggung_jawab:
+            return jsonify({"success": False, "message": "Nama Guru / Tendik penanggung jawab wajib diisi."}), 400
+
     if not tanda_tangan_siswa:
-        return jsonify({"success": False, "message": "Tanda tangan siswa (E-Signature) wajib dibubuhkan."}), 400
+        return jsonify({"success": False, "message": "Tanda tangan siswa (E-Signature) wajib dibubuhkan langsung di kanvas."}), 400
 
     # Parse tanggal waktu
     tanggal_waktu = datetime.now()
@@ -281,6 +325,10 @@ def create_pelanggaran():
                 pass
 
     try:
+        cfg = PengaturanJadwal.query.first()
+        curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+        curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
         record = PelanggaranSiswa(
             siswa_id=siswa_id,
             nis=nis or "-",
@@ -289,15 +337,28 @@ def create_pelanggaran():
             tanggal_waktu=tanggal_waktu,
             jenis_pelanggaran=jenis_pelanggaran,
             poin=poin,
+            kategori=kategori,
+            tahun_ajaran=curr_ta,
+            semester=curr_sem,
             nama_penanggung_jawab=nama_penanggung_jawab,
             tanda_tangan_siswa=tanda_tangan_siswa,
+            status_verifikasi=status_verifikasi,
             keterangan=keterangan or None
         )
         db.session.add(record)
         db.session.commit()
+        notify_data_changed("pelanggaran")
 
-        # Catat jejak audit penambahan pelanggaran
-        action_name = 'PENGAKUAN_PELANGGARAN_MANDIRI' if user_role == 'siswa' else 'CATAT_PELANGGARAN'
+        # Catat jejak audit
+        if kategori == 'Prestasi':
+            action_name = 'KLAIM_PRESTASI_MANDIRI' if user_role == 'siswa' else 'CATAT_PRESTASI'
+            ket_audit = f"Pemberian poin penghargaan prestasi '{jenis_pelanggaran}' (+{poin} poin apresiasi, Status: {status_verifikasi}) untuk {nama_siswa} ({kelas})."
+            msg = f"Klaim prestasi mandiri berhasil dikirim! Menunggu konfirmasi (+{poin} poin apresiasi)." if user_role == 'siswa' else f"Penghargaan prestasi siswa {nama_siswa} (+{poin} poin apresiasi) berhasil disimpan resmi."
+        else:
+            action_name = 'LAPOR_PELANGGARAN_MANDIRI' if user_role == 'siswa' else 'CATAT_PELANGGARAN'
+            ket_audit = f"Pencatatan pelanggaran '{jenis_pelanggaran}' (+{poin} poin, Status: {status_verifikasi}) untuk {nama_siswa} ({kelas})."
+            msg = f"Laporan pelanggaran mandiri berhasil dikirim! Menunggu konfirmasi Guru Piket (+{poin} poin)." if user_role == 'siswa' else f"Catatan pelanggaran siswa {nama_siswa} (+{poin} poin) berhasil disimpan resmi."
+
         actor_name = f"Siswa: {nama_siswa} ({nis})" if user_role == 'siswa' else current_u.get('identifier', nama_penanggung_jawab)
         record_audit_log(
             user_id=current_u.get('user_id'),
@@ -306,17 +367,69 @@ def create_pelanggaran():
             action=action_name,
             target_type='PelanggaranSiswa',
             target_id=record.id,
-            keterangan=f"Pencatatan pelanggaran '{jenis_pelanggaran}' (+{poin} poin) untuk {nama_siswa} ({kelas}). Guru Penegur: {nama_penanggung_jawab}"
+            keterangan=ket_audit
         )
 
         return jsonify({
             "success": True,
-            "message": f"Catatan pelanggaran siswa {nama_siswa} (+{poin} poin) berhasil disimpan.",
+            "message": msg,
+            "status_verifikasi": status_verifikasi,
             "data": record.to_dict()
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": f"Gagal menyimpan catatan pelanggaran: {str(e)}"}), 500
+        return jsonify({"success": False, "message": f"Gagal menyimpan catatan: {str(e)}"}), 500
+
+
+@pelanggaran_bp.route('/api/pelanggaran/<int:id>/konfirmasi', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def konfirmasi_pelanggaran(id):
+    """
+    Fitur 1-Klik Guru Piket / Admin untuk mengesahkan atau menolak laporan pelanggaran mandiri siswa.
+    """
+    rec = PelanggaranSiswa.query.get(id)
+    if not rec:
+        return jsonify({"success": False, "message": "Catatan pelanggaran tidak ditemukan."}), 404
+
+    data = request.json or {}
+    aksi = str(data.get('aksi', 'setujui')).strip().lower()
+    current_u = getattr(request, 'current_user', {})
+    officer_name = current_u.get('identifier', 'Guru Piket')
+
+    try:
+        if aksi in ['tolak', 'batal']:
+            db.session.delete(rec)
+            db.session.commit()
+            notify_data_changed("pelanggaran")
+            return jsonify({
+                "success": True,
+                "message": f"Laporan pelanggaran mandiri {rec.nama_siswa} ({rec.jenis_pelanggaran}) berhasil dibatalkan / ditolak."
+            })
+
+        rec.status_verifikasi = "Disetujui"
+        rec.nama_penanggung_jawab = f"Disahkan oleh {officer_name}"
+        db.session.commit()
+        notify_data_changed("pelanggaran")
+
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=officer_name,
+            action='KONFIRMASI_PELANGGARAN_MANDIRI',
+            target_type='PelanggaranSiswa',
+            target_id=rec.id,
+            keterangan=f"Guru Piket mengesahkan laporan pelanggaran {rec.nama_siswa} ({rec.jenis_pelanggaran}, +{rec.poin} poin)"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"Pelanggaran mandiri {rec.nama_siswa} (+{rec.poin} poin) berhasil disahkan resmi!",
+            "data": rec.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal mengonfirmasi pelanggaran: {str(e)}"}), 500
 
 
 @pelanggaran_bp.route('/api/pelanggaran', methods=['GET'])
@@ -336,6 +449,10 @@ def get_pelanggaran_list():
     tanggal = request.args.get('tanggal')
     bulan = request.args.get('bulan')
     tahun = request.args.get('tahun')
+    status_verifikasi = request.args.get('status_verifikasi')
+    kategori = request.args.get('kategori')
+    tahun_ajaran = request.args.get('tahun_ajaran')
+    semester = request.args.get('semester')
     search = request.args.get('search')
     limit = request.args.get('limit', default=1000, type=int)
 
@@ -355,6 +472,16 @@ def get_pelanggaran_list():
             query = query.filter_by(nis=nis)
         if kelas and kelas != 'ALL':
             query = query.filter_by(kelas=kelas)
+        if status_verifikasi and status_verifikasi != 'ALL':
+            query = query.filter_by(status_verifikasi=status_verifikasi)
+
+    if kategori and kategori != 'ALL':
+        query = query.filter(PelanggaranSiswa.kategori == kategori)
+    if tahun_ajaran and tahun_ajaran != 'ALL':
+        query = query.filter(PelanggaranSiswa.tahun_ajaran == tahun_ajaran)
+    if semester and semester != 'ALL':
+        query = query.filter(PelanggaranSiswa.semester == semester)
+
     if tanggal:
         try:
             target_date = datetime.strptime(tanggal, "%Y-%m-%d").date()
@@ -396,55 +523,87 @@ def get_pelanggaran_list():
 @role_required(['piket', 'admin'])
 def get_pelanggaran_rekap():
     """
-    Mengambil ringkasan akumulasi poin pelanggaran per siswa,
-    daftar siswa dengan poin tertinggi, dan statistik pelanggaran hari ini.
+    Mengambil ringkasan akumulasi poin kedisiplinan per siswa (Restorative Justice):
+    - total_poin_pelanggaran
+    - total_poin_prestasi (reward yang memulihkan poin)
+    - poin_bersih = max(0, total_pelanggaran - total_prestasi)
+    - SP 1, 2, 3 dievaluasi dari poin_bersih
+    Mendukung filter Tahun Ajaran & Semester resmi.
     """
     try:
         today = datetime.now().date()
+        tahun_ajaran = request.args.get('tahun_ajaran')
+        semester = request.args.get('semester')
+
+        query_base = PelanggaranSiswa.query
+        if tahun_ajaran and tahun_ajaran != 'ALL':
+            query_base = query_base.filter(PelanggaranSiswa.tahun_ajaran == tahun_ajaran)
+        if semester and semester != 'ALL':
+            query_base = query_base.filter(PelanggaranSiswa.semester == semester)
 
         # Pelanggaran hari ini
-        today_count = PelanggaranSiswa.query.filter(
-            db.func.date(PelanggaranSiswa.tanggal_waktu) == today
+        today_count = query_base.filter(
+            db.func.date(PelanggaranSiswa.tanggal_waktu) == today,
+            PelanggaranSiswa.kategori != 'Prestasi'
         ).count()
 
-        # Total catatan pelanggaran
-        total_records = PelanggaranSiswa.query.count()
+        # Total catatan
+        total_records = query_base.count()
 
-        # Agregasi total poin per siswa
-        subquery = db.session.query(
-            PelanggaranSiswa.nama_siswa,
-            PelanggaranSiswa.nis,
-            PelanggaranSiswa.kelas,
-            PelanggaranSiswa.siswa_id,
-            db.func.sum(PelanggaranSiswa.poin).label('total_poin'),
-            db.func.count(PelanggaranSiswa.id).label('jumlah_pelanggaran')
-        ).group_by(
-            PelanggaranSiswa.nama_siswa,
-            PelanggaranSiswa.nis,
-            PelanggaranSiswa.kelas,
-            PelanggaranSiswa.siswa_id
-        ).order_by(db.desc('total_poin')).all()
+        # Agregasi per siswa
+        all_records = query_base.all()
+        siswa_map = {}
+        for r in all_records:
+            key = r.siswa_id or f"{r.nis}_{r.nama_siswa}"
+            if key not in siswa_map:
+                siswa_map[key] = {
+                    "siswa_id": r.siswa_id,
+                    "nama_siswa": r.nama_siswa,
+                    "nis": r.nis,
+                    "kelas": r.kelas,
+                    "poin_pelanggaran": 0,
+                    "poin_prestasi": 0,
+                    "jumlah_pelanggaran": 0,
+                    "jumlah_prestasi": 0
+                }
+            if r.kategori == 'Prestasi':
+                siswa_map[key]["poin_prestasi"] += r.poin
+                siswa_map[key]["jumlah_prestasi"] += 1
+            else:
+                siswa_map[key]["poin_pelanggaran"] += r.poin
+                siswa_map[key]["jumlah_pelanggaran"] += 1
 
         rekap_siswa = []
-        for row in subquery:
-            status = "Aman"
-            poin = int(row.total_poin or 0)
-            if poin >= 75:
-                status = "SP / Rapat Pleno"
-            elif poin >= 50:
-                status = "Panggilan Orang Tua / BK"
-            elif poin >= 25:
-                status = "Peringatan Wali Kelas"
+        for key, s in siswa_map.items():
+            poin_bersih = max(0, s["poin_pelanggaran"] - s["poin_prestasi"])
+            status = "Aman (< 30 Poin)"
+            sp_level = "Aman"
+            if poin_bersih >= 100:
+                sp_level = "SP 3"
+                status = "SP 3 (Sidang Pleno / Drop Out)"
+            elif poin_bersih >= 50:
+                sp_level = "SP 2"
+                status = "SP 2 (Panggilan Orang Tua / BK)"
+            elif poin_bersih >= 30:
+                sp_level = "SP 1"
+                status = "SP 1 (Peringatan / Wali Kelas)"
 
             rekap_siswa.append({
-                "siswa_id": row.siswa_id,
-                "nama_siswa": row.nama_siswa,
-                "nis": row.nis,
-                "kelas": row.kelas,
-                "total_poin": poin,
-                "jumlah_pelanggaran": row.jumlah_pelanggaran,
+                "siswa_id": s["siswa_id"],
+                "nama_siswa": s["nama_siswa"],
+                "nis": s["nis"],
+                "kelas": s["kelas"],
+                "total_poin_pelanggaran": s["poin_pelanggaran"],
+                "total_poin_prestasi": s["poin_prestasi"],
+                "total_poin": poin_bersih,
+                "poin_bersih": poin_bersih,
+                "jumlah_pelanggaran": s["jumlah_pelanggaran"],
+                "jumlah_prestasi": s["jumlah_prestasi"],
+                "sp_level": sp_level,
                 "status_pembinaan": status
             })
+
+        rekap_siswa.sort(key=lambda x: x["poin_bersih"], reverse=True)
 
         return jsonify({
             "success": True,
@@ -479,6 +638,7 @@ def delete_pelanggaran(id):
 
         db.session.delete(record)
         db.session.commit()
+        notify_data_changed("pelanggaran")
 
         # Catat jejak audit penghapusan pelanggaran
         current_u = getattr(request, 'current_user', {})

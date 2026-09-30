@@ -7,12 +7,12 @@ from config import BASE_DIR, DATABASE_PATH
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
-def create_db_backup(max_keep=7):
+def create_db_backup(max_keep=30):
     """
     Membuat cadangan database SQLite secara aman menggunakan SQLite Online Backup API.
     Aman dijalankan saat mode WAL dan transaksi absensi sedang berjalan (non-blocking).
     
-    :param max_keep: Jumlah cadangan maksimal yang dipertahankan (rotasi otomatis)
+    :param max_keep: Jumlah cadangan maksimal yang dipertahankan (rotasi otomatis 30 hari)
     :return: dict status keberhasilan, path berkas, ukuran, dan timestamp
     """
     if not os.path.exists(DATABASE_PATH):
@@ -98,4 +98,44 @@ def list_db_backups():
             "message": f"Gagal membaca riwayat cadangan: {str(e)}",
             "backups": []
         }
+
+
+_scheduler_started = False
+
+def start_auto_backup_scheduler():
+    """
+    Menjalankan scheduler cadangan otomatis (Disaster Recovery) di background thread.
+    Secara berkala memicu cadangan database otomatis jika belum dibuat hari ini (retensi 30 hari).
+    """
+    import threading
+    import time
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    _scheduler_started = True
+
+    def _worker():
+        # Beri jeda 10 detik saat startup aplikasi sebelum evaluasi pertama
+        time.sleep(10)
+        while True:
+            try:
+                backups = list_db_backups().get('backups', [])
+                need_backup = True
+                if backups:
+                    latest = backups[0]
+                    latest_dt = datetime.strptime(latest['created_at'], "%Y-%m-%d %H:%M:%S")
+                    if (datetime.now() - latest_dt).total_seconds() < 20 * 3600:
+                        need_backup = False
+
+                if need_backup:
+                    print("[AUTO BACKUP] Memulai pembuatan cadangan otomatis database SMKN 21...")
+                    res = create_db_backup(max_keep=30)
+                    print(f"[AUTO BACKUP] Selesai: {res.get('message')}")
+            except Exception as e:
+                print(f"[AUTO BACKUP ERROR] Kendala background scheduler: {e}")
+
+            time.sleep(3600)
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
 

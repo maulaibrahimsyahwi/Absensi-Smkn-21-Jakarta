@@ -23,13 +23,17 @@ import {
   Sparkles,
   X,
   ShieldCheck,
+  Trophy,
+  Award,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import logoSMKN21 from "../assets/Logo SMKN21.png";
 import {
   MASTER_PELANGGARAN,
+  MASTER_PRESTASI,
   ALLOWED_POIN,
+  ALLOWED_POIN_PRESTASI,
   getKategoriPelanggaran,
 } from "../data/pelanggaranData";
 import {
@@ -71,6 +75,13 @@ export default function CatatPelanggaran() {
         ? "/portal-admin"
         : "/";
 
+  // State Form Identitas Siswa
+  const [namaSiswa, setNamaSiswa] = useState("");
+  const [nis, setNis] = useState("");
+  const [siswaId, setSiswaId] = useState(null);
+  const [kelas, setKelas] = useState("");
+  const [selectedStudent, setSelectedStudent] = useState(null);
+
   // Inisialisasi otomatis jika siswa mencatat mandiri
   useEffect(() => {
     if (isSiswa && user) {
@@ -82,16 +93,12 @@ export default function CatatPelanggaran() {
     }
   }, [isSiswa, user]);
 
-  // State Form Identitas Siswa
-  const [namaSiswa, setNamaSiswa] = useState("");
-  const [nis, setNis] = useState("");
-  const [siswaId, setSiswaId] = useState(null);
-  const [kelas, setKelas] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState(null);
-
   // State Tanggal & Waktu Kejadian
   const [tanggal, setTanggal] = useState(getTodayDateStr);
   const [waktu, setWaktu] = useState(getCurrentTimeStr);
+
+  // Kategori Form: Pelanggaran vs Prestasi (Restorative Justice)
+  const [kategoriForm, setKategoriForm] = useState("Pelanggaran");
 
   // State Pelanggaran & Poin
   const [jenisPelanggaran, setJenisPelanggaran] = useState("");
@@ -138,6 +145,21 @@ export default function CatatPelanggaran() {
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+  };
+
+  // Muat tanda tangan tersimpan ke kanvas
+  const loadSignatureImage = (dataUrl) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !dataUrl) return;
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 10, 10, rect.width - 20, rect.height - 20);
+      setHasSignature(true);
+    };
+    img.src = dataUrl;
   };
 
   // Setup Canvas & Muat otomatis tanda tangan siswa jika ada
@@ -217,10 +239,9 @@ export default function CatatPelanggaran() {
     setIsStudentDropdownOpen(false);
     setStudentSearch("");
 
-    // Jika siswa sudah punya tanda tangan digital tersimpan, muat otomatis
-    if (siswa.tanda_tangan) {
-      loadSignatureImage(siswa.tanda_tangan);
-    }
+    // Keabsahan Hukum: Tanda tangan siswa wajib ditandatangani langsung di tempat saat peneguran,
+    // tidak boleh ditempel otomatis dari profil akun.
+    clearSignature();
   };
 
   const handleClearSelectedStudent = () => {
@@ -233,21 +254,6 @@ export default function CatatPelanggaran() {
     clearSignature();
   };
 
-  // Muat tanda tangan tersimpan ke kanvas
-  const loadSignatureImage = (dataUrl) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !dataUrl) return;
-    const ctx = canvas.getContext("2d");
-    const img = new Image();
-    img.onload = () => {
-      const rect = canvas.getBoundingClientRect();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 10, 10, rect.width - 20, rect.height - 20);
-      setHasSignature(true);
-    };
-    img.src = dataUrl;
-  };
-
   // Tombol gunakan TTD tersimpan untuk siswa
   const handleUseSavedSignature = () => {
     if (isSiswa && user?.tanda_tangan) {
@@ -255,15 +261,16 @@ export default function CatatPelanggaran() {
     }
   };
 
-  // Filter jenis pelanggaran berdasarkan kata kunci pencarian (diurutkan dari poin terendah ke tertinggi)
+  // Filter jenis pelanggaran / prestasi berdasarkan kata kunci pencarian (diurutkan dari poin terendah ke tertinggi)
   const filteredViolations = useMemo(() => {
-    let list = MASTER_PELANGGARAN;
+    let list =
+      kategoriForm === "Prestasi" ? MASTER_PRESTASI : MASTER_PELANGGARAN;
     if (violationSearch.trim()) {
       const q = violationSearch.toLowerCase();
       list = list.filter((item) => item.nama.toLowerCase().includes(q));
     }
     return [...list].sort((a, b) => a.poin_default - b.poin_default);
-  }, [violationSearch]);
+  }, [violationSearch, kategoriForm]);
 
   // Saat jenis pelanggaran dipilih, otomatis tentukan poin bakunya
   const handleSelectViolation = (item) => {
@@ -393,6 +400,7 @@ export default function CatatPelanggaran() {
       nama_penanggung_jawab: namaPenanggungJawab.trim(),
       tanda_tangan_siswa: signatureBase64,
       keterangan: keterangan.trim(),
+      kategori: kategoriForm,
     };
 
     setSubmitting(true);
@@ -402,7 +410,10 @@ export default function CatatPelanggaran() {
         setSuccessData(res.data.data);
       } else {
         setErrorMsg(
-          res.data?.message || "Gagal menyimpan catatan pelanggaran.",
+          res.data?.message ||
+            (kategoriForm === "Prestasi"
+              ? "Gagal menyimpan catatan prestasi."
+              : "Gagal menyimpan catatan pelanggaran."),
         );
       }
     } catch (err) {
@@ -471,23 +482,32 @@ export default function CatatPelanggaran() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-2.5 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-3xl mx-auto flex flex-col justify-center space-y-6">
+    <div className="min-h-[calc(100vh-4rem)] py-2.5 sm:py-10 px-3 sm:px-6 lg:px-8 max-w-4xl mx-auto flex flex-col justify-center space-y-6">
       {/* Modal / Slip Sukses */}
       {successData && (
-        <div className="bg-white rounded-2xl border border-emerald-200 p-6 sm:p-8 shadow-xl space-y-6 animate-in zoom-in-95">
+        <div
+          className={`bg-white rounded-2xl border ${successData.kategori === "Prestasi" ? "border-emerald-300" : "border-rose-200"} p-6 sm:p-8 shadow-xl space-y-6 animate-in zoom-in-95`}
+        >
           <div className="flex items-center gap-3 text-emerald-600">
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-slate-900">
-                Catatan Pelanggaran Berhasil Disimpan
+                {successData.kategori === "Prestasi"
+                  ? "Catatan Prestasi & Penghargaan Berhasil Disimpan"
+                  : successData.status_verifikasi === "Menunggu Konfirmasi"
+                    ? "Laporan Pelanggaran Terkirim"
+                    : "Catatan Pelanggaran Berhasil Disimpan"}
               </h2>
               <p className="text-xs text-slate-500">
-                Tercatat ke buku poin kedisiplinan dan portal siswa secara
-                resmi.
+                {successData.kategori === "Prestasi"
+                  ? "Tercatat resmi ke buku saku sebagai poin apresiasi dan pengurang poin sanksi (Restorative Justice)."
+                  : successData.status_verifikasi === "Menunggu Konfirmasi"
+                    ? "Menunggu peninjauan dan konfirmasi pengesahan dari Guru Piket."
+                    : "Tercatat ke buku poin kedisiplinan dan portal siswa secara resmi."}
               </p>
             </div>
           </div>
 
-          {/* Kartu Bukti Pelanggaran */}
+          {/* Kartu Bukti Pelanggaran / Prestasi */}
           <div className="border border-slate-200 rounded-xl p-5 bg-slate-50/70 space-y-4 print:border-black">
             <div className="flex items-center gap-3 pb-3 border-b-2 border-slate-900 print:flex">
               <img
@@ -500,7 +520,9 @@ export default function CatatPelanggaran() {
                   SMKN 21 JAKARTA
                 </h2>
                 <p className="text-[10px] sm:text-xs text-slate-600 font-sans">
-                  Surat Bukti Catatan Pelanggaran Tata Tertib Siswa
+                  {successData.kategori === "Prestasi"
+                    ? "Surat Bukti Catatan Penghargaan & Prestasi Siswa"
+                    : "Surat Bukti Catatan Pelanggaran Tata Tertib Siswa"}
                 </p>
               </div>
             </div>
@@ -512,8 +534,12 @@ export default function CatatPelanggaran() {
                 </h3>
               </div>
               <div className="text-left sm:text-right">
-                <span className="text-xl font-extrabold text-rose-600">
-                  {successData.poin} Poin
+                <span
+                  className={`text-xl font-extrabold ${successData.kategori === "Prestasi" ? "text-emerald-600" : "text-rose-600"}`}
+                >
+                  {successData.kategori === "Prestasi"
+                    ? `${successData.poin} Poin Reward`
+                    : `${successData.poin} Poin`}
                 </span>
                 <p className="text-[11px] text-slate-500">
                   {successData.tanggal_waktu_formatted}
@@ -535,7 +561,9 @@ export default function CatatPelanggaran() {
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block mb-0.5">
-                  Guru / Tendik Penegur
+                  {successData.kategori === "Prestasi"
+                    ? "Guru Pembina / Penilai"
+                    : "Guru / Tendik Penegur"}
                 </span>
                 <span className="text-slate-900 font-bold text-sm block">
                   {successData.nama_penanggung_jawab}
@@ -547,7 +575,9 @@ export default function CatatPelanggaran() {
             <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
               <div>
                 <span className="text-[11px] text-slate-500 block font-medium">
-                  Tanda Tangan Pengakuan Siswa
+                  {successData.kategori === "Prestasi"
+                    ? "Tanda Tangan Penerima Apresiasi"
+                    : "Tanda Tangan Pengakuan Siswa"}
                 </span>
                 <div className="w-40 h-20 border border-slate-200 bg-white rounded-xl mt-1 flex items-center justify-center overflow-hidden">
                   <img
@@ -571,7 +601,7 @@ export default function CatatPelanggaran() {
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm w-full sm:w-auto"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak Bukti Pelanggaran</span>
+              <span>Cetak Bukti</span>
             </button>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -610,14 +640,52 @@ export default function CatatPelanggaran() {
               </div>
               <div>
                 <h1 className="text-lg sm:text-xl font-bold text-slate-900">
-                  Catat Pelanggaran Siswa/i
+                  {kategoriForm === "Prestasi"
+                    ? "Catat Prestasi & Penghargaan Siswa/i"
+                    : "Catat Pelanggaran Siswa/i"}
                 </h1>
                 <p className="text-xs text-slate-500">
-                  {isSiswa
-                    ? "Formulir mandiri pengakuan pelanggaran tata tertib SMKN 21 Jakarta"
-                    : "Pencatatan pelanggaran & buku saku kedisiplinan SMKN 21 Jakarta"}
+                  {kategoriForm === "Prestasi"
+                    ? "Pencatatan prestasi, kejuaraan, atau keteladanan siswa"
+                    : isSiswa
+                      ? "Formulir mandiri pengakuan pelanggaran tata tertib SMKN 21 Jakarta"
+                      : "Pencatatan pelanggaran & buku saku kedisiplinan SMKN 21 Jakarta"}
                 </p>
               </div>
+            </div>
+
+            {/* Tab Switcher: Pelanggaran vs Prestasi */}
+            <div className="flex items-center bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setKategoriForm("Pelanggaran");
+                  setJenisPelanggaran("");
+                  setPoin("");
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  kategoriForm === "Pelanggaran"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Pelanggaran</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setKategoriForm("Prestasi");
+                  setJenisPelanggaran("");
+                  setPoin("");
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  kategoriForm === "Prestasi"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Prestasi</span>
+              </button>
             </div>
           </div>
 
@@ -815,16 +883,27 @@ export default function CatatPelanggaran() {
               </div>
             </div>
 
-            {/* SECTION 4: JENIS PELANGGARAN (Searchable Dropdown 44 Butir Baku) */}
+            {/* SECTION 4: JENIS PELANGGARAN / PRESTASI */}
             <div className="space-y-1.5 relative" ref={violationDropdownRef}>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                4. Jenis Pelanggaran <span className="text-rose-500">*</span>
+                {kategoriForm === "Prestasi"
+                  ? "4. Bentuk Prestasi / Penghargaan"
+                  : "4. Jenis Pelanggaran"}{" "}
+                <span
+                  className={
+                    kategoriForm === "Prestasi"
+                      ? "text-emerald-500"
+                      : "text-rose-500"
+                  }
+                >
+                  *
+                </span>
               </label>
 
               <button
                 type="button"
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className="w-full text-left text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-white flex items-center justify-between cursor-pointer shadow-2xs transition-colors"
+                className={`w-full text-left text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 ${kategoriForm === "Prestasi" ? "focus:ring-emerald-500" : "focus:ring-rose-500"} bg-white flex items-center justify-between cursor-pointer shadow-2xs transition-colors`}
               >
                 <span
                   className={
@@ -834,7 +913,9 @@ export default function CatatPelanggaran() {
                   }
                 >
                   {jenisPelanggaran ||
-                    "Pilih salah satu dari 44 butir pelanggaran..."}
+                    (kategoriForm === "Prestasi"
+                      ? "Pilih salah satu prestasi atau penghargaan siswa..."
+                      : "Pilih salah satu dari 44 butir pelanggaran...")}
                 </span>
                 <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
               </button>
@@ -845,10 +926,14 @@ export default function CatatPelanggaran() {
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Ketik kata kunci pelanggaran..."
+                      placeholder={
+                        kategoriForm === "Prestasi"
+                          ? "Ketik kata kunci prestasi / lomba..."
+                          : "Ketik kata kunci pelanggaran..."
+                      }
                       value={violationSearch}
                       onChange={(e) => setViolationSearch(e.target.value)}
-                      className="w-full text-xs pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                      className={`w-full text-xs pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 focus:outline-hidden focus:ring-2 ${kategoriForm === "Prestasi" ? "focus:ring-emerald-500" : "focus:ring-rose-500"}`}
                       autoFocus
                     />
                   </div>
@@ -864,22 +949,26 @@ export default function CatatPelanggaran() {
                           onClick={() => handleSelectViolation(item)}
                           className={`w-full text-left p-2.5 rounded-xl transition-colors flex items-center justify-between gap-3 cursor-pointer text-xs ${
                             isSelected
-                              ? "bg-rose-50 text-rose-900 font-bold"
+                              ? kategoriForm === "Prestasi"
+                                ? "bg-emerald-50 text-emerald-900 font-bold"
+                                : "bg-rose-50 text-rose-900 font-bold"
                               : "hover:bg-slate-50 text-slate-700 font-medium"
                           }`}
                         >
                           <span className="leading-relaxed">{item.nama}</span>
                           <span
-                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border flex-shrink-0 ${kat.badge}`}
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border flex-shrink-0 ${kategoriForm === "Prestasi" ? "bg-emerald-100 text-emerald-800 border-emerald-300" : kat.badge}`}
                           >
-                            {item.poin_default} Poin
+                            {kategoriForm === "Prestasi"
+                              ? `${item.poin_default} Reward`
+                              : `${item.poin_default} Poin`}
                           </span>
                         </button>
                       );
                     })}
                     {filteredViolations.length === 0 && (
                       <p className="text-xs text-slate-400 text-center py-4">
-                        Tidak pelanggaran yang cocok
+                        Tidak ada data yang cocok
                       </p>
                     )}
                   </div>
@@ -887,81 +976,133 @@ export default function CatatPelanggaran() {
               )}
             </div>
 
-            {/* SECTION 5: POIN PELANGGARAN (Interactive Pill Group dengan Warna Tingkat Pelanggaran) */}
+            {/* SECTION 5: POIN */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  5. Poin Pelanggaran <span className="text-rose-500">*</span>
+                  {kategoriForm === "Prestasi"
+                    ? "5. Poin Reward Apresiasi"
+                    : "5. Poin Pelanggaran"}{" "}
+                  <span
+                    className={
+                      kategoriForm === "Prestasi"
+                        ? "text-emerald-500"
+                        : "text-rose-500"
+                    }
+                  >
+                    *
+                  </span>
                 </label>
               </div>
 
-              {/* Selector Opsi 6 Poin Baku dengan Penyesuaian Warna Tingkat */}
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
-                {ALLOWED_POIN.map((p) => {
-                  const kat = getKategoriPelanggaran(p);
-                  const isSelected = String(poin) === String(p);
-
-                  // Styling warna tombol dinamis menyesuaikan tingkat poinnya
-                  let pointStyle = "";
-                  if (p <= 5) {
-                    // Ringan (2, 5) -> Emerald / Green
-                    pointStyle = isSelected
-                      ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/50 scale-[1.03]"
-                      : "bg-emerald-50/50 hover:bg-emerald-100/70 border-emerald-200 text-emerald-800";
-                  } else if (p <= 25) {
-                    // Sedang (10, 25) -> Amber / Yellow
-                    pointStyle = isSelected
-                      ? "bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30 ring-2 ring-amber-400/50 scale-[1.03]"
-                      : "bg-amber-50/50 hover:bg-amber-100/70 border-amber-200 text-amber-800";
-                  } else if (p <= 50) {
-                    // Berat (50) -> Orange
-                    pointStyle = isSelected
-                      ? "bg-orange-600 text-white border-orange-600 shadow-md shadow-orange-600/30 ring-2 ring-orange-500/50 scale-[1.03]"
-                      : "bg-orange-50/50 hover:bg-orange-100/70 border-orange-200 text-orange-800";
-                  } else {
-                    // Sangat Berat (100) -> Rose / Red
-                    pointStyle = isSelected
-                      ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/30 ring-2 ring-rose-500/50 scale-[1.03]"
-                      : "bg-rose-50/50 hover:bg-rose-100/70 border-rose-200 text-rose-800";
-                  }
-
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setPoin(String(p))}
-                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${pointStyle}`}
-                    >
-                      <span className="block text-base font-black">{p}</span>
-                      <span
-                        className={`block text-[10px] font-bold mt-0.5 ${
-                          isSelected ? "text-white/90" : "opacity-75"
+              {kategoriForm === "Prestasi" ? (
+                /* Pilihan Poin Prestasi / Reward */
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
+                  {ALLOWED_POIN_PRESTASI.map((p) => {
+                    const isSelected = String(poin) === String(p);
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPoin(String(p))}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/50 scale-[1.03]"
+                            : "bg-emerald-50/50 hover:bg-emerald-100/70 border-emerald-200 text-emerald-800"
                         }`}
                       >
-                        {kat.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                        <span className="block text-base font-black">{p}</span>
+                        <span
+                          className={`block text-[10px] font-bold mt-0.5 ${
+                            isSelected ? "text-white/90" : "opacity-75"
+                          }`}
+                        >
+                          Reward
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Selector Opsi 6 Poin Baku dengan Penyesuaian Warna Tingkat */
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-2.5">
+                  {ALLOWED_POIN.map((p) => {
+                    const kat = getKategoriPelanggaran(p);
+                    const isSelected = String(poin) === String(p);
+
+                    let pointStyle = "";
+                    if (p <= 5) {
+                      pointStyle = isSelected
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/50 scale-[1.03]"
+                        : "bg-emerald-50/50 hover:bg-emerald-100/70 border-emerald-200 text-emerald-800";
+                    } else if (p <= 25) {
+                      pointStyle = isSelected
+                        ? "bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/30 ring-2 ring-amber-400/50 scale-[1.03]"
+                        : "bg-amber-50/50 hover:bg-amber-100/70 border-amber-200 text-amber-800";
+                    } else if (p <= 50) {
+                      pointStyle = isSelected
+                        ? "bg-orange-600 text-white border-orange-600 shadow-md shadow-orange-600/30 ring-2 ring-orange-500/50 scale-[1.03]"
+                        : "bg-orange-50/50 hover:bg-orange-100/70 border-orange-200 text-orange-800";
+                    } else {
+                      pointStyle = isSelected
+                        ? "bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/30 ring-2 ring-rose-500/50 scale-[1.03]"
+                        : "bg-rose-50/50 hover:bg-rose-100/70 border-rose-200 text-rose-800";
+                    }
+
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPoin(String(p))}
+                        className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${pointStyle}`}
+                      >
+                        <span className="block text-base font-black">{p}</span>
+                        <span
+                          className={`block text-[10px] font-bold mt-0.5 ${
+                            isSelected ? "text-white/90" : "opacity-75"
+                          }`}
+                        >
+                          {kat.label}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* SECTION 6: NAMA GURU / TENDIK PENANGGUNG JAWAB (NAMA LENGKAP) */}
+            {/* SECTION 6: NAMA GURU / TENDIK */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  6. Guru / Tendik Penegur{" "}
-                  <span className="text-rose-500">*</span>
+                  {kategoriForm === "Prestasi"
+                    ? "6. Guru Pembina / Penilai Penghargaan"
+                    : "6. Guru / Tendik Penegur"}{" "}
+                  <span
+                    className={
+                      kategoriForm === "Prestasi"
+                        ? "text-emerald-500"
+                        : "text-rose-500"
+                    }
+                  >
+                    *
+                  </span>
                 </label>
                 <span className="text-[11px] text-slate-400">
-                  Nama Guru Yang Menegur
+                  {kategoriForm === "Prestasi"
+                    ? "Nama Guru / Pembina"
+                    : "Nama Guru Yang Menegur"}
                 </span>
               </div>
 
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Ketik nama lengkap guru / tenaga kependidikan penegur..."
+                  placeholder={
+                    kategoriForm === "Prestasi"
+                      ? "Ketik nama lengkap guru pembina / penilai prestasi..."
+                      : "Ketik nama lengkap guru / tenaga kependidikan penegur..."
+                  }
                   value={namaPenanggungJawab}
                   onChange={(e) => setNamaPenanggungJawab(e.target.value)}
                   className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
@@ -978,7 +1119,11 @@ export default function CatatPelanggaran() {
               <textarea
                 value={keterangan}
                 onChange={(e) => setKeterangan(e.target.value)}
-                placeholder="Catatan tambahan mengenai kejadian (contoh: Ditegur di depan gerbang, tidak memakai dasi & sabuk)..."
+                placeholder={
+                  kategoriForm === "Prestasi"
+                    ? "Catatan tambahan (contoh: Membantu menjaga ketertiban, juara 1 lomba desain grafis)..."
+                    : "Catatan tambahan mengenai kejadian (contoh: Ditegur di depan gerbang, tidak memakai dasi & sabuk)..."
+                }
                 rows={2}
                 className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-medium"
               />
@@ -988,8 +1133,18 @@ export default function CatatPelanggaran() {
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  8. Tanda Tangan Pengakuan Siswa{" "}
-                  <span className="text-rose-500">*</span>
+                  {kategoriForm === "Prestasi"
+                    ? "8. Tanda Tangan Konfirmasi Siswa"
+                    : "8. Tanda Tangan Pengakuan Siswa"}{" "}
+                  <span
+                    className={
+                      kategoriForm === "Prestasi"
+                        ? "text-emerald-500"
+                        : "text-rose-500"
+                    }
+                  >
+                    *
+                  </span>
                 </label>
 
                 <div className="flex items-center gap-2">
@@ -1007,7 +1162,7 @@ export default function CatatPelanggaran() {
               <p className="text-xs text-slate-500">
                 Goreskan tanda tangan digital siswa secara langsung pada area
                 kotak di bawah menggunakan jari atau mouse sebagai tanda bukti
-                pengakuan
+                pengakuan / penerimaan apresiasi
               </p>
 
               <div className="border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-2xl p-2 bg-slate-50/50 transition-colors relative">
@@ -1039,14 +1194,19 @@ export default function CatatPelanggaran() {
             {/* SUBMIT BUTTON */}
             <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
               <p className="text-[11px] text-slate-400 text-center sm:text-left">
-                Pelanggaran akan otomatis tercatat ke buku saku kedisiplinan dan
-                portal siswa SMKN 21
+                {kategoriForm === "Prestasi"
+                  ? "Poin prestasi akan otomatis mengurangi akumulasi sanksi dan tercatat di buku saku serta portal siswa"
+                  : "Pelanggaran akan otomatis tercatat ke buku saku kedisiplinan dan portal siswa SMKN 21"}
               </p>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 active:scale-98 disabled:opacity-50 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-rose-600/20 transition-all cursor-pointer whitespace-nowrap"
+                className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 ${
+                  kategoriForm === "Prestasi"
+                    ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20"
+                    : "bg-rose-600 hover:bg-rose-700 shadow-rose-600/20"
+                } active:scale-98 disabled:opacity-50 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md transition-all cursor-pointer whitespace-nowrap`}
               >
                 {submitting ? (
                   <>
@@ -1055,7 +1215,11 @@ export default function CatatPelanggaran() {
                   </>
                 ) : (
                   <>
-                    <span>Simpan</span>
+                    <span>
+                      {kategoriForm === "Prestasi"
+                        ? "Simpan Prestasi"
+                        : "Simpan Catatan Pelanggaran"}
+                    </span>
                   </>
                 )}
               </button>

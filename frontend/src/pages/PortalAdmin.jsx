@@ -23,13 +23,14 @@ import {
   Loader2,
   TrendingUp,
   Award,
-  RefreshCw,
   Laptop,
   UserRound,
   CalendarDays,
   Sun,
   Flag,
   Zap,
+  Database,
+  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -38,7 +39,10 @@ import ToastNotification from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 import ModalPengaturanPJJ from "../components/pjj/ModalPengaturanPJJ";
 import ModalKalenderLibur from "../components/libur/ModalKalenderLibur";
+import ModalTahunAjaran from "../components/admin/ModalTahunAjaran";
+import ModalDisasterRecovery from "../components/admin/ModalDisasterRecovery";
 import { liburService } from "../services/liburService";
+import { useRealtimeSubscription } from "../services/realtimeService";
 
 export default function PortalAdmin() {
   const navigate = useNavigate();
@@ -73,6 +77,8 @@ export default function PortalAdmin() {
   const [isLiburModalOpen, setIsLiburModalOpen] = useState(false);
   const [liburModalTab, setLiburModalTab] = useState("daftar");
   const [liburStatusToday, setLiburStatusToday] = useState(null);
+  const [isTahunAjaranModalOpen, setIsTahunAjaranModalOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [notification, setNotification] = useState(null);
 
   // Live Clock (WIB)
@@ -148,50 +154,15 @@ export default function PortalAdmin() {
 
   useEffect(() => {
     fetchSummary();
-
-    // Polling silent setiap 8 detik
-    const intervalId = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        api
-          .get("/rekap/admin_summary")
-          .then((res) => {
-            if (res.data?.success && res.data.data)
-              setSummaryData(res.data.data);
-          })
-          .catch(() => {});
-        api
-          .get("/piket/notifikasi")
-          .then((res) => {
-            if (res.data?.success && Array.isArray(res.data.notifikasi)) {
-              setPengajuanList(res.data.notifikasi);
-            }
-          })
-          .catch(() => {});
-        liburService
-          .getStatusToday()
-          .then((res) => {
-            if (res?.success) setLiburStatusToday(res);
-          })
-          .catch(() => {});
-      }
-    }, 8000);
-
-    // BroadcastChannel synchronization
-    let bc = null;
-    try {
-      if (typeof BroadcastChannel !== "undefined") {
-        bc = new BroadcastChannel("smkn21_absensi_channel");
-        bc.onmessage = () => {
-          fetchSummary();
-        };
-      }
-    } catch (e) {}
-
-    return () => {
-      clearInterval(intervalId);
-      if (bc) bc.close();
-    };
   }, [fetchSummary]);
+
+  // Sinkronisasi data otomatis secara realtime lintas tab & perangkat admin
+  useRealtimeSubscription(
+    ["presensi", "izin", "pelanggaran", "piket", "siswa", "libur", "pjj"],
+    () => {
+      fetchSummary();
+    },
+  );
 
   const openProfile = (tab = "profil") => {
     setProfileModalTab(tab);
@@ -277,8 +248,7 @@ export default function PortalAdmin() {
                       </>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-3 h-3 text-emerald-300" />
-                        <span>Hari Sekolah Aktif</span>
+                        <span>Aktif Pembelajaran</span>
                       </>
                     )}
                   </button>
@@ -287,13 +257,13 @@ export default function PortalAdmin() {
             </div>
           </div>
 
-          {/* Tombol Profil & Notifikasi Admin */}
+          {/* Tombol Profil (Desktop) & Notifikasi Admin */}
           <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
             <button
               type="button"
               onClick={() => openProfile("profil")}
               title="Profil Pengguna & Pengaturan Akun"
-              className="inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
             >
               {user?.foto_profil ? (
                 <img
@@ -331,16 +301,6 @@ export default function PortalAdmin() {
               sekolah
             </p>
           </div>
-          <button
-            type="button"
-            onClick={fetchSummary}
-            className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <RefreshCw
-              className={`w-3.5 h-3.5 ${loading ? "animate-spin text-purple-600" : ""}`}
-            />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -394,15 +354,15 @@ export default function PortalAdmin() {
         </div>
       </div>
 
-      {/* Menu Aksi Cepat Administrasi (Quick Actions) */}
-      <div className="space-y-3">
+      {/* Menu Aksi Cepat Administrasi (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
+      <div className="hidden md:block space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
             <span>Pusat Manajemen & Layanan Administrasi</span>
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Card 1: Data & Biometrik Siswa */}
           <Link
             to="/registrasi"
@@ -547,7 +507,7 @@ export default function PortalAdmin() {
                     ? `${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
                     : liburStatusToday?.is_special_school_day
                       ? `🇮🇩 Masuk Khusus: ${liburStatusToday.holiday_event?.nama || "Kegiatan"}`
-                      : "Libur semester, libur nasional & override harian"}
+                      : "Libur semester, libur nasional, dan hari khusus sekolah"}
                 </p>
               </div>
             </div>
@@ -583,6 +543,57 @@ export default function PortalAdmin() {
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
               <span className="hidden sm:inline">Kelola Daring</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card: Pengaturan Tahun Ajaran & Semester */}
+          <button
+            type="button"
+            onClick={() => setIsTahunAjaranModalOpen(true)}
+            className="group bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <GraduationCap className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-base truncate">
+                  Tahun Ajaran & Semester
+                </h3>
+                <p className="text-[11px] text-blue-100 mt-0.5 truncate">
+                  Partisi semester ganjil/genap & jam masuk gerbang
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Kelola Akademik</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card: Disaster Recovery & Backup Database */}
+          <button
+            type="button"
+            onClick={() => setIsBackupModalOpen(true)}
+            className="group bg-gradient-to-r from-purple-700 to-fuchsia-800 hover:from-purple-800 hover:to-fuchsia-900 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <Database className="w-6 h-6" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-purple-800 animate-ping"></span>
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-base truncate">
+                  Disaster Recovery & Backup
+                </h3>
+                <p className="text-[11px] text-purple-100 mt-0.5 truncate">
+                  Backup otomatis harian (retensi 30 hari) & unduh off-site
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Kelola Backup</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -679,6 +690,19 @@ export default function PortalAdmin() {
         onClose={() => setIsLiburModalOpen(false)}
         onRefreshStatus={fetchSummary}
         initialTab={liburModalTab}
+      />
+
+      {/* Modal Pengaturan Tahun Ajaran & Semester */}
+      <ModalTahunAjaran
+        isOpen={isTahunAjaranModalOpen}
+        onClose={() => setIsTahunAjaranModalOpen(false)}
+        onUpdated={fetchSummary}
+      />
+
+      {/* Modal Disaster Recovery & Backup Database */}
+      <ModalDisasterRecovery
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
       />
     </div>
   );

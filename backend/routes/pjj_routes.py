@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify
 from models import db, PengaturanPJJ, Siswa
 from utils.auth_middleware import token_required, role_required
 from utils.helpers import is_kelas_pjj, get_holiday_status, is_school_day
+from utils.realtime_bus import notify_data_changed
 
 pjj_bp = Blueprint('pjj', __name__)
 
@@ -195,17 +196,19 @@ def update_pjj_settings():
         cfg.updated_at = datetime.now()
 
         db.session.commit()
+        notify_data_changed("pjj")
+        notify_data_changed("presensi")
 
         # Rangkuman pesan respon
         if not is_active:
-            msg = "Mode PJJ dinonaktifkan. Seluruh kelas kembali ke Pembelajaran Tatap Muka (PTM) di sekolah."
+            msg = "Mode PJJ dinonaktifkan. Seluruh kelas kembali ke Pembelajaran Tatap Muka di sekolah"
         elif tipe_lingkup == 'semua':
-            msg = "Mode PJJ diaktifkan untuk Seluruh Siswa SMKN 21."
+            msg = "Mode PJJ diaktifkan untuk Seluruh Siswa SMKN 21 Jakarta"
         elif tipe_lingkup == 'tingkat':
             tingkat_str = ", ".join(tingkat_aktif) if tingkat_aktif else "Tidak ada"
-            msg = f"Mode PJJ diaktifkan untuk Tingkat {tingkat_str}."
+            msg = f"Mode PJJ diaktifkan untuk Tingkat {tingkat_str}"
         else:
-            msg = f"Mode PJJ diaktifkan untuk {len(kelas_aktif)} kelas pilihan."
+            msg = f"Mode PJJ diaktifkan untuk {len(kelas_aktif)} kelas pilihan"
 
         return jsonify({
             "success": True,

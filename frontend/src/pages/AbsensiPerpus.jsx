@@ -21,7 +21,6 @@ import {
   MapPin,
   Navigation,
   AlertTriangle,
-  RefreshCw,
   Sun,
   Flag,
   Calendar,
@@ -543,7 +542,7 @@ export default function AbsensiPerpus() {
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 max-w-md mb-4 leading-relaxed">
             Presensi perpustakaan hanya dapat dilakukan saat Anda berada di
-            lingkungan sekolah SMKN 21 Jakarta (radius &le; 10 meter).
+            lingkungan sekolah SMKN 21 Jakarta
             {geoState.distanceMeters != null && (
               <span className="block mt-2 font-bold text-rose-300 bg-rose-950/60 border border-rose-800/60 rounded-lg py-1.5 px-3">
                 Jarak Anda saat ini: ~{formatDistance(geoState.distanceMeters)}{" "}

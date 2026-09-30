@@ -1,5 +1,5 @@
 import React from "react";
-import { KeyRound, Camera, PenTool, Loader2 } from "lucide-react";
+import { KeyRound, Camera, PenTool, Loader2, ShieldAlert } from "lucide-react";
 
 export default function ResetSiswaModals({
   resettingPasswordSiswa,
@@ -11,6 +11,9 @@ export default function ResetSiswaModals({
   resettingSignatureSiswa,
   setResettingSignatureSiswa,
   handleResetSignatureConfirm,
+  resetting2faSiswa,
+  setResetting2faSiswa,
+  handleReset2faConfirm,
   loading,
 }) {
   return (
@@ -162,6 +165,58 @@ export default function ResetSiswaModals({
                   </>
                 ) : (
                   <span>Ya, Reset TTD</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Reset 2FA Siswa */}
+      {resetting2faSiswa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95">
+            <div className="p-5 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3.5 shadow-xs">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                Reset Autentikasi 2FA Siswa?
+              </h3>
+              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                Autentikasi dua faktor (2FA TOTP) untuk{" "}
+                <strong>{resetting2faSiswa.nama}</strong> (
+                {resetting2faSiswa.kelas}) akan dinonaktifkan.
+              </p>
+              <div className="mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-left">
+                <p className="text-[11px] text-rose-800 font-medium leading-relaxed">
+                  Gunakan fitur ini jika HP siswa hilang atau aplikasi
+                  Authenticator terhapus sehingga siswa tidak terkunci permanen.
+                </p>
+              </div>
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResetting2faSiswa(null)}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleReset2faConfirm}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Mereset 2FA...</span>
+                  </>
+                ) : (
+                  <span>Ya, Reset 2FA</span>
                 )}
               </button>
             </div>
