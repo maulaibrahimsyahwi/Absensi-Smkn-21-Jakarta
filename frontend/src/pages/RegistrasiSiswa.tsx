@@ -1,0 +1,941 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { createPortal } from "react-dom";
+import {
+  ArrowLeft,
+  Camera,
+  FileSpreadsheet,
+  Download,
+} from "lucide-react";
+import api from "../services/api";
+
+import FormTambahSiswa from "../components/registrasi/FormTambahSiswa";
+import TabelDaftarSiswa from "../components/registrasi/TabelDaftarSiswa";
+import EditSiswaModal from "../components/registrasi/EditSiswaModal";
+import DeleteSiswaModal from "../components/registrasi/DeleteSiswaModal";
+import LuluskanModal from "../components/registrasi/LuluskanModal";
+import ResetSiswaModals from "../components/registrasi/ResetSiswaModals";
+import ModalImportDapodik from "../components/registrasi/ModalImportDapodik";
+import KenaikanKelasModal from "../components/registrasi/KenaikanKelasModal";
+import MedicalExemptionModal from "../components/registrasi/MedicalExemptionModal";
+import ToastNotification, { ToastNotificationProps } from "../components/common/ToastNotification";
+import { useRealtimeSubscription } from "../services/realtimeService";
+import { downloadDapodikTemplate } from "../utils/dapodikUtils";
+
+import {
+  JURUSAN_SMKN21,
+  KELAS_PER_JURUSAN,
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+  getJurusanInfo,
+} from "../constants/schoolData";
+import { Siswa } from "../types/auth";
+
+// Re-export untuk kompatibilitas backward
+export {
+  JURUSAN_SMKN21,
+  KELAS_PER_JURUSAN,
+  DAFTAR_KELAS_SMKN21,
+  KELAS_GROUPS_DROPDOWN,
+  getJurusanInfo,
+};
+
+export default function RegistrasiSiswa() {
+  const navigate = useNavigate();
+  const webcamRef = useRef<any>(null);
+  const [siswaList, setSiswaList] = useState<Siswa[]>([]);
+  const [loadingList, setLoadingList] = useState<boolean>(false);
+  const [showCancelReRecordModal, setShowCancelReRecordModal] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [jurusanFilter] = useState<string>("ALL");
+  const [kelasFilter, setKelasFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL"); // "ALL" | "Aktif" | "Alumni"
+
+  // Multi-select & Bulk Action state
+  const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [luluskanModalData, setLuluskanModalData] = useState<{
+    isOpen: boolean;
+    type: "tingkat_xii" | "selected" | "single";
+    targetSiswa: Siswa | null;
+  }>({
+    isOpen: false,
+    type: "tingkat_xii",
+    targetSiswa: null,
+  });
+  const [bulkDeleting, setBulkDeleting] = useState<boolean>(false);
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+
+  // Form state
+  const [nis, setNis] = useState<string>("");
+  const [nama, setNama] = useState<string>("");
+  const [kelas, setKelas] = useState<string>("X PPLG 1");
+  const [jenisKelamin, setJenisKelamin] = useState<string>("Laki-laki");
+  const [samples, setSamples] = useState<string[]>([]); // Array of base64 images (1 to 3)
+  const [currentSlot, setCurrentSlot] = useState<number>(0); // 0, 1, or 2
+  const [notification, setNotification] = useState<ToastNotificationProps["notification"]>(null);
+
+  // Edit / Delete / Reset Modals State
+  const [editingSiswa, setEditingSiswa] = useState<Siswa | null>(null);
+  const [deletingSiswa, setDeletingSiswa] = useState<Siswa | null>(null);
+  const [reRecordingSiswa, setReRecordingSiswa] = useState<Siswa | null>(null);
+  const [resettingPasswordSiswa, setResettingPasswordSiswa] = useState<Siswa | null>(null);
+  const [resettingFaceSiswa, setResettingFaceSiswa] = useState<Siswa | null>(null);
+  const [resettingSignatureSiswa, setResettingSignatureSiswa] = useState<Siswa | null>(null);
+  const [resetting2faSiswa, setResetting2faSiswa] = useState<Siswa | null>(null);
+  const [resettingLoading, setResettingLoading] = useState<boolean>(false);
+
+  // Kenaikan Kelas Massal & Medical Exemption Modals State
+  const [isKenaikanModalOpen, setIsKenaikanModalOpen] = useState<boolean>(false);
+  const [medicalExemptionSiswa, setMedicalExemptionSiswa] = useState<Siswa | null>(null);
+
+  const fetchSiswa = async (isManual = false) => {
+    setLoadingList(true);
+    try {
+      const delayPromise = isManual
+        ? new Promise((resolve) => setTimeout(resolve, 450))
+        : Promise.resolve();
+      const [res] = await Promise.all([api.get("/siswa"), delayPromise]);
+      const data = res.data || [];
+      setSiswaList(data);
+      if (isManual) {
+        setNotification({
+          type: "success",
+          message: `Data siswa berhasil diperbarui (${data.length} siswa terdaftar).`,
+        });
+      }
+    } catch (err) {
+      console.error("Gagal mengambil data siswa:", err);
+      if (isManual) {
+        setNotification({
+          type: "error",
+          message: "Gagal memperbarui data siswa. Periksa koneksi backend.",
+        });
+      }
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSiswa();
+  }, []);
+
+  // Sinkronisasi realtime otomatis data registrasi siswa
+  useRealtimeSubscription(["siswa"], () => {
+    fetchSiswa(false);
+  });
+
+  // Auto-dismiss floating toast notification setelah 5 detik
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [notification]);
+
+  const handleBackClick = (e?: React.MouseEvent) => {
+    if (reRecordingSiswa) {
+      if (e) e.preventDefault();
+      setShowCancelReRecordModal(true);
+    } else {
+      navigate("/portal-admin");
+    }
+  };
+
+  // Ambil foto untuk slot yang aktif
+  const takeSamplePhoto = useCallback(() => {
+    if (!webcamRef.current) return;
+    const screenshot = webcamRef.current.getScreenshot();
+    if (screenshot) {
+      const newSamples = [...samples];
+      newSamples[currentSlot] = screenshot;
+      setSamples(newSamples);
+
+      if (currentSlot < 2) {
+        setCurrentSlot(currentSlot + 1);
+      }
+      setNotification({
+        type: "info",
+        message: `Foto sampel ke-${currentSlot + 1} berhasil diambil!`,
+      });
+    }
+  }, [webcamRef, currentSlot, samples]);
+
+  const removeSample = (index: number) => {
+    const newSamples = samples.filter((_, idx) => idx !== index);
+    setSamples(newSamples);
+    setCurrentSlot(newSamples.length);
+  };
+
+  // Simpan data siswa & sampel wajah
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const cleanNis = nis.trim();
+    if (!cleanNis || !/^\d{4,18}$/.test(cleanNis)) {
+      setNotification({
+        type: "error",
+        message: "NIS harus berupa angka antara 4 sampai 18 digit!",
+      });
+      return;
+    }
+
+    const cleanNama = nama.trim();
+    if (cleanNama.length < 3) {
+      setNotification({
+        type: "error",
+        message: "Nama lengkap siswa minimal 3 huruf!",
+      });
+      return;
+    }
+    if (!/^[a-zA-Z\s\.\',\-]+$/.test(cleanNama)) {
+      setNotification({
+        type: "error",
+        message:
+          "Nama siswa hanya boleh berupa huruf, spasi, titik, atau tanda petik!",
+      });
+      return;
+    }
+
+    const cleanKelas = kelas.trim().toUpperCase();
+    if (!cleanKelas || cleanKelas.length < 3) {
+      setNotification({
+        type: "error",
+        message:
+          "Kelas & jurusan wajib diisi! Format: Tingkat (X/XI/XII) diikuti nama jurusan/rombel (Contoh: X PPLG atau X PPLG 1).",
+      });
+      return;
+    }
+
+    if (samples.length === 0) {
+      setNotification({
+        type: "error",
+        message:
+          "Harap ambil minimal 1 foto sampel wajah siswa terlebih dahulu!",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    setNotification(null);
+
+    try {
+      let targetId: number | string | null = reRecordingSiswa ? reRecordingSiswa.id : null;
+
+      if (!targetId) {
+        // Cek apakah siswa sudah ada di database (misal: baru diimport dari Dapodik)
+        const existingStudent = siswaList.find(
+          (s) => String(s.nis).trim() === cleanNis,
+        );
+        if (existingStudent) {
+          targetId = existingStudent.id;
+          // Perbarui data jika terdapat penyesuaian
+          await api.put(`/siswa/${targetId}`, {
+            nis: cleanNis,
+            nama: cleanNama,
+            kelas: cleanKelas,
+            jenis_kelamin: jenisKelamin || "Laki-laki",
+          });
+        } else {
+          const createRes = await api.post("/siswa", {
+            nis: cleanNis,
+            nama: cleanNama,
+            kelas: cleanKelas,
+            jenis_kelamin: jenisKelamin || "Laki-laki",
+          });
+          targetId = createRes.data.id;
+        }
+      }
+
+      const faceRes = await api.post("/register_face", {
+        siswa_id: targetId,
+        images: samples,
+      });
+
+      const genderLabel = jenisKelamin === "Perempuan" ? "Siswi" : "Siswa";
+      setNotification({
+        type: "success",
+        message:
+          faceRes.data.message ||
+          `Berhasil mendaftarkan ${genderLabel} ${cleanNama} (${cleanKelas}) dengan ${samples.length} sampel wajah!`,
+      });
+
+      // Reset form
+      setNis("");
+      setNama("");
+      setJenisKelamin("Laki-laki");
+      setSamples([]);
+      setCurrentSlot(0);
+      setReRecordingSiswa(null);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Gagal mendaftarkan siswa atau biometrik wajah. Pastikan wajah terlihat jelas.",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Luluskan & Status Actions
+  const handleLuluskanTingkatXII = () => {
+    setLuluskanModalData({
+      isOpen: true,
+      type: "tingkat_xii",
+      targetSiswa: null,
+    });
+  };
+
+  const handleLuluskanSelected = () => {
+    if (selectedIds.length === 0) return;
+    setLuluskanModalData({
+      isOpen: true,
+      type: "selected",
+      targetSiswa: null,
+    });
+  };
+
+  const handleLuluskanSingle = (siswa: Siswa) => {
+    setLuluskanModalData({
+      isOpen: true,
+      type: "single",
+      targetSiswa: siswa,
+    });
+  };
+
+  const confirmLuluskanModal = async () => {
+    setActionLoading(true);
+    try {
+      if (luluskanModalData.type === "tingkat_xii") {
+        const res = await api.post("/siswa/luluskan_tingkat", {
+          tingkat: "XII",
+        });
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            "Seluruh siswa kelas XII berhasil diluluskan menjadi Alumni.",
+        });
+      } else if (luluskanModalData.type === "selected") {
+        const res = await api.post("/siswa/bulk_status", {
+          siswa_ids: selectedIds,
+          status: "Alumni",
+        });
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            `${selectedIds.length} siswa berhasil diluluskan menjadi Alumni.`,
+        });
+        setSelectedIds([]);
+      } else if (
+        luluskanModalData.type === "single" &&
+        luluskanModalData.targetSiswa
+      ) {
+        const res = await api.patch(
+          `/siswa/${luluskanModalData.targetSiswa.id}/status`,
+          { status: "Alumni" },
+        );
+        setNotification({
+          type: "success",
+          message:
+            res.data.message ||
+            `Siswa ${luluskanModalData.targetSiswa.nama} berhasil diubah menjadi Alumni.`,
+        });
+      }
+      setLuluskanModalData({
+        isOpen: false,
+        type: "tingkat_xii",
+        targetSiswa: null,
+      });
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal memproses kelulusan siswa.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAktifkanSingle = async (siswa: Siswa) => {
+    try {
+      const res = await api.patch(`/siswa/${siswa.id}/status`, {
+        status: "Aktif",
+      });
+      setNotification({
+        type: "success",
+        message:
+          res.data.message ||
+          `Siswa ${siswa.nama} berhasil diaktifkan kembali.`,
+      });
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mengaktifkan siswa.",
+      });
+    }
+  };
+
+  const confirmBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setActionLoading(true);
+    try {
+      const res = await api.post("/siswa/bulk_delete", {
+        siswa_ids: selectedIds,
+      });
+      setNotification({
+        type: "success",
+        message:
+          res.data.message ||
+          `${selectedIds.length} data siswa berhasil dihapus dari database.`,
+      });
+
+      // Broadcast penghapusan massal akun siswa agar tab yang sedang aktif langsung keluar
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("smkn21_auth_channel");
+          bc.postMessage({
+            type: "BULK_USERS_DELETED",
+            role: "siswa",
+            ids: selectedIds,
+          });
+          bc.close();
+        }
+      } catch (e) {}
+
+      setSelectedIds([]);
+      setBulkDeleting(false);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Gagal menghapus data siswa secara massal.",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const confirmDeleteSiswa = async () => {
+    if (!deletingSiswa) return;
+    try {
+      await api.delete(`/siswa/${deletingSiswa.id}`);
+      setNotification({
+        type: "success",
+        message: `Siswa ${deletingSiswa.nama} berhasil dihapus dari database.`,
+      });
+
+      // Broadcast penghapusan akun siswa agar tab yang sedang aktif langsung keluar
+      try {
+        if (typeof BroadcastChannel !== "undefined") {
+          const bc = new BroadcastChannel("smkn21_auth_channel");
+          bc.postMessage({
+            type: "USER_DELETED",
+            role: "siswa",
+            id: deletingSiswa.id,
+          });
+          bc.close();
+        }
+      } catch (e) {}
+
+      setDeletingSiswa(null);
+      setSelectedIds((prev) => prev.filter((id) => id !== deletingSiswa.id));
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal menghapus siswa.",
+      });
+    }
+  };
+
+  const handleUpdateSiswa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSiswa) return;
+
+    const cleanNis = String(editingSiswa.nis || "").trim();
+    if (!cleanNis || !/^\d{4,18}$/.test(cleanNis)) {
+      setNotification({
+        type: "error",
+        message: "NIS harus berupa angka antara 4 sampai 18 digit!",
+      });
+      return;
+    }
+
+    const cleanNama = String(editingSiswa.nama || "").trim();
+    if (cleanNama.length < 3 || !/^[a-zA-Z\s\.\',\-]+$/.test(cleanNama)) {
+      setNotification({
+        type: "error",
+        message:
+          "Nama siswa minimal 3 huruf dan tidak boleh mengandung angka/simbol aneh!",
+      });
+      return;
+    }
+
+    const cleanKelas = String(editingSiswa.kelas || "")
+      .trim()
+      .toUpperCase();
+    if (!cleanKelas || cleanKelas.length < 3) {
+      setNotification({
+        type: "error",
+        message:
+          "Kelas & jurusan wajib diisi! Format: Tingkat (X/XI/XII) diikuti nama jurusan/rombel (Contoh: X PPLG atau X PPLG 1).",
+      });
+      return;
+    }
+
+    try {
+      await api.put(`/siswa/${editingSiswa.id}`, {
+        nis: cleanNis,
+        nama: cleanNama,
+        kelas: cleanKelas,
+        status: editingSiswa.status || "Aktif",
+        jenis_kelamin: editingSiswa.jenis_kelamin || "Laki-laki",
+      });
+      setNotification({
+        type: "success",
+        message: `Data ${cleanNama} (${cleanKelas}) berhasil diperbarui.`,
+      });
+      setEditingSiswa(null);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal memperbarui data siswa.",
+      });
+    }
+  };
+
+  const handleResetPasswordConfirm = async () => {
+    if (!resettingPasswordSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(
+        `/siswa/${resettingPasswordSiswa.id}/reset_password`,
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Kata sandi ${resettingPasswordSiswa.nama} berhasil direset ke default (NIS ${resettingPasswordSiswa.nis})`,
+      });
+      setResettingPasswordSiswa(null);
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal mereset kata sandi siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  const handleResetFaceConfirm = async () => {
+    if (!resettingFaceSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(`/siswa/${resettingFaceSiswa.id}/reset_face`);
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Biometrik wajah ${resettingFaceSiswa.nama} berhasil direset.`,
+      });
+      setResettingFaceSiswa(null);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal mereset biometrik wajah siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  const handleResetSignatureConfirm = async () => {
+    if (!resettingSignatureSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(
+        `/siswa/${resettingSignatureSiswa.id}/reset_signature`,
+      );
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Tanda tangan digital ${resettingSignatureSiswa.nama} berhasil direset.`,
+      });
+      setResettingSignatureSiswa(null);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
+          "Gagal mereset tanda tangan digital siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  const handleReset2faConfirm = async () => {
+    if (!resetting2faSiswa) return;
+    setResettingLoading(true);
+    try {
+      const res = await api.post(`/siswa/${resetting2faSiswa.id}/reset_2fa`);
+      setNotification({
+        type: "success",
+        message:
+          res.data?.message ||
+          `Autentikasi 2FA ${resetting2faSiswa.nama} berhasil dinonaktifkan.`,
+      });
+      setResetting2faSiswa(null);
+      fetchSiswa();
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message: err.response?.data?.message || "Gagal mereset 2FA siswa.",
+      });
+    } finally {
+      setResettingLoading(false);
+    }
+  };
+
+  // Perhitungan Data & Filter
+  const totalAktif = siswaList.filter(
+    (s) => (s.status || "Aktif") === "Aktif",
+  ).length;
+  const totalAlumni = siswaList.filter((s) => s.status === "Alumni").length;
+  const totalKelasXIIAktif = siswaList.filter(
+    (s) => s.kelas?.startsWith("XII") && (s.status || "Aktif") === "Aktif",
+  ).length;
+
+  const filteredSiswa = siswaList.filter((s) => {
+    const matchSearch =
+      s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.kelas?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchJurusan =
+      jurusanFilter === "ALL" ||
+      (s.kelas && s.kelas.toUpperCase().includes(jurusanFilter));
+    const matchKelas = kelasFilter === "ALL" || s.kelas === kelasFilter;
+    const sStatus = s.status || "Aktif";
+    const matchStatus = statusFilter === "ALL" || sStatus === statusFilter;
+    return matchSearch && matchJurusan && matchKelas && matchStatus;
+  });
+
+  const uniqueKelas = Array.from(new Set(siswaList.map((s) => s.kelas))).filter(
+    Boolean,
+  ) as string[];
+  const allFilteredIds = filteredSiswa.map((s) => s.id);
+  const isAllSelected =
+    filteredSiswa.length > 0 &&
+    allFilteredIds.every((id) => selectedIds.includes(id));
+  const isSomeSelected =
+    filteredSiswa.some((s) => selectedIds.includes(s.id)) && !isAllSelected;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) =>
+        prev.filter((id) => !allFilteredIds.includes(id as number)),
+      );
+    } else {
+      setSelectedIds((prev) =>
+        Array.from(new Set([...prev, ...allFilteredIds])),
+      );
+    }
+  };
+
+  const toggleSelectSiswa = (id: number | string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  return (
+    <div className="py-6 sm:py-8 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+      {/* Toast Notification Seragam */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => handleBackClick()}
+            title="Kembali ke Beranda Admin"
+            className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0 cursor-pointer"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Pendaftaran Siswa / Siswi SMKN 21
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Mengelola data dan biometrik wajah siswa/siswi SMKN 21 Jakarta
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={downloadDapodikTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs cursor-pointer"
+            title="Unduh template format Excel Dapodik"
+          >
+            <Download className="w-4 h-4 text-slate-500" />
+            <span>Unduh Template</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white shadow-2xs transition-all cursor-pointer"
+            title="Import data siswa dari Excel / CSV Dapodik"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Import Dapodik</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Grid: Form Left, Student Table Right */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-3">
+        {/* Kolom Kiri: Form & Kamera Perekam */}
+        <div className="lg:col-span-5">
+          <FormTambahSiswa
+            nis={nis}
+            setNis={setNis}
+            nama={nama}
+            setNama={setNama}
+            kelas={kelas}
+            setKelas={setKelas}
+            jenisKelamin={jenisKelamin}
+            setJenisKelamin={setJenisKelamin}
+            samples={samples}
+            currentSlot={currentSlot}
+            setCurrentSlot={setCurrentSlot}
+            webcamRef={webcamRef}
+            takeSamplePhoto={takeSamplePhoto}
+            removeSample={removeSample}
+            onSubmit={handleRegister}
+            submitting={submitting}
+            reRecordingSiswa={reRecordingSiswa}
+            onCancelReRecord={() => {
+              setReRecordingSiswa(null);
+              setNis("");
+              setNama("");
+              setJenisKelamin("Laki-laki");
+              setSamples([]);
+            }}
+            siswaList={siswaList}
+          />
+        </div>
+
+        {/* Kolom Kanan: Tabel Siswa & Aksi */}
+        <TabelDaftarSiswa
+          siswaList={siswaList}
+          filteredSiswa={filteredSiswa}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          kelasFilter={kelasFilter}
+          setKelasFilter={setKelasFilter}
+          uniqueKelas={uniqueKelas}
+          selectedIds={selectedIds}
+          isAllSelected={isAllSelected}
+          isSomeSelected={isSomeSelected}
+          toggleSelectAll={toggleSelectAll}
+          toggleSelectSiswa={toggleSelectSiswa}
+          totalAktif={totalAktif}
+          totalAlumni={totalAlumni}
+          totalKelasXIIAktif={totalKelasXIIAktif}
+          onLuluskanTingkatXII={handleLuluskanTingkatXII}
+          onKenaikanKelasMassal={() => setIsKenaikanModalOpen(true)}
+          onMedicalExemption={(s) => setMedicalExemptionSiswa(s)}
+          onLuluskanSelected={handleLuluskanSelected}
+          onLuluskanSingle={handleLuluskanSingle}
+          onAktifkanSingle={handleAktifkanSingle}
+          onReRecord={(s) => {
+            setReRecordingSiswa(s);
+            setNis(s.nis);
+            setNama(s.nama);
+            setKelas(s.kelas);
+            setJenisKelamin(s.jenis_kelamin || "Laki-laki");
+            setSamples([]);
+            setCurrentSlot(0);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          onEdit={(s) => setEditingSiswa(s)}
+          onDelete={(s) => setDeletingSiswa(s)}
+          onResetPassword={(s) => setResettingPasswordSiswa(s)}
+          onResetFace={(s) => setResettingFaceSiswa(s)}
+          onResetSignature={(s) => setResettingSignatureSiswa(s)}
+          onReset2fa={(s) => setResetting2faSiswa(s)}
+          onBulkDelete={() => setBulkDeleting(true)}
+          loading={loadingList}
+        />
+      </div>
+
+      {/* Modal Luluskan Siswa (Tingkat XII / Terpilih / Satuan) */}
+      <LuluskanModal
+        isOpen={luluskanModalData.isOpen}
+        onClose={() =>
+          setLuluskanModalData({
+            isOpen: false,
+            type: "tingkat_xii",
+            targetSiswa: null,
+          })
+        }
+        onConfirm={confirmLuluskanModal}
+        type={luluskanModalData.type}
+        targetSiswa={luluskanModalData.targetSiswa}
+        selectedCount={selectedIds.length}
+        loading={actionLoading}
+      />
+
+      {/* Modal Hapus Siswa (Single & Bulk) */}
+      <DeleteSiswaModal
+        deletingSiswa={deletingSiswa}
+        setDeletingSiswa={setDeletingSiswa}
+        confirmDeleteSiswa={confirmDeleteSiswa}
+        isBulk={bulkDeleting}
+        selectedCount={selectedIds.length}
+        confirmBulkDelete={confirmBulkDelete}
+        onCloseBulk={() => setBulkDeleting(false)}
+        loading={actionLoading}
+      />
+
+      {/* Modal Edit Siswa */}
+      <EditSiswaModal
+        editingSiswa={editingSiswa}
+        setEditingSiswa={setEditingSiswa}
+        handleUpdateSiswa={handleUpdateSiswa}
+        groups={KELAS_GROUPS_DROPDOWN}
+        siswaList={siswaList}
+      />
+
+      {/* Modal Konfirmasi Reset Password, Wajah, TTD, dan 2FA Siswa */}
+      <ResetSiswaModals
+        resettingPasswordSiswa={resettingPasswordSiswa}
+        setResettingPasswordSiswa={setResettingPasswordSiswa}
+        handleResetPasswordConfirm={handleResetPasswordConfirm}
+        resettingFaceSiswa={resettingFaceSiswa}
+        setResettingFaceSiswa={setResettingFaceSiswa}
+        handleResetFaceConfirm={handleResetFaceConfirm}
+        resettingSignatureSiswa={resettingSignatureSiswa}
+        setResettingSignatureSiswa={setResettingSignatureSiswa}
+        handleResetSignatureConfirm={handleResetSignatureConfirm}
+        resetting2faSiswa={resetting2faSiswa}
+        setResetting2faSiswa={setResetting2faSiswa}
+        handleReset2faConfirm={handleReset2faConfirm}
+        loading={resettingLoading}
+      />
+
+      {/* Modal Konfirmasi Batal Rekam Ulang Wajah */}
+      {showCancelReRecordModal &&
+        createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                <Camera className="w-6 h-6" />
+              </div>
+              <div className="text-center">
+                <h4 className="text-base font-bold text-slate-900">
+                  Batalkan Rekam Ulang Wajah?
+                </h4>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  Anda sedang dalam proses merekam ulang wajah untuk siswa{" "}
+                  <strong className="text-slate-800">
+                    {reRecordingSiswa?.nama}
+                  </strong>{" "}
+                  ({reRecordingSiswa?.kelas}). Apakah Anda ingin tetap
+                  melanjutkan rekam foto wajah, atau batalkan tanpa mengubah
+                  foto wajah siswa?
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelReRecordModal(false)}
+                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
+                >
+                  Lanjutkan Rekam
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCancelReRecordModal(false);
+                    setReRecordingSiswa(null);
+                    setNis("");
+                    setNama("");
+                    setJenisKelamin("Laki-laki");
+                    setSamples([]);
+                    navigate("/portal-admin");
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer transition-colors"
+                >
+                  Batalkan & Keluar
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Modal Import Data Siswa Dapodik */}
+      <ModalImportDapodik
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          fetchSiswa(true);
+        }}
+        existingSiswaList={siswaList}
+      />
+
+      {/* Modal Kenaikan Kelas Massal */}
+      <KenaikanKelasModal
+        isOpen={isKenaikanModalOpen}
+        onClose={() => setIsKenaikanModalOpen(false)}
+        onSuccess={(msg) => {
+          fetchSiswa(true);
+          setNotification({ type: "success", message: msg });
+        }}
+      />
+
+      {/* Modal Dispensasi Medis Biometrik Wajah */}
+      <MedicalExemptionModal
+        isOpen={Boolean(medicalExemptionSiswa)}
+        targetSiswa={medicalExemptionSiswa}
+        onClose={() => setMedicalExemptionSiswa(null)}
+        onSuccess={(msg) => {
+          fetchSiswa(true);
+          setNotification({ type: "success", message: msg });
+        }}
+      />
+    </div>
+  );
+}

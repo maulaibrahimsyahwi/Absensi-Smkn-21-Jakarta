@@ -118,7 +118,7 @@ def token_required(f):
                     return jsonify({
                         'status': 'error',
                         'error_code': 'SESSION_TERMINATED',
-                        'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda.'
+                        'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
                     }), 401
         except Exception as db_err:
             # Jika terjadi error koneksi database, log dan izinkan payload yang valid tetap berjalan agar tidak memblokir sementara
