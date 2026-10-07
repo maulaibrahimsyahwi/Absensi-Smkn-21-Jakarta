@@ -16,6 +16,7 @@ import {
   Navigation,
   Lock,
   GraduationCap,
+  ImageIcon,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { getCurrentLocation } from "../utils/geoUtils";
@@ -75,7 +76,9 @@ export default function PengajuanIzin(): React.JSX.Element {
   );
   const [nisError, setNisError] = useState("");
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Asia/Jakarta",
+  });
   const [jenis, setJenis] = useState<"Sakit" | "Izin">("Sakit");
   const [tanggalMulai, setTanggalMulai] = useState(todayStr);
   const [tanggalSelesai, setTanggalSelesai] = useState(todayStr);
@@ -121,9 +124,28 @@ export default function PengajuanIzin(): React.JSX.Element {
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [submittedData, setSubmittedData] = useState<SubmittedIzinReceipt | null>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (errorMsg && errorRef.current) {
+      errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [errorMsg]);
+  const [submittedData, setSubmittedData] =
+    useState<SubmittedIzinReceipt | null>(null);
+
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+
+  const checks = [
+    { label: "Data Siswa", ok: !!siswaData },
+    { label: "Alasan", ok: alasan.trim().length >= 5 },
+    { label: "Foto Bukti", ok: !!suratBukti },
+    { label: "Tanda Tangan", ok: !!studentSignature },
+    { label: "Lokasi GPS", ok: !!geoLoc.latitude },
+  ];
+  const completedCount = checks.filter((c) => c.ok).length;
+  const isFormComplete = completedCount === checks.length;
 
   // Fungsi mengambil titik lokasi GPS dari perangkat
   const ambilLokasiGPS = () => {
@@ -274,8 +296,11 @@ export default function PengajuanIzin(): React.JSX.Element {
   const handleHapusFoto = () => {
     setSuratBukti(null);
     setSuratPreview(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
+    if (galleryInputRef.current) {
+      galleryInputRef.current.value = "";
     }
   };
 
@@ -427,7 +452,7 @@ export default function PengajuanIzin(): React.JSX.Element {
   }
 
   return (
-    <div className="w-full max-w-3xl mx-auto min-h-[calc(100vh-4rem)] py-4 sm:py-10 px-3 sm:px-6 lg:px-8 flex flex-col justify-center overflow-x-hidden">
+    <div className="w-full max-w-3xl mx-auto min-h-[calc(100vh-4rem)] py-4 sm:py-10 px-3 sm:px-6 lg:px-8 flex flex-col justify-center overflow-x-clip">
       {submittedData ? (
         /* SUCCESS RECEIPT CARD */
         <div className="bg-white rounded-2xl border border-emerald-200/80 shadow-lg shadow-emerald-500/5 overflow-hidden p-4 sm:p-8 animate-in fade-in duration-300">
@@ -532,7 +557,7 @@ export default function PengajuanIzin(): React.JSX.Element {
         </div>
       ) : (
         /* SUBMISSION FORM */
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-900/5 overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md shadow-slate-900/5 overflow-clip">
           {/* Form Header */}
           <div className="px-4 py-4 sm:px-7 sm:py-6 border-b border-slate-100 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-white">
             <div className="flex items-center gap-3 min-w-0">
@@ -561,7 +586,10 @@ export default function PengajuanIzin(): React.JSX.Element {
             className="p-4 sm:p-7 space-y-4 sm:space-y-5"
           >
             {errorMsg && (
-              <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs sm:text-sm text-rose-700 animate-in fade-in">
+              <div
+                ref={errorRef}
+                className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-xs sm:text-sm text-rose-700 animate-in fade-in"
+              >
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-500" />
                 <span>{errorMsg}</span>
               </div>
@@ -812,24 +840,51 @@ export default function PengajuanIzin(): React.JSX.Element {
                   </button>
                 </div>
               ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl p-5 text-center cursor-pointer transition-colors bg-slate-50/50 hover:bg-blue-50/30"
-                >
+                <div className="space-y-2">
                   <input
-                    ref={fileInputRef}
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <input
+                    ref={galleryInputRef}
                     type="file"
                     accept="image/*"
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-2">
-                    <Camera className="w-5 h-5" />
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="press flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-4 hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer transition-colors text-center"
+                    >
+                      <Camera className="h-5 w-5 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-700">
+                        Foto Langsung
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Kamera HP
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => galleryInputRef.current?.click()}
+                      className="press flex flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-4 hover:border-blue-400 hover:bg-blue-50/30 cursor-pointer transition-colors text-center"
+                    >
+                      <ImageIcon className="h-5 w-5 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-700">
+                        Dari Galeri
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Pilih berkas
+                      </span>
+                    </button>
                   </div>
-                  <p className="text-xs font-semibold text-slate-700">
-                    Klik untuk ambil foto atau pilih dari galeri
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
+                  <p className="text-[11px] text-center text-slate-400">
                     Format JPG, PNG (Maks. 5MB)
                   </p>
                 </div>
@@ -992,39 +1047,45 @@ export default function PengajuanIzin(): React.JSX.Element {
               </span>
             </div>
 
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                !siswaData ||
-                !geoLoc.latitude ||
-                !geoLoc.longitude ||
-                !studentSignature
-              }
-              className={`w-full py-3 px-4 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 transition-all shadow-md ${
-                loading ||
-                !siswaData ||
-                !geoLoc.latitude ||
-                !geoLoc.longitude ||
-                !studentSignature
-                  ? "bg-slate-300 cursor-not-allowed shadow-none text-slate-500"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-blue-500/20 cursor-pointer active:scale-[0.99]"
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Mengirim Pengajuan...</span>
-                </>
-              ) : !geoLoc.latitude || !geoLoc.longitude ? (
-                <span>Aktifkan GPS untuk Dapat Mengirim</span>
-              ) : !studentSignature ? (
-                <span>Bubuhkan Tanda Tangan Digital untuk Mengirim</span>
-              ) : (
-                <span>Kirim Surat Pengajuan {jenis}</span>
-              )}
-            </button>
+            {/* Sticky Submit Bar di bawah form */}
+            <div className="sticky bottom-0 -mx-4 -mb-4 sm:-mx-7 sm:-mb-7 mt-6 border-t border-slate-200/80 bg-white/95 p-4 sm:px-7 pb-[max(1rem,env(safe-area-inset-bottom,0px))] backdrop-blur-md rounded-b-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-10">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-600">
+                  Kelengkapan formulir ({completedCount}/{checks.length})
+                </span>
+                <span className="font-bold text-blue-600">
+                  {Math.round((completedCount / checks.length) * 100)}%
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !isFormComplete}
+                className="press flex w-full min-h-[48px] items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none cursor-pointer"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Mengirim Pengajuan...</span>
+                  </>
+                ) : !isFormComplete ? (
+                  <span>
+                    Lengkapi{" "}
+                    {!siswaData
+                      ? "Data Siswa"
+                      : alasan.trim().length < 5
+                        ? "Alasan (min. 5 huruf)"
+                        : !suratBukti
+                          ? "Foto Bukti"
+                          : !studentSignature
+                            ? "Tanda Tangan"
+                            : "Lokasi GPS"}
+                  </span>
+                ) : (
+                  <span>Kirim Surat Pengajuan {jenis}</span>
+                )}
+              </button>
+            </div>
           </form>
         </div>
       )}

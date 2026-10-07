@@ -1,41 +1,37 @@
 import api from "./api";
-import { ApiResponse } from "../types";
+import type { ApiResponse } from "../types";
+
+export type RekapParams = Record<string, string | number | boolean | null | undefined>;
+
+const cleanParams = (p: RekapParams): Record<string, string | number | boolean> =>
+  Object.fromEntries(
+    Object.entries(p).filter(([, v]) => v !== "" && v != null),
+  ) as Record<string, string | number | boolean>;
+
+const get = async <T = unknown>(
+  url: string,
+  params: RekapParams = {},
+  signal?: AbortSignal,
+): Promise<T> =>
+  (await api.get<T>(url, { params: cleanParams(params), signal })).data;
 
 /**
  * Layanan API Rekapitulasi & Riwayat Kehadiran Siswa SMKN 21 Jakarta.
+ * Membersihkan parameter kosong untuk mencegah filter salah pada backend,
+ * serta mendukung AbortSignal untuk mitigasi race condition pada filter tabel.
  */
 export const rekapService = {
-  /**
-   * Mengambil daftar tahun ajaran yang tersedia di database.
-   */
-  getAvailableYears: async (): Promise<any> => {
-    const res = await api.get("/rekap/available_years");
-    return res.data;
-  },
+  getAvailableYears: (signal?: AbortSignal) =>
+    get<number[]>("/rekap/available_years", {}, signal),
 
-  /**
-   * Mengambil data statistik agregasi & rekapitulasi siswa per periode (bulan/tahun).
-   */
-  getSiswaPeriode: async (params: Record<string, unknown>): Promise<any> => {
-    const res = await api.get("/rekap/siswa_periode", { params });
-    return res.data;
-  },
+  getSiswaPeriode: <T = any>(p: RekapParams = {}, signal?: AbortSignal) =>
+    get<T>("/rekap/siswa_periode", p, signal),
 
-  /**
-   * Mengambil data riwayat log presensi harian siswa.
-   */
-  getHarian: async (params: Record<string, unknown>): Promise<any> => {
-    const res = await api.get("/rekap/harian", { params });
-    return res.data;
-  },
+  getHarian: <T = any[]>(p: RekapParams = {}, signal?: AbortSignal) =>
+    get<T>("/rekap/harian", p, signal),
 
-  /**
-   * Mengambil data riwayat kunjungan perpustakaan.
-   */
-  getPerpus: async (params: Record<string, unknown>): Promise<any> => {
-    const res = await api.get("/rekap/perpus", { params });
-    return res.data;
-  },
+  getPerpus: <T = any[]>(p: RekapParams = {}, signal?: AbortSignal) =>
+    get<T>("/rekap/perpus", p, signal),
 };
 
 export default rekapService;

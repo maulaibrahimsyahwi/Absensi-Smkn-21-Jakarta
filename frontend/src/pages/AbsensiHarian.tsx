@@ -20,6 +20,7 @@ import {
   VolumeX,
   ShieldAlert,
   CloudOff,
+  Stethoscope,
 } from "lucide-react";
 import FaceSilhouetteGuide from "../components/FaceSilhouetteGuide";
 import { useAuth } from "../context/AuthContext";
@@ -42,6 +43,9 @@ import {
   getOfflineQueue,
   syncOfflineQueueToServer,
 } from "../services/offlineQueue";
+import OfflineQueueModal from "../components/common/OfflineQueueModal";
+import BiometricPrivacyModal from "../components/common/BiometricPrivacyModal";
+import useWakeLock from "../hooks/useWakeLock";
 
 interface AttendanceResult {
   success: boolean;
@@ -74,10 +78,31 @@ export default function AbsensiHarian(): React.JSX.Element {
   const [offlineQueueCount, setOfflineQueueCount] = useState(
     getOfflineQueue().length,
   );
+  const [showOfflineModal, setShowOfflineModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [isTimeTampered, setIsTimeTampered] = useState(false);
   const [timeDriftSeconds, setTimeDriftSeconds] = useState(0);
+  const [camError, setCamError] = useState<string | null>(null);
 
+  useWakeLock();
   const { playSound } = useAudioFeedback();
+
+  // Dengarkan event sinkronisasi offline PWA Background Sync secara real-time
+  useEffect(() => {
+    const handleQueued = () => setOfflineQueueCount(getOfflineQueue().length);
+    const handleSynced = () => setOfflineQueueCount(getOfflineQueue().length);
+    const handleCleared = () => setOfflineQueueCount(0);
+
+    window.addEventListener("offline-attendance-queued", handleQueued);
+    window.addEventListener("offline-attendance-synced", handleSynced);
+    window.addEventListener("offline-attendance-cleared", handleCleared);
+
+    return () => {
+      window.removeEventListener("offline-attendance-queued", handleQueued);
+      window.removeEventListener("offline-attendance-synced", handleSynced);
+      window.removeEventListener("offline-attendance-cleared", handleCleared);
+    };
+  }, []);
 
   // Pengecekan Presensi & Status Operasional Hari Ini (Hari Sekolah, Libur, Sudah Absen)
   useEffect(() => {
@@ -133,26 +158,6 @@ export default function AbsensiHarian(): React.JSX.Element {
     };
     checkPjj();
   }, [isSiswa, user]);
-
-  // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
-  useEffect(() => {
-    let wakeLock: any = null;
-    const requestWakeLock = async () => {
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLock = await (navigator as any).wakeLock.request("screen");
-        }
-      } catch (err) {
-        // Abaikan jika ditolak peramban
-      }
-    };
-    requestWakeLock();
-    return () => {
-      if (wakeLock) {
-        wakeLock.release().catch(() => {});
-      }
-    };
-  }, []);
 
   // GPS Geofence Hook (SMKN 21)
   const {
@@ -220,7 +225,7 @@ export default function AbsensiHarian(): React.JSX.Element {
       speakTimeTamperedWarning();
       setResult({
         success: false,
-        message: `⚠️ Presensi Ditolak: Jam HP Anda tidak akurat (selisih ~${timeDriftSeconds}s). Aktifkan 'Set Waktu Otomatis' (NTP) di pengaturan HP Anda.`,
+        message: `Presensi Ditolak: Jam HP Anda tidak akurat (selisih ~${timeDriftSeconds}s). Aktifkan 'Set Waktu Otomatis' (NTP) di pengaturan HP Anda.`,
       });
       return;
     }
@@ -250,6 +255,7 @@ export default function AbsensiHarian(): React.JSX.Element {
 
       const res = await api.post("/verify_harian", payload);
       playSound("success");
+      if ("vibrate" in navigator) navigator.vibrate(40);
 
       const studentName =
         res.data?.siswa?.nama || res.data?.nama || user?.nama || "Siswa";
@@ -293,27 +299,38 @@ export default function AbsensiHarian(): React.JSX.Element {
       }, 3500);
     } catch (err: any) {
       playSound("error");
+      if ("vibrate" in navigator) navigator.vibrate([60, 40, 60]);
 
       // Deteksi Kegagalan Jaringan / Listrik Padam (Offline Emergency Buffer)
       const isNetworkOffline =
         !navigator.onLine || err.code === "ERR_NETWORK" || !err.response;
       if (isNetworkOffline) {
-        enqueueOfflineAttendance({
-          siswa_id: user?.id ?? "OFFLINE_TEMP",
-          nis: user?.nis || "OFFLINE_TEMP",
-          nama: user?.nama || "Siswa SMKN 21",
-          status: "Tepat Waktu",
+        const saved = await enqueueOfflineAttendance({
+          mode: isSiswa ? "mandiri" : "kiosk",
+          image: imageSrc,
+          latitude: geoState.latitude,
+          longitude: geoState.longitude,
+          accuracy: geoState.accuracy,
+          expected_siswa_id: isSiswa ? user?.id ?? null : null,
           device_id: getDeviceId(),
         });
+        if (!saved) {
+          setResult({
+            success: false,
+            message:
+              "Penyimpanan perangkat penuh atau tidak tersedia. Presensi belum tersimpan, hubungi guru piket.",
+          });
+          return;
+        }
         setOfflineQueueCount(getOfflineQueue().length);
         speakIndonesian(
-          "Koneksi terputus. Presensi tersimpan di buffer offline kiosk.",
+          "Koneksi terputus. Presensi dan foto tersimpan di buffer lokal kiosk.",
         );
         setResult({
           success: true,
           isOfflineBuffer: true,
           message:
-            "⚠️ Jaringan Offline / Terputus: Presensi tersimpan di Buffer Darurat Kiosk. Akan otomatis disinkronkan ke server saat jaringan pulih.",
+            "Jaringan Terputus: Bukti foto tersimpan di Buffer Darurat. Verifikasi pengenalan wajah akan otomatis dijalankan ke server saat jaringan pulih.",
         });
         setTimeout(() => {
           setResult(null);
@@ -383,6 +400,9 @@ export default function AbsensiHarian(): React.JSX.Element {
     livenessToken,
   ]);
 
+  const captureRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  captureRef.current = captureAndVerify;
+
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
   useEffect(() => {
     if (
@@ -398,7 +418,7 @@ export default function AbsensiHarian(): React.JSX.Element {
     }
 
     if (countdown <= 0) {
-      captureAndVerify();
+      captureRef.current();
       return;
     }
 
@@ -415,8 +435,7 @@ export default function AbsensiHarian(): React.JSX.Element {
     result,
     effectiveGpsValid,
     isSiswa,
-    attendanceToday,
-    captureAndVerify,
+    attendanceToday?.already_attended,
   ]);
 
   // Hari Libur atau Akhir Pekan: Presensi Ditutup
@@ -542,32 +561,72 @@ export default function AbsensiHarian(): React.JSX.Element {
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none">
-      {/* 1. Kamera Fullscreen Memenuhi Layar */}
-      <Webcam
-        audio={false}
-        ref={webcamRef}
-        screenshotFormat="image/jpeg"
-        videoConstraints={{
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        }}
-        className="w-full h-full object-cover"
-      />
+    <div className="fixed inset-0 h-dvh w-full bg-black overflow-hidden select-none">
+      {camError ? (
+        <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center z-30">
+          <div className="w-16 h-16 rounded-3xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mb-4">
+            <Camera className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-bold text-white mb-2">
+            Kamera Tidak Dapat Diakses
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
+            {camError}. Pastikan izin kamera telah diberikan pada browser atau
+            coba muat ulang halaman.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-lg transition"
+            >
+              Muat Ulang Halaman
+            </button>
+            <Link
+              to={backTarget}
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 font-bold text-xs transition"
+            >
+              Kembali
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* 1. Kamera Fullscreen Memenuhi Layar */}
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            onUserMediaError={(err) =>
+              setCamError(
+                typeof err === "string"
+                  ? err
+                  : (err as any)?.message ||
+                      "Akses kamera ditolak atau perangkat kamera tidak ditemukan.",
+              )
+            }
+            videoConstraints={{
+              facingMode: "user",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            }}
+            className="w-full h-full object-cover"
+          />
 
-      {/* 2. Garis Laser Pemindai Animasi */}
-      <div className="scanner-line"></div>
+          {/* 2. Garis Laser Pemindai Animasi */}
+          {!isLiveVerified && !loading && <div className="scanner-line"></div>}
 
-      {/* 3. Presisi Siluet Kontur Wajah Manusia */}
-      <FaceSilhouetteGuide
-        isDetected={isFaceDetected}
-        theme="blue"
-        countdown={countdown}
-        loading={loading}
-        isLiveVerified={isLiveVerified}
-        eyeState={eyeState}
-      />
+          {/* 3. Presisi Siluet Kontur Wajah Manusia */}
+          <FaceSilhouetteGuide
+            isDetected={isFaceDetected}
+            theme="blue"
+            countdown={countdown}
+            loading={loading}
+            isLiveVerified={isLiveVerified}
+            eyeState={eyeState}
+          />
+        </>
+      )}
 
       {/* 4. Top Floating Bar */}
       <div className="absolute top-2 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
@@ -610,29 +669,16 @@ export default function AbsensiHarian(): React.JSX.Element {
             )}
           </button>
 
-          {/* Tombol Sync Antrean Offline Kiosk Buffer jika ada data */}
+          {/* Tombol Buka Modal Antrean Offline Kiosk Buffer jika ada data */}
           {offlineQueueCount > 0 && (
             <button
               type="button"
-              onClick={async () => {
-                const res = await syncOfflineQueueToServer();
-                if (res.success) {
-                  setOfflineQueueCount(getOfflineQueue().length);
-                  alert(
-                    `Berhasil menyinkronkan ${res.count} presensi offline ke server!`,
-                  );
-                } else {
-                  alert(
-                    res.message ||
-                      "Gagal sinkronisasi offline. Periksa jaringan.",
-                  );
-                }
-              }}
-              title="Ada presensi darurat tersimpan di buffer lokal kiosk. Klik untuk sinkronkan."
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse"
+              onClick={() => setShowOfflineModal(true)}
+              title="Ada presensi darurat tersimpan di buffer lokal kiosk. Klik untuk melihat & menyinkronkan."
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse cursor-pointer"
             >
               <CloudOff className="w-3.5 h-3.5" />
-              <span>Sync Buffer ({offlineQueueCount})</span>
+              <span>Buffer Offline ({offlineQueueCount})</span>
             </button>
           )}
 
@@ -655,7 +701,7 @@ export default function AbsensiHarian(): React.JSX.Element {
           <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-rose-600/95 border border-rose-400 text-white font-bold text-xs shadow-2xl backdrop-blur-md max-w-md text-center">
             <ShieldAlert className="w-5 h-5 text-white shrink-0 animate-bounce" />
             <span>
-              ⚠️ Jam HP Tidak Sinkron ({timeDriftSeconds} detik)! Harap aktifkan
+              Jam HP Tidak Sinkron ({timeDriftSeconds} detik)! Harap aktifkan
               "Waktu Otomatis" di setelan HP sebelum presensi.
             </span>
           </div>
@@ -690,34 +736,41 @@ export default function AbsensiHarian(): React.JSX.Element {
         <div className="absolute top-16 sm:top-20 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-[500px] z-30 animate-in fade-in zoom-in-95 duration-200">
           <div
             className={`p-3.5 sm:p-4 rounded-2xl border backdrop-blur-md shadow-2xl flex items-start gap-3 ${
-              result.success
-                ? "bg-emerald-950/90 border-emerald-400/80 text-emerald-100"
-                : "bg-rose-950/90 border-rose-400/80 text-rose-100"
+              result.isOfflineBuffer
+                ? "bg-amber-950/90 border-amber-400/80 text-amber-100"
+                : result.success
+                  ? "bg-emerald-950/90 border-emerald-400/80 text-emerald-100"
+                  : "bg-rose-950/90 border-rose-400/80 text-rose-100"
             }`}
           >
-            {result.success ? (
+            {result.isOfflineBuffer ? (
+              <CloudOff className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400 flex-shrink-0 mt-0.5" />
+            ) : result.success ? (
               <CheckCircle2 className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400 flex-shrink-0 mt-0.5" />
             ) : (
               <AlertCircle className="w-6 h-6 sm:w-7 sm:h-7 text-rose-400 flex-shrink-0 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
               <p className="font-extrabold text-sm sm:text-base leading-snug">
-                {result.success
-                  ? "Presensi Berhasil Terverifikasi!"
-                  : "Presensi Belum Berhasil"}
+                {result.isOfflineBuffer
+                  ? "Tersimpan di Buffer Offline Kiosk"
+                  : result.success
+                    ? "Presensi Berhasil Terverifikasi!"
+                    : "Presensi Belum Berhasil"}
               </p>
               <p className="text-xs sm:text-sm mt-1 opacity-90 break-words">
                 {result.message}
               </p>
               {result.is_medical_exempt && (
                 <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
-                  <span>🩺 Pengecualian Medis Biometrik Aktif</span>
+                  <Stethoscope className="w-3.5 h-3.5 shrink-0" />
+                  <span>Pengecualian Medis Biometrik Aktif</span>
                 </div>
               )}
               {result.is_flagged_proxy && (
-                <div className="mt-2 p-2 rounded-lg bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/40">
+                <div className="mt-2 inline-flex items-center gap-1.5 p-2 rounded-lg bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/40">
+                  <Flag className="w-3.5 h-3.5 shrink-0" />
                   <span>
-                    🚩{" "}
                     {result.proxy_note ||
                       "Peringatan: 1 HP terdeteksi bergantian"}
                   </span>
@@ -944,8 +997,8 @@ export default function AbsensiHarian(): React.JSX.Element {
         </div>
       )}
 
-      {/* 8. Floating Bottom Button: Pindai Langsung */}
-      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+      {/* 8. Floating Bottom Button: Pindai Langsung & Badge UU PDP */}
+      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex flex-col items-center gap-2.5 z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
         <button
           onClick={() => {
             if (!isLiveVerified) return;
@@ -953,7 +1006,7 @@ export default function AbsensiHarian(): React.JSX.Element {
             captureAndVerify();
           }}
           disabled={loading || !effectiveGpsValid || !isLiveVerified}
-          className="px-6 py-3 min-h-[48px] rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-blue-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
+          className="press px-6 py-3 min-h-[48px] rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-blue-500/40 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
         >
           <Camera className="w-5 h-5 flex-shrink-0" />
           <span className="truncate">
@@ -969,6 +1022,22 @@ export default function AbsensiHarian(): React.JSX.Element {
           </span>
         </button>
       </div>
+
+      {/* Modal Antrean Presensi Offline Buffer */}
+      <OfflineQueueModal
+        isOpen={showOfflineModal}
+        onClose={() => setShowOfflineModal(false)}
+        onSynced={(count) => {
+          setOfflineQueueCount(getOfflineQueue().length);
+          speakIndonesian(`Sinkronisasi ${count} presensi offline berhasil.`);
+        }}
+      />
+
+      {/* Modal Kebijakan Privasi Biometrik */}
+      <BiometricPrivacyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
     </div>
   );
 }

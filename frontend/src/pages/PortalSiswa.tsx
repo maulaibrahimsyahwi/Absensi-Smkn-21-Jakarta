@@ -8,13 +8,17 @@ import {
   FileText,
   ChevronRight,
   ShieldAlert,
+  ShieldCheck,
   PlusCircle,
   User,
   Lock,
   X,
   Sun,
   Flag,
+  Clock,
+  HeartPulse,
 } from "lucide-react";
+import { Skeleton } from "../components/common/Skeleton";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import {
@@ -22,14 +26,17 @@ import {
   getKategoriPelanggaran,
 } from "../data/pelanggaranData";
 import SignaturePadModal from "../components/SignaturePadModal";
-import ChangePasswordModal from "../components/ChangePasswordModal";
 import ProfileModal from "../components/ProfileModal";
+import ToastNotification, {
+  ToastNotificationData,
+} from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { playNotificationSound } from "../utils/audioUtils";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
 import { useRealtimeSubscription } from "../services/realtimeService";
 import { Pelanggaran } from "../types/pelanggaran";
 import { LiburEvent } from "../types/libur";
+import { useCountUp } from "../hooks/useCountUp";
 
 interface RekapStatistik {
   total_hadir: number;
@@ -69,21 +76,89 @@ interface NotificationBanner {
   message: string;
 }
 
+const TONES = {
+  emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+  amber: "bg-amber-50 text-amber-700 ring-amber-100",
+  blue: "bg-blue-50 text-blue-700 ring-blue-100",
+  purple: "bg-purple-50 text-purple-700 ring-purple-100",
+} as const;
+
+function StatCard({
+  label,
+  value,
+  tone,
+  icon,
+  index,
+}: {
+  label: string;
+  value: number;
+  tone: keyof typeof TONES;
+  icon: React.ReactNode;
+  index: number;
+}) {
+  const n = useCountUp(value);
+  return (
+    <div
+      className="rise-in card-lift rounded-2xl border border-slate-200/80 bg-white p-4"
+      style={{ "--i": index } as React.CSSProperties}
+    >
+      <span
+        className={`mb-3 grid h-9 w-9 place-items-center rounded-xl ring-1 ${TONES[tone]}`}
+      >
+        {icon}
+      </span>
+      <p className="text-2xl sm:text-3xl font-extrabold tabular-nums tracking-tight text-slate-900">
+        {n}
+      </p>
+      <p className="mt-0.5 text-xs font-semibold text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+function PortalSiswaSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Memuat portal siswa"
+      className="mx-auto max-w-6xl space-y-4 px-3.5 py-5 pb-28 sm:px-6 sm:py-8 lg:pb-8"
+    >
+      <div className="flex items-center gap-4 rounded-3xl border border-slate-200/80 bg-white p-5">
+        <Skeleton className="h-16 w-16 rounded-2xl" />
+        <div className="flex-1 space-y-2.5">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-5 w-48" />
+          <Skeleton className="h-3 w-32" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 rounded-2xl" />
+        ))}
+      </div>
+      <Skeleton className="h-56 w-full rounded-3xl" />
+    </div>
+  );
+}
+
 export default function PortalSiswa(): React.JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, saveSignature, updateUserProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [personalData, setPersonalData] = useState<PersonalDataResponse | null>(null);
+  const [personalData, setPersonalData] = useState<PersonalDataResponse | null>(
+    null,
+  );
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalTab, setProfileModalTab] = useState("profil");
-  const [notification, setNotification] = useState<NotificationBanner | null>(null);
+  const [notification, setNotification] =
+    useState<ToastNotificationData | null>(null);
   const [pelanggaranList, setPelanggaranList] = useState<Pelanggaran[]>([]);
   const [notifikasiList, setNotifikasiList] = useState<any[]>([]);
-  const [previewSuratData, setPreviewSuratData] = useState<LiburEvent | null>(null);
+  const [previewSuratData, setPreviewSuratData] = useState<LiburEvent | null>(
+    null,
+  );
   const prevNotifIdsRef = useRef<(string | number)[] | null>(null);
 
   const openProfile = (tab = "profil") => {
@@ -187,8 +262,12 @@ export default function PortalSiswa(): React.JSX.Element {
           );
           if (freshItems.length > 0) {
             const topItem = freshItems[0];
-            const isDanger = freshItems.some((i: any) => i.category === "danger");
-            const isSuccess = freshItems.some((i: any) => i.category === "success");
+            const isDanger = freshItems.some(
+              (i: any) => i.category === "danger",
+            );
+            const isSuccess = freshItems.some(
+              (i: any) => i.category === "success",
+            );
             if (isDanger) {
               playNotificationSound("error");
               setNotification({
@@ -236,19 +315,42 @@ export default function PortalSiswa(): React.JSX.Element {
     },
   );
 
-  const totalPoinPelanggaran = useMemo(() => {
-    return pelanggaranList.reduce(
-      (acc, curr) => acc + (Number(curr.poin) || 0),
-      0,
-    );
-  }, [pelanggaranList]);
+  // Hitung akumulasi poin bersih: Total pelanggaran dikurangi prestasi terkonfirmasi
+  const { totalPoinPelanggaran, totalPoinPrestasi, netPoinKedisiplinan } =
+    useMemo(() => {
+      let violation = 0;
+      let prestasi = 0;
+
+      for (const item of pelanggaranList) {
+        if (
+          item.status_verifikasi === "Ditolak" ||
+          item.status_verifikasi === "Menunggu Konfirmasi"
+        ) {
+          continue;
+        }
+        const p = Number(item.poin) || 0;
+        if (item.kategori === "Prestasi") {
+          prestasi += p;
+        } else {
+          violation += p;
+        }
+      }
+
+      return {
+        totalPoinPelanggaran: violation,
+        totalPoinPrestasi: prestasi,
+        netPoinKedisiplinan: Math.max(0, violation - prestasi),
+      };
+    }, [pelanggaranList]);
 
   const statusKedisiplinan = useMemo(() => {
-    return getStatusPembinaan(totalPoinPelanggaran);
-  }, [totalPoinPelanggaran]);
+    return getStatusPembinaan(netPoinKedisiplinan);
+  }, [netPoinKedisiplinan]);
 
   // State Notifikasi Izin / Sakit yang telah disetujui / ditolak
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<(string | number)[]>(() => {
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<
+    (string | number)[]
+  >(() => {
     try {
       const raw = localStorage.getItem(`read_izin_notif_${user?.id}`);
       return raw ? JSON.parse(raw) : [];
@@ -350,26 +452,17 @@ export default function PortalSiswa(): React.JSX.Element {
     }
   }, [isAlumni, user?.tanggal_lulus, personalData?.siswa?.tanggal_lulus]);
 
+  if (loading && !personalData) {
+    return <PortalSiswaSkeleton />;
+  }
+
   return (
     <div className="min-h-screen py-5 sm:py-8 px-3.5 sm:px-6 max-w-6xl mx-auto space-y-3 sm:space-y-4">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed bottom-5 right-5 z-50 p-4 rounded-2xl bg-slate-900 text-white shadow-xl flex items-center gap-3 animate-in fade-in">
-          {notification.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
-          )}
-          <span className="text-sm font-medium">{notification.message}</span>
-          <button
-            type="button"
-            onClick={() => setNotification(null)}
-            className="text-slate-400 hover:text-white text-xs ml-2"
-          >
-            <X className="w-4 h-4 cursor-pointer" />
-          </button>
-        </div>
-      )}
+      {/* Toast Notification Terpadu */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Header Profil Siswa */}
       <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 rounded-3xl p-5 sm:p-8 text-white shadow-xl shadow-blue-900/20 relative">
@@ -432,7 +525,7 @@ export default function PortalSiswa(): React.JSX.Element {
               type="button"
               onClick={() => openProfile("profil")}
               title="Profil Pengguna & Pengaturan Akun"
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
+              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
             >
               {user?.foto_profil ? (
                 <img
@@ -498,12 +591,9 @@ export default function PortalSiswa(): React.JSX.Element {
                 )}
               </div>
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                Selamat atas kelulusan Anda dari SMKN 21 Jakarta! Akun alumni
-                Anda diberikan masa akses aktif selama{" "}
-                <strong>1 tahun sejak kelulusan</strong> untuk melihat arsip
-                riwayat presensi, pengajuan izin, dan buku saku kedisiplinan.
-                Fitur operasional presensi mandiri dan perizinan harian sekolah
-                telah dinonaktifkan.
+                Selamat atas kelulusan Anda! Akun alumni aktif selama{" "}
+                <strong>1 tahun</strong> untuk melihat arsip presensi, riwayat
+                izin, dan catatan kedisiplinan.
               </p>
             </div>
           </div>
@@ -524,13 +614,9 @@ export default function PortalSiswa(): React.JSX.Element {
                 </h3>
               </div>
               <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                Akun {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"}{" "}
-                Anda belum memiliki data biometrik wajah resmi. Seluruh fitur
-                aplikasi terkunci sampai wajah Anda didaftarkan secara resmi
-                oleh{" "}
-                <strong>
-                  Administrator / Petugas Tata Usaha SMKN 21 Jakarta
-                </strong>
+                Akun belum memiliki rekaman biometrik wajah resmi. Silakan
+                hubungi <strong>Admin atau Petugas Tata Usaha</strong> untuk
+                aktivasi akun.
               </p>
             </div>
           </div>
@@ -549,9 +635,8 @@ export default function PortalSiswa(): React.JSX.Element {
                 </span>
               </h3>
               <p className="text-xs text-slate-600 mt-0.5">
-                Setiap {user?.jenis_kelamin === "Perempuan" ? "siswi" : "siswa"}{" "}
-                SMKN 21 wajib memiliki tanda tangan digital sebelum mengajukan
-                surat izin/sakit atau keperluan presensi resmi
+                Wajib dibuat sebelum mengajukan surat izin/sakit atau keperluan
+                presensi resmi.
               </p>
             </div>
           </div>
@@ -587,7 +672,7 @@ export default function PortalSiswa(): React.JSX.Element {
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
                 {personalData.status_hari_ini.message ||
-                  "Hari ini operasional sekolah dan presensi harian diliburkan. Anda tidak perlu melakukan scan presensi."}
+                  "Hari ini operasional sekolah dan presensi harian diliburkan."}
               </p>
               {personalData.status_hari_ini.holiday_event?.lampiran_surat && (
                 <div className="pt-2">
@@ -630,7 +715,7 @@ export default function PortalSiswa(): React.JSX.Element {
               </div>
               <p className="text-xs text-slate-700 leading-relaxed">
                 {personalData.status_hari_ini.holiday_event?.keterangan ||
-                  "Hari ini dijadwalkan kegiatan wajib sekolah. Siswa diwajibkan hadir dan melakukan scan presensi."}
+                  "Kegiatan wajib sekolah. Siswa diharapkan hadir dan melakukan presensi."}
               </p>
               {personalData.status_hari_ini.holiday_event?.lampiran_surat && (
                 <div className="pt-2">
@@ -653,21 +738,23 @@ export default function PortalSiswa(): React.JSX.Element {
         </div>
       )}
 
-      {/* Tombol Aksi Cepat (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
+      {/* Tombol Aksi Cepat (Tampil di Tablet & Desktop >= 640px) */}
       {!isAlumni && (
-        <div className="hidden md:grid md:grid-cols-3 gap-3 sm:gap-4">
+        <div className="hidden sm:grid sm:grid-cols-3 gap-3 sm:gap-4">
           {user?.terdaftar ? (
             <Link
               to="/harian"
-              className="group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
+              className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-blue-300"
             >
               <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                  <Camera className="w-6 h-6" />
-                </div>
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
+                  <Camera className="w-5 h-5" />
+                </span>
                 <div>
-                  <h3 className="font-bold text-base">Presensi Harian</h3>
-                  <p className="text-[11px] text-emerald-100">
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Presensi Harian
+                  </h3>
+                  <p className="text-xs text-slate-500">
                     {personalData?.status_hari_ini?.is_holiday
                       ? "Sedang Libur"
                       : personalData?.status_hari_ini?.is_special_school_day
@@ -676,7 +763,7 @@ export default function PortalSiswa(): React.JSX.Element {
                   </p>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
             </Link>
           ) : (
             <div
@@ -687,20 +774,20 @@ export default function PortalSiswa(): React.JSX.Element {
                     "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
-              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
+              className="group flex items-center justify-between rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 cursor-not-allowed select-none opacity-80"
             >
               <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
-                  <Camera className="w-6 h-6" />
-                </div>
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-200/70 text-slate-500">
+                  <Camera className="w-5 h-5" />
+                </span>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h3 className="font-bold text-base text-slate-600">
+                    <h3 className="text-sm font-bold text-slate-600">
                       Presensi Harian
                     </h3>
-                    <Lock className="w-4 h-4 text-slate-500" />
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     Wajib biometrik wajah
                   </p>
                 </div>
@@ -711,18 +798,20 @@ export default function PortalSiswa(): React.JSX.Element {
           {user?.terdaftar ? (
             <Link
               to="/izin"
-              className="group bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
+              className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-amber-300"
             >
               <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                  <FileText className="w-6 h-6" />
-                </div>
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-600 transition-colors group-hover:bg-amber-600 group-hover:text-white">
+                  <FileText className="w-5 h-5" />
+                </span>
                 <div>
-                  <h3 className="font-bold text-base">Surat Izin / Sakit</h3>
-                  <p className="text-[11px] text-amber-100">Formulir mandiri</p>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Surat Izin / Sakit
+                  </h3>
+                  <p className="text-xs text-slate-500">Formulir mandiri</p>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
             </Link>
           ) : (
             <div
@@ -733,20 +822,20 @@ export default function PortalSiswa(): React.JSX.Element {
                     "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
                 })
               }
-              className="group bg-slate-100/90 hover:bg-slate-100 border border-slate-200/90 text-slate-400 p-5 rounded-2xl transition-all flex items-center justify-between cursor-not-allowed select-none shadow-xs"
+              className="group flex items-center justify-between rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 cursor-not-allowed select-none opacity-80"
             >
               <div className="flex items-center gap-3.5">
-                <div className="p-3 bg-slate-200/80 text-slate-500 rounded-xl">
-                  <FileText className="w-6 h-6" />
-                </div>
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-200/70 text-slate-500">
+                  <FileText className="w-5 h-5" />
+                </span>
                 <div>
                   <div className="flex items-center gap-1.5">
-                    <h3 className="font-bold text-base text-slate-600">
+                    <h3 className="text-sm font-bold text-slate-600">
                       Surat Izin / Sakit
                     </h3>
-                    <Lock className="w-4 h-4 text-slate-500" />
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
                   </div>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-xs text-slate-400">
                     Wajib biometrik wajah
                   </p>
                 </div>
@@ -757,22 +846,22 @@ export default function PortalSiswa(): React.JSX.Element {
           {/* Catat / Pengakuan Pelanggaran Mandiri Siswa */}
           <Link
             to="/pelanggaran"
-            className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
+            className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-rose-300"
           >
             <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <ShieldAlert className="w-6 h-6" />
-              </div>
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-rose-50 text-rose-600 transition-colors group-hover:bg-rose-600 group-hover:text-white">
+                <ShieldAlert className="w-5 h-5" />
+              </span>
               <div>
-                <h3 className="font-bold text-base">Catat Pelanggaran</h3>
-                <p className="text-[11px] text-rose-100">
+                <h3 className="text-sm font-bold text-slate-800">
+                  Catat Pelanggaran
+                </h3>
+                <p className="text-xs text-slate-500">
                   Formulir pengakuan mandiri
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 font-bold text-xs bg-white/15 px-3 py-1.5 rounded-xl">
-              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       )}
@@ -785,47 +874,40 @@ export default function PortalSiswa(): React.JSX.Element {
               Rekap Kehadiran Saya
             </h2>
             <p className="text-xs text-slate-500">
-              Akumulasi presensi Anda selama terdaftar di SMKN 21
+              Akumulasi presensi Anda selama terdaftar
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
-          <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200/60">
-            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-              Tepat Waktu
-            </p>
-            <p className="text-2xl sm:text-3xl font-black text-emerald-700">
-              {stat.tepat_waktu}
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200/60">
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">
-              Terlambat
-            </p>
-            <p className="text-2xl sm:text-3xl font-black text-amber-700">
-              {stat.terlambat}
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-blue-50/70 border border-blue-200/60">
-            <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">
-              Sakit
-            </p>
-            <p className="text-2xl sm:text-3xl font-black text-blue-700">
-              {stat.sakit}
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-200/60">
-            <p className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-1">
-              Izin
-            </p>
-            <p className="text-2xl sm:text-3xl font-black text-purple-700">
-              {stat.izin}
-            </p>
-          </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <StatCard
+            index={0}
+            label="Tepat Waktu"
+            value={stat.tepat_waktu}
+            tone="emerald"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
+          <StatCard
+            index={1}
+            label="Terlambat"
+            value={stat.terlambat}
+            tone="amber"
+            icon={<Clock className="h-4 w-4" />}
+          />
+          <StatCard
+            index={2}
+            label="Sakit"
+            value={stat.sakit}
+            tone="blue"
+            icon={<HeartPulse className="h-4 w-4" />}
+          />
+          <StatCard
+            index={3}
+            label="Izin"
+            value={stat.izin}
+            tone="purple"
+            icon={<FileText className="h-4 w-4" />}
+          />
         </div>
       </div>
 
@@ -835,7 +917,8 @@ export default function PortalSiswa(): React.JSX.Element {
           Riwayat Pengajuan Izin Mandiri
         </h2>
 
-        {personalData?.riwayat_pengajuan && personalData.riwayat_pengajuan.length > 0 ? (
+        {personalData?.riwayat_pengajuan &&
+        personalData.riwayat_pengajuan.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {personalData.riwayat_pengajuan.map((item) => (
               <div
@@ -905,12 +988,26 @@ export default function PortalSiswa(): React.JSX.Element {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+            {totalPoinPrestasi > 0 && (
+              <div className="text-left sm:text-right pr-3 border-r border-slate-200">
+                <span className="text-xl sm:text-2xl font-black text-emerald-600">
+                  {totalPoinPrestasi} Poin
+                </span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Poin Prestasi
+                </span>
+              </div>
+            )}
             <div className="text-left sm:text-right">
-              <span className="text-xl sm:text-2xl font-black text-rose-600">
-                {totalPoinPelanggaran} Poin
+              <span
+                className={`text-xl sm:text-2xl font-black ${netPoinKedisiplinan > 0 ? "text-rose-600" : "text-emerald-600"}`}
+              >
+                {netPoinKedisiplinan} Poin
               </span>
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                Total Poin Pelanggaran
+                {totalPoinPrestasi > 0
+                  ? "Poin Bersih Pelanggaran"
+                  : "Total Poin Pelanggaran"}
               </span>
             </div>
             <span
@@ -993,8 +1090,7 @@ export default function PortalSiswa(): React.JSX.Element {
           </div>
         ) : (
           <div className="py-8 text-center text-slate-400 text-sm">
-            Tidak ada catatan pelanggaran tata tertib. Pertahankan kedisiplinan
-            Anda
+            Tidak ada catatan pelanggaran. Pertahankan kedisiplinan Anda.
           </div>
         )}
       </div>
@@ -1007,16 +1103,6 @@ export default function PortalSiswa(): React.JSX.Element {
         title={`Tanda Tangan Digital ${user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}`}
         subtitle={`Goreskan tanda tangan digital ${user?.nama || (user?.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa")} untuk verifikasi perizinan.`}
         initialSignature={user?.tanda_tangan}
-      />
-
-      {/* Change Password Modal */}
-      <ChangePasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={() => setIsPasswordModalOpen(false)}
-        user={user}
-        onSuccess={(msg) => {
-          setNotification({ type: "success", message: msg });
-        }}
       />
 
       {/* Profile & Settings Modal */}

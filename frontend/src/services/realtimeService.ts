@@ -6,8 +6,7 @@ import api from "./api";
  * Menggabungkan 3 mekanisme sinkronisasi:
  * 1. BroadcastChannel API ("smkn21_realtime_bus") -> Sinkronisasi seketika (0ms) antar tab browser.
  * 2. Window Storage Event -> Fallback multi-jendela jika BroadcastChannel tidak aktif.
- * 3. Adaptive Micro-pulse Polling (/api/realtime/pulse) -> Sinkronisasi lintas perangkat fisik (Gate tablet vs Laptop guru)
- *    hanya membaca status ~120 byte tanpa membebani query SQL atau database locks.
+ * 3. Lazy Micro-pulse Polling (/api/realtime/pulse) -> Sinkronisasi lintas perangkat fisik dengan backoff & jitter.
  */
 
 export interface RealtimeEventPayload {
@@ -28,8 +27,10 @@ class RealtimeBus {
   subscribers: Set<RealtimeSubscriber>;
   lastVersion: number | string | null;
   lastModules: Record<string, number>;
-  pulseTimer: ReturnType<typeof setInterval> | number | null;
+  pulseTimer: ReturnType<typeof setTimeout> | null = null;
   isPolling: boolean;
+  failures = 0;
+  seen: string[] = [];
 
   constructor() {
     this.channelName = "smkn21_realtime_bus";
@@ -37,13 +38,11 @@ class RealtimeBus {
     this.subscribers = new Set<RealtimeSubscriber>();
     this.lastVersion = null;
     this.lastModules = {};
-    this.pulseTimer = null;
     this.isPolling = false;
 
     this.initBroadcastChannel();
     this.initStorageListener();
     this.initVisibilityListener();
-    this.startPulsePolling();
   }
 
   initBroadcastChannel(): void {
@@ -51,6 +50,7 @@ class RealtimeBus {
       try {
         this.broadcastChannel = new BroadcastChannel(this.channelName);
         this.broadcastChannel.onmessage = (event: MessageEvent) => {
+          if (!this.firstSeen(event.data?.id)) return;
           if (event.data && event.data.modules) {
             this.notifySubscribers(event.data.modules, false);
           }
@@ -67,6 +67,7 @@ class RealtimeBus {
         if (e.key === "smkn21_realtime_sync_event" && e.newValue) {
           try {
             const data = JSON.parse(e.newValue);
+            if (!this.firstSeen(data?.id)) return;
             if (data && data.modules) {
               this.notifySubscribers(data.modules, false);
             }
@@ -79,53 +80,59 @@ class RealtimeBus {
   }
 
   initVisibilityListener(): void {
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) {
-          // Tab kembali aktif dibuka, segera cek pulse
-          this.checkPulse();
-          this.restartPollingWithInterval(2500);
-        } else {
-          // Tab di background, kurangi frekuensi ke 15 detik
-          this.restartPollingWithInterval(15000);
-        }
-      });
-
-      window.addEventListener("focus", () => {
-        this.checkPulse();
-      });
-    }
+    if (typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && this.subscribers.size) {
+        this.checkPulse().finally(() => this.schedule());
+      }
+    });
   }
 
-  startPulsePolling(intervalMs = 2500): void {
-    if (this.pulseTimer) clearInterval(this.pulseTimer);
-    this.pulseTimer = setInterval(() => {
-      this.checkPulse();
-    }, intervalMs);
-    // Jalankan satu kali segera
-    this.checkPulse();
+  private delay(): number {
+    const base = document.hidden ? 30_000 : 4_000;
+    return Math.min(60_000, base * 2 ** this.failures) * (0.85 + Math.random() * 0.3); // backoff + jitter
   }
 
-  restartPollingWithInterval(intervalMs: number): void {
-    if (this.pulseTimer) clearInterval(this.pulseTimer);
-    this.pulseTimer = setInterval(() => {
-      this.checkPulse();
-    }, intervalMs);
+  private schedule(): void {
+    if (this.pulseTimer) clearTimeout(this.pulseTimer);
+    if (this.subscribers.size === 0) return;
+    this.pulseTimer = setTimeout(async () => {
+      await this.checkPulse();
+      this.schedule();
+    }, this.delay());
+  }
+
+  startPulsePolling(): void {
+    this.checkPulse().finally(() => this.schedule());
+  }
+
+  stopPulsePolling(): void {
+    if (this.pulseTimer) clearTimeout(this.pulseTimer);
+    this.pulseTimer = null;
+    this.lastVersion = null; // pelanggan baru mulai dari baseline baru
+  }
+
+  private firstSeen(id?: string): boolean {
+    if (!id) return true;
+    if (this.seen.includes(id)) return false;
+    this.seen.push(id);
+    if (this.seen.length > 30) this.seen.shift();
+    return true;
   }
 
   async checkPulse(): Promise<void> {
-    if (this.isPolling) return;
+    if (this.isPolling || !navigator.onLine || !localStorage.getItem("smkn21_auth_token")) return;
     this.isPolling = true;
 
     try {
       const res = await api.get("/realtime/pulse");
+      this.failures = 0;
       if (res.data && res.data.success) {
         const { version, modules } = res.data;
 
         if (this.lastVersion === null) {
           this.lastVersion = version;
           this.lastModules = modules || {};
-          this.isPolling = false;
           return;
         }
 
@@ -152,7 +159,7 @@ class RealtimeBus {
         }
       }
     } catch {
-      // Endpoint pulse gagal / offline, abaikan tanpa mengganggu UI
+      this.failures = Math.min(this.failures + 1, 4);
     } finally {
       this.isPolling = false;
     }
@@ -164,33 +171,21 @@ class RealtimeBus {
    */
   notifyLocalMutation(modules: string | string[] = ["all"]): void {
     const list = Array.isArray(modules) ? modules : [modules];
+    const evt = { modules: list, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` };
 
-    // 1. Broadcast ke tab lain via BroadcastChannel
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage({
-          modules: list,
-          timestamp: Date.now(),
-        });
-      } catch {
-        // ignore
-      }
-    }
-
-    // 2. Storage event fallback
     try {
-      localStorage.setItem(
-        "smkn21_realtime_sync_event",
-        JSON.stringify({ modules: list, timestamp: Date.now() }),
-      );
+      this.broadcastChannel?.postMessage(evt);
     } catch {
       // ignore
     }
 
-    // 3. Beri tahu server agar perangkat lain juga menerima update
-    api.post("/realtime/notify", { module: list[0] || "all" }).catch(() => {});
+    try {
+      localStorage.setItem("smkn21_realtime_sync_event", JSON.stringify(evt));
+    } catch {
+      // ignore
+    }
 
-    // 4. Beri tahu listener internal tab saat ini
+    Promise.allSettled(list.map((m) => api.post("/realtime/notify", { module: m })));
     this.notifySubscribers(list, true);
   }
 
@@ -224,9 +219,11 @@ class RealtimeBus {
       callback,
     };
     this.subscribers.add(subRecord);
+    if (this.subscribers.size === 1) this.startPulsePolling();
 
     return () => {
       this.subscribers.delete(subRecord);
+      if (this.subscribers.size === 0) this.stopPulsePolling();
     };
   }
 }

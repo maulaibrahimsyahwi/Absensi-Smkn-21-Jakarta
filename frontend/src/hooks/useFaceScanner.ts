@@ -1,21 +1,44 @@
 import { useState, useRef, useCallback, useEffect, RefObject } from "react";
 import api from "../services/api";
 
+let sharedAudioCtx: AudioContext | null = null;
+const getAudioCtx = (): AudioContext | null => {
+  if (typeof window === "undefined") return null;
+  const Ctor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!Ctor) return null;
+  sharedAudioCtx ??= new Ctor();
+  if (sharedAudioCtx.state === "suspended") {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+};
+
 /**
  * Custom Hook untuk mengelola audio synthesizer feedback presensi (Beep Sukses / Gagal)
- * tanpa memerlukan file audio eksternal.
+ * menggunakan AudioContext tunggal bersama untuk mencegah batas browser audio context.
  */
 export function useAudioFeedback() {
-  const playSound = useCallback((type: 'success' | 'warning' | string = "success") => {
+  const playSound = useCallback((type: "success" | "warning" | string = "success") => {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
+      const ctx = getAudioCtx();
+      if (!ctx) return;
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc.connect(gain);
       gain.connect(ctx.destination);
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {
+          // ignore
+        }
+      };
 
       if (type === "success") {
         // Nada ceria dua nada (D5 -> A5)
@@ -90,7 +113,20 @@ export function useLivenessDetector({
   const [isLiveVerified, setIsLiveVerified] = useState<boolean>(false);
   const [livenessToken, setLivenessToken] = useState<string | null>(null);
 
-  const blinkCycleRef = useRef<{ hasBeenOpen: boolean; hasClosed: boolean }>({ hasBeenOpen: false, hasClosed: false });
+  const onVerifiedRef = useRef(onLiveVerified);
+  useEffect(() => {
+    onVerifiedRef.current = onLiveVerified;
+  });
+  const isLiveVerifiedRef = useRef(false);
+  const isActiveRef = useRef(isActive);
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  });
+
+  const blinkCycleRef = useRef<{ hasBeenOpen: boolean; hasClosed: boolean }>({
+    hasBeenOpen: false,
+    hasClosed: false,
+  });
   const baselineOpenScoreRef = useRef<number | null>(null);
   const openSamplesRef = useRef<number[]>([]);
   const isCheckingRef = useRef<boolean>(false);
@@ -102,8 +138,8 @@ export function useLivenessDetector({
     if (
       !webcamRef?.current ||
       isCheckingRef.current ||
-      isLiveVerified ||
-      !isActive ||
+      isLiveVerifiedRef.current ||
+      !isActiveRef.current ||
       document.hidden
     )
       return;
@@ -173,9 +209,10 @@ export function useLivenessDetector({
           blinkCycleRef.current.hasClosed
         ) {
           // Siklus Kedipan Berhasil: OPEN -> CLOSED -> OPEN
+          isLiveVerifiedRef.current = true;
           setIsLiveVerified(true);
           const verifiedToken = data.liveness_token || livenessTokenRef.current;
-          if (onLiveVerified) onLiveVerified(verifiedToken);
+          onVerifiedRef.current?.(verifiedToken);
         }
       } else if (isEyeClosed) {
         setEyeState("CLOSED");
@@ -191,7 +228,7 @@ export function useLivenessDetector({
     } finally {
       isCheckingRef.current = false;
     }
-  }, [webcamRef, isActive, isLiveVerified, onLiveVerified]);
+  }, [webcamRef]);
 
   // Polling terkendali berjarak aman & adaptif
   useEffect(() => {
@@ -209,10 +246,10 @@ export function useLivenessDetector({
 
     const runLoop = async () => {
       if (!isMounted) return;
-      if (isActive && !isLiveVerified && !document.hidden) {
+      if (isActiveRef.current && !isLiveVerifiedRef.current && !document.hidden) {
         await checkLivenessFrame();
       }
-      if (isMounted && !isLiveVerified) {
+      if (isMounted && !isLiveVerifiedRef.current) {
         const currentDelay =
           noFaceCountRef.current > 2
             ? Math.max(pollIntervalMs, 1100)
@@ -224,7 +261,7 @@ export function useLivenessDetector({
     runLoop();
 
     const handleVisibilityChange = () => {
-      if (!document.hidden && isActive && !isLiveVerified) {
+      if (!document.hidden && isActiveRef.current && !isLiveVerifiedRef.current) {
         runLoop();
       }
     };
@@ -232,13 +269,16 @@ export function useLivenessDetector({
 
     return () => {
       isMounted = false;
-      isCheckingRef.current = false;
+      abortControllerRef.current?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (timerId) clearTimeout(timerId);
     };
   }, [isActive, isLiveVerified, checkLivenessFrame, pollIntervalMs]);
 
   const resetLiveness = useCallback(() => {
+    isLiveVerifiedRef.current = false;
+    abortControllerRef.current?.abort();
+    noFaceCountRef.current = 0;
     setIsLiveVerified(false);
     setIsFaceDetected(false);
     setEyeState("UNKNOWN");

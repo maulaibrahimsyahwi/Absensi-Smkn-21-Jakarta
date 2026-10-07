@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Users,
   Search,
-  Filter,
   GraduationCap,
   Trash2,
   Edit2,
@@ -10,15 +9,22 @@ import {
   KeyRound,
   PenTool,
   UserCheck,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
   ShieldOff,
   Activity,
+  CheckCircle2,
+  AlertTriangle,
+  X,
 } from "lucide-react";
 import CustomDropdown from "../CustomDropdown";
 import { SkeletonTable } from "../common/Skeleton";
 import { Siswa } from "../../types/siswa";
+import SegmentedControl from "../ui/SegmentedControl";
+import ActionMenu, { ActionItem } from "../ui/ActionMenu";
+import Button from "../ui/Button";
+import SortableTh from "../ui/SortableTh";
+import DashboardPagination from "../dashboard/DashboardPagination";
+import { useTableSort } from "../../hooks/useTableSort";
+import { isExemptActive } from "../../utils/date";
 
 export interface TabelDaftarSiswaProps {
   siswaList: Siswa[];
@@ -52,6 +58,7 @@ export interface TabelDaftarSiswaProps {
   onResetSignature: (s: Siswa) => void;
   onReset2fa?: (s: Siswa) => void;
   onBulkDelete: () => void;
+  onClearSelection?: () => void;
   loading?: boolean;
 }
 
@@ -86,637 +93,523 @@ export default function TabelDaftarSiswa({
   onResetSignature,
   onReset2fa,
   onBulkDelete,
+  onClearSelection,
   loading = false,
 }: TabelDaftarSiswaProps) {
-  // Sorting State
-  const [sortKey, setSortKey] = useState<string>("nama");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [quick, setQuick] = useState<"all" | "no_face" | "exempt">("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
 
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
+  const rows = useMemo(() => {
+    if (quick === "no_face") return filteredSiswa.filter((s) => !s.terdaftar);
+    if (quick === "exempt")
+      return filteredSiswa.filter((s) =>
+        isExemptActive(s.medical_exemption_until),
+      );
+    return filteredSiswa;
+  }, [filteredSiswa, quick]);
+
+  const { sorted, sortKey, sortDir, onSort } = useTableSort(
+    rows,
+    "nama",
+    "asc",
+    ["sample_count"],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [rows, sortKey, sortDir, limit]);
+
+  const total = sorted.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+  const end = Math.min(start + limit, total);
+  const pageRows = sorted.slice(start, end);
+  const paging = {
+    displayLimit: limit,
+    setDisplayLimit: setLimit,
+    currentPage: page,
+    setCurrentPage: setPage,
+    totalItems: total,
+    totalPages,
+    safeCurrentPage: safePage,
+    startIndex: start,
+    endIndex: end,
   };
 
-  const sortedSiswa = [...filteredSiswa].sort((a, b) => {
-    let aVal: any = a[sortKey] ?? "";
-    let bVal: any = b[sortKey] ?? "";
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const hiddenSelected =
+    selectedIds.length - sorted.filter((s) => selectedSet.has(s.id)).length;
+  const noFaceCount = filteredSiswa.filter((s) => !s.terdaftar).length;
+  const exemptCount = filteredSiswa.filter((s) =>
+    isExemptActive(s.medical_exemption_until),
+  ).length;
 
-    if (sortKey === "sample_count") {
-      aVal = a.sample_count || (a.terdaftar ? 1 : 0);
-      bVal = b.sample_count || (b.terdaftar ? 1 : 0);
-    } else if (typeof aVal === "string") {
-      aVal = aVal.toLowerCase();
-      bVal = bVal.toLowerCase();
-    }
+  const kelasOptions = useMemo(() => {
+    return [
+      { value: "ALL", label: "Semua Kelas" },
+      ...uniqueKelas.map((k) => ({ value: k, label: k })),
+    ];
+  }, [uniqueKelas]);
 
-    if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
-    if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
+  const rowActions = (s: Siswa): ActionItem[] => [
+    s.status === "Alumni"
+      ? {
+          key: "aktif",
+          group: "Status",
+          label: "Aktifkan kembali",
+          icon: <UserCheck className="h-4 w-4" />,
+          onSelect: () => onAktifkanSingle(s),
+        }
+      : {
+          key: "lulus",
+          group: "Status",
+          label: "Luluskan ke alumni",
+          icon: <GraduationCap className="h-4 w-4" />,
+          onSelect: () => onLuluskanSingle(s),
+        },
+    {
+      key: "med",
+      group: "Biometrik",
+      label: "Dispensasi medis",
+      icon: <Activity className="h-4 w-4" />,
+      hidden: !onMedicalExemption,
+      onSelect: () => onMedicalExemption?.(s),
+    },
+    {
+      key: "face",
+      group: "Biometrik",
+      label: "Reset biometrik wajah",
+      icon: <Camera className="h-4 w-4" />,
+      hidden: !s.terdaftar,
+      onSelect: () => onResetFace(s),
+    },
+    {
+      key: "pw",
+      group: "Akun",
+      label: "Reset kata sandi",
+      icon: <KeyRound className="h-4 w-4" />,
+      onSelect: () => onResetPassword(s),
+    },
+    {
+      key: "ttd",
+      group: "Akun",
+      label: "Reset tanda tangan",
+      icon: <PenTool className="h-4 w-4" />,
+      hidden: !s.has_signature && !s.tanda_tangan,
+      onSelect: () => onResetSignature(s),
+    },
+    {
+      key: "2fa",
+      group: "Akun",
+      label: "Reset 2FA",
+      icon: <ShieldOff className="h-4 w-4" />,
+      hidden: !onReset2fa,
+      onSelect: () => onReset2fa?.(s),
+    },
+    {
+      key: "del",
+      group: "Berbahaya",
+      label: "Hapus permanen",
+      icon: <Trash2 className="h-4 w-4" />,
+      danger: true,
+      onSelect: () => onDelete(s),
+    },
+  ];
 
   return (
-    <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 flex flex-col">
-      {/* Title & Stats */}
-      <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-        <div className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-blue-600" />
-          <h2 className="text-base font-bold text-slate-900">
-            Daftar Siswa Terdaftar
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700">
-            {statusFilter === "Aktif"
-              ? `Total ${totalAktif} Siswa Aktif`
-              : statusFilter === "Alumni"
-                ? `Total ${totalAlumni} Siswa Alumni`
-                : `Total ${siswaList.length} Siswa`}
-          </span>
-        </div>
-      </div>
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+      {/* Header & Filter Bar */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-blue-600" />
+            <h2 className="text-base font-bold text-slate-900">
+              Daftar Siswa Terdaftar
+            </h2>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              {total} siswa
+            </span>
+          </div>
 
-      {/* Filter Status Siswa Tabs (Semua, Aktif, Alumni) */}
-      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl mb-3.5 self-start overflow-x-auto max-w-full">
-        <button
-          type="button"
-          onClick={() => setStatusFilter("ALL")}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            statusFilter === "ALL"
-              ? "bg-white text-slate-900 shadow-2xs"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          Semua ({siswaList.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter("Aktif")}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            statusFilter === "Aktif"
-              ? "bg-white text-emerald-700 shadow-2xs"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          <span>Aktif ({totalAktif})</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setStatusFilter("Alumni")}
-          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            statusFilter === "Alumni"
-              ? "bg-white text-indigo-700 shadow-2xs"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          <span>Alumni / Lulus ({totalAlumni})</span>
-        </button>
-      </div>
-
-      {/* Search, Filter Kelas, & Tombol Cepat Luluskan Kelas XII */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 mb-4">
-        <div className="relative flex-1 w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari nama, NIS, atau kelas..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500"
+          {/* Action Menu Tindakan Massal */}
+          <ActionMenu
+            label="Tindakan Massal"
+            title="Tindakan Massal"
+            subtitle="Berlaku untuk banyak siswa sekaligus"
+            items={[
+              {
+                key: "naik",
+                label: "Kenaikan kelas massal",
+                icon: <GraduationCap className="h-4 w-4 text-blue-600" />,
+                onSelect: onKenaikanKelasMassal,
+              },
+              {
+                key: "xii",
+                label: `Luluskan kelas XII (${totalKelasXIIAktif})`,
+                icon: <GraduationCap className="h-4 w-4 text-indigo-600" />,
+                hidden: totalKelasXIIAktif === 0,
+                onSelect: onLuluskanTingkatXII,
+              },
+            ]}
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+        {/* Segmented Filter Status Siswa */}
+        <SegmentedControl
+          ariaLabel="Status siswa"
+          value={statusFilter as "ALL" | "Aktif" | "Alumni"}
+          onChange={setStatusFilter}
+          options={[
+            { value: "ALL", label: "Semua", count: siswaList.length },
+            { value: "Aktif", label: "Aktif", count: totalAktif },
+            { value: "Alumni", label: "Alumni", count: totalAlumni },
+          ]}
+        />
+
+        {/* Quick Filter: Semua, Belum Ada Wajah, Dispensasi */}
+        <SegmentedControl
+          ariaLabel="Filter cepat"
+          value={quick}
+          onChange={setQuick}
+          options={[
+            { value: "all", label: "Semua Data" },
+            {
+              value: "no_face",
+              label: "Belum Ada Wajah",
+              count: noFaceCount,
+            },
+            {
+              value: "exempt",
+              label: "Dispensasi Medis",
+              count: exemptCount,
+            },
+          ]}
+        />
+
+        {/* Search & Kelas Filter */}
+        <div className="flex flex-col sm:flex-row gap-2 pt-1">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari berdasarkan nama atau NIS..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <CustomDropdown
             value={kelasFilter}
             onChange={setKelasFilter}
-            options={[
-              { value: "ALL", label: "Semua Kelas" },
-              ...uniqueKelas.map((k) => ({ value: k, label: k })),
-            ]}
-            icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-            className="w-full sm:w-auto"
-            align="right"
+            options={kelasOptions}
+            className="w-full sm:w-48"
+            placeholder="Pilih Kelas..."
           />
-
-          <button
-            type="button"
-            onClick={onKenaikanKelasMassal}
-            title="Kenaikan Kelas Massal & Rollover Tahun Ajaran"
-            className="py-2 px-3 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap flex-shrink-0"
-          >
-            <span className="hidden sm:inline">Kenaikan Kelas Massal</span>
-            <span className="sm:hidden">Naik Kelas</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onLuluskanTingkatXII}
-            disabled={totalKelasXIIAktif === 0}
-            title={
-              totalKelasXIIAktif > 0
-                ? `Luluskan sekaligus ${totalKelasXIIAktif} siswa kelas XII yang aktif`
-                : "Tidak ada siswa kelas XII yang aktif"
-            }
-            className="py-2 px-3 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap flex-shrink-0"
-          >
-            <span className="hidden sm:inline">Luluskan Kelas XII</span>
-            <span className="sm:hidden">Luluskan XII</span>
-          </button>
         </div>
       </div>
 
-      {/* Multi-Selection Bulk Action Floating Bar */}
+      {/* Sticky Bulk Action Bar */}
       {selectedIds.length > 0 && (
-        <div className="mb-4 p-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3 animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
-              {selectedIds.length}
-            </span>
-            <span className="text-xs font-bold text-blue-900">Siswa</span>
+        <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-blue-200 bg-white p-3 shadow-lg xl:bottom-4 animate-in fade-in slide-in-from-bottom duration-200">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-900">
+              {selectedIds.length} siswa dipilih
+            </p>
+            {hiddenSelected > 0 && (
+              <p className="text-xs font-medium text-amber-700">
+                {hiddenSelected} di antaranya tidak terlihat akibat filter aktif
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onLuluskanSelected}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-            >
-              <span>Luluskan </span>
-            </button>
-            <button
-              type="button"
-              onClick={onBulkDelete}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition shadow-xs cursor-pointer"
-            >
-              <span>Hapus</span>
-            </button>
-          </div>
+
+          <Button size="sm" variant="primary" onClick={onLuluskanSelected}>
+            Luluskan ({selectedIds.length})
+          </Button>
+          <Button size="sm" variant="dangerSoft" onClick={onBulkDelete}>
+            Hapus
+          </Button>
+          {onClearSelection && (
+            <Button size="sm" variant="outline" onClick={onClearSelection}>
+              Batal pilih
+            </Button>
+          )}
         </div>
       )}
 
-      {/* 1. Mobile Cards View (< md) */}
-      <div className="md:hidden divide-y divide-slate-100 max-h-[560px] overflow-y-auto border border-slate-100 rounded-xl">
-        {loading ? (
-          <div className="p-3 space-y-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={`mob-skel-${i}`}
-                className="p-3.5 bg-slate-50 rounded-xl space-y-2.5 animate-pulse border border-slate-100"
-              >
-                <div className="h-4 bg-slate-200 rounded w-44"></div>
-                <div className="h-3 bg-slate-200 rounded w-28"></div>
-                <div className="h-6 bg-slate-200 rounded w-20"></div>
-              </div>
-            ))}
-          </div>
-        ) : sortedSiswa.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 p-4">
-            <Users className="w-8 h-8 text-slate-300 mx-auto mb-2 stroke-1" />
-            <p className="font-semibold text-slate-600 text-xs">
-              Tidak ada siswa ditemukan
-            </p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
-              Coba ubah kata kunci atau filter status/kelas
-            </p>
-          </div>
-        ) : (
-          sortedSiswa.map((s) => {
-            const isSelected = selectedIds.includes(s.id);
-            const isAlumni = s.status === "Alumni";
+      {/* Konten Daftar Siswa */}
+      {loading ? (
+        <SkeletonTable rows={8} cols={5} />
+      ) : pageRows.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs sm:text-sm font-semibold text-slate-700">
+            Tidak ada siswa ditemukan
+          </p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Coba sesuaikan kata kunci pencarian atau ubah filter kelas/status.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Tampilan Kartu untuk Mobile & Tablet (< xl) */}
+          <div className="xl:hidden space-y-2.5">
+            {pageRows.map((s) => {
+              const isSelected = selectedSet.has(s.id);
+              const isExempt = isExemptActive(s.medical_exemption_until);
 
-            return (
-              <div
-                key={s.id}
-                className={`p-3.5 transition-colors ${
-                  isSelected ? "bg-blue-50/50" : "hover:bg-slate-50/60"
-                }`}
-              >
-                <div className="flex items-start gap-2.5 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleSelectSiswa(s.id)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 mt-0.5 cursor-pointer"
-                  />
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-bold text-slate-900 text-sm truncate">
-                        {s.nama}
-                      </p>
-
-                      <span
-                        className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                          s.jenis_kelamin === "Perempuan"
-                            ? "bg-pink-50 text-pink-700 border border-pink-200"
-                            : "bg-sky-50 text-sky-700 border border-sky-200"
-                        }`}
-                      >
-                        {s.jenis_kelamin === "Perempuan" ? "Siswi" : "Siswa"}
-                      </span>
-
-                      {isAlumni ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          <span>Alumni</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span>Aktif</span>
-                        </span>
-                      )}
-
-                      {s.medical_exemption_until &&
-                        new Date(s.medical_exemption_until) >=
-                          new Date(new Date().toDateString()) && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-200"
-                            title={`Dispensasi Medis s/d ${s.medical_exemption_until}: ${s.medical_exemption_alasan || "Pengecualian biometrik"}`}
-                          >
-                            <Activity className="w-2.5 h-2.5 text-teal-600" />
-                            <span>Dispensasi Medis</span>
-                          </span>
-                        )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        NIS {s.nis}
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-[11px] font-bold text-slate-700">
-                        {s.kelas}
-                      </span>
-                    </div>
-                  </div>
-
-                  {s.terdaftar ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0">
-                      <span>{s.sample_count || 1} Foto</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 flex-shrink-0">
-                      Belum Ada
-                    </span>
-                  )}
-                </div>
-
-                {/* Tombol Aksi Touch-Friendly di Mobile */}
-                <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 flex-wrap">
-                  {isAlumni ? (
-                    <button
-                      type="button"
-                      onClick={() => onAktifkanSingle(s)}
-                      className="py-1.5 px-2 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <span>Aktifkan</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => onLuluskanSingle(s)}
-                      className="py-1.5 px-2 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 flex items-center gap-1 transition-colors cursor-pointer"
-                    >
-                      <GraduationCap className="w-3.5 h-3.5" />
-                      <span>Luluskan</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => onMedicalExemption && onMedicalExemption(s)}
-                    className="py-1.5 px-2 rounded-lg text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 flex items-center gap-1 transition-colors cursor-pointer"
-                    title="Dispensasi Medis Biometrik"
-                  >
-                    <Activity className="w-3.5 h-3.5" />
-                    <span>Dispensasi Medis</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onReRecord(s)}
-                    className="py-1.5 px-2 rounded-lg text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200/60 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Rekam</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onEdit(s)}
-                    className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onResetPassword(s)}
-                    className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 flex items-center gap-1 transition-colors cursor-pointer"
-                    title="Reset Password ke Default (NIS)"
-                  >
-                    <KeyRound className="w-3.5 h-3.5" />
-                    <span>Reset Sandi</span>
-                  </button>
-
-                  {s.face_encoding && (
-                    <button
-                      type="button"
-                      onClick={() => onResetFace(s)}
-                      className="py-1.5 px-2 rounded-lg text-xs font-semibold text-cyan-700 bg-cyan-50 hover:bg-cyan-100 border border-cyan-200 flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Reset Biometrik Wajah"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>Reset Wajah</span>
-                    </button>
-                  )}
-
-                  {s.tanda_tangan && (
-                    <button
-                      type="button"
-                      onClick={() => onResetSignature(s)}
-                      className="py-1.5 px-2 rounded-lg text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Reset Tanda Tangan"
-                    >
-                      <PenTool className="w-3.5 h-3.5" />
-                      <span>Reset TTD</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => onReset2fa && onReset2fa(s)}
-                    className="py-1.5 px-2 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
-                    title="Reset 2FA Authenticator"
-                  >
-                    <ShieldOff className="w-3.5 h-3.5" />
-                    <span>Reset 2FA</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => onDelete(s)}
-                    className="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer ml-auto"
-                    title="Hapus Permanen"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Hapus</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* 2. Desktop Table View (>= md) */}
-      <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[560px] flex-1 border border-slate-100 rounded-xl">
-        <table className="w-full text-left border-collapse text-xs min-w-[580px]">
-          <thead className="sticky top-0 bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 z-10 select-none">
-            <tr>
-              <th className="p-3 w-10 text-center">
-                <input
-                  type="checkbox"
-                  checked={isAllSelected}
-                  onChange={toggleSelectAll}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                  title="Pilih Semua Siswa pada Daftar"
-                />
-              </th>
-              <th
-                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
-                onClick={() => handleSort("nama")}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Siswa</span>
-                  {sortKey === "nama" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
-                onClick={() => handleSort("kelas")}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Kelas & Status</span>
-                  {sortKey === "kelas" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                className="p-3 cursor-pointer hover:bg-slate-100/80 transition-colors"
-                onClick={() => handleSort("sample_count")}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Biometrik Wajah</span>
-                  {sortKey === "sample_count" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th className="p-3 text-right">Kelola / Aksi</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="p-4">
-                  <SkeletonTable rows={7} cols={5} />
-                </td>
-              </tr>
-            ) : sortedSiswa.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="text-center py-12 text-slate-400">
-                  Tidak ada siswa ditemukan.
-                </td>
-              </tr>
-            ) : (
-              sortedSiswa.map((s) => {
-                const isSelected = selectedIds.includes(s.id);
-                const isAlumni = s.status === "Alumni";
-
-                return (
-                  <tr
-                    key={s.id}
-                    className={`transition-colors ${
-                      isSelected ? "bg-blue-50/50" : "hover:bg-slate-50/60"
-                    }`}
-                  >
-                    <td className="p-3 text-center">
+              return (
+                <div
+                  key={s.id}
+                  className={`p-3.5 rounded-2xl border transition-all ${
+                    isSelected
+                      ? "border-blue-300 bg-blue-50/40 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <label className="-ml-1.5 -mt-1 grid h-10 w-10 shrink-0 cursor-pointer place-items-center">
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectSiswa(s.id)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        className="h-5 w-5 accent-blue-600 rounded cursor-pointer"
+                        aria-label={`Pilih ${s.nama}`}
                       />
-                    </td>
-                    <td className="p-3">
+                    </label>
+
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="font-bold text-slate-900">{s.nama}</p>
-                        {s.medical_exemption_until &&
-                          new Date(s.medical_exemption_until) >=
-                            new Date(new Date().toDateString()) && (
-                            <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-200"
-                              title={`Dispensasi Medis s/d ${s.medical_exemption_until}: ${s.medical_exemption_alasan || "Pengecualian biometrik"}`}
-                            >
-                              <Activity className="w-2.5 h-2.5 text-teal-600" />
-                              <span>Dispensasi Medis</span>
-                            </span>
-                          )}
+                        <span className="font-bold text-sm text-slate-900 truncate">
+                          {s.nama}
+                        </span>
+                        {s.status === "Alumni" && (
+                          <span className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            Alumni
+                          </span>
+                        )}
+                        {isExempt && (
+                          <span
+                            className="px-1.5 py-0.2 text-[10px] font-bold rounded bg-amber-50 text-amber-700 border border-amber-200 inline-flex items-center gap-1"
+                            title={`Dispensasi medis sampai ${s.medical_exemption_until}`}
+                          >
+                            <Activity className="w-3 h-3" /> Dispensasi
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono">
-                        NIS {s.nis}
+
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        NIS: <span className="font-mono">{s.nis}</span> &bull;{" "}
+                        {s.kelas} &bull; {s.jenis_kelamin || "Laki-laki"}
                       </p>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-slate-800 text-xs">
-                          {s.kelas}
-                        </span>
-                        {isAlumni ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <span>Alumni</span>
+
+                      <div className="mt-1.5 flex items-center gap-2">
+                        {s.terdaftar ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            {s.sample_count
+                              ? `${s.sample_count} Sampel`
+                              : "Terdaftar"}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span>Aktif</span>
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-600">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                            Belum Ada Wajah
                           </span>
                         )}
                       </div>
-                    </td>
-                    <td className="p-3">
-                      {s.terdaftar ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span>{s.sample_count || 1} Foto</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 flex items-center gap-2 border-t border-slate-100 pt-2.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={<Edit2 className="h-3.5 w-3.5" />}
+                      onClick={() => onEdit(s)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={<Camera className="h-3.5 w-3.5" />}
+                      onClick={() => onReRecord(s)}
+                    >
+                      {s.terdaftar ? "Rekam Ulang" : "Rekam Wajah"}
+                    </Button>
+                    <div className="ml-auto">
+                      <ActionMenu
+                        title={s.nama}
+                        subtitle={`NIS: ${s.nis} • ${s.kelas}`}
+                        items={rowActions(s)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tampilan Tabel untuk Layar Lebar (>= xl) */}
+          <div className="hidden xl:block overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600">
+                  <th className="p-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                      aria-label="Pilih semua siswa di halaman ini"
+                    />
+                  </th>
+                  <SortableTh
+                    sortKey="nis"
+                    currentKey={sortKey}
+                    direction={sortDir}
+                    onSort={onSort}
+                    className="p-3"
+                  >
+                    NIS
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="nama"
+                    currentKey={sortKey}
+                    direction={sortDir}
+                    onSort={onSort}
+                    className="p-3"
+                  >
+                    Nama Siswa
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="kelas"
+                    currentKey={sortKey}
+                    direction={sortDir}
+                    onSort={onSort}
+                    className="p-3"
+                  >
+                    Kelas
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="status"
+                    currentKey={sortKey}
+                    direction={sortDir}
+                    onSort={onSort}
+                    className="p-3"
+                  >
+                    Status
+                  </SortableTh>
+                  <th className="p-3">Biometrik Wajah</th>
+                  <th className="p-3 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {pageRows.map((s) => {
+                  const isSelected = selectedSet.has(s.id);
+                  const isExempt = isExemptActive(s.medical_exemption_until);
+
+                  return (
+                    <tr
+                      key={s.id}
+                      className={`hover:bg-slate-50/60 transition-colors ${
+                        isSelected ? "bg-blue-50/30" : ""
+                      }`}
+                    >
+                      <td className="p-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectSiswa(s.id)}
+                          className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                          aria-label={`Pilih ${s.nama}`}
+                        />
+                      </td>
+                      <td className="p-3 font-mono font-semibold text-slate-700">
+                        {s.nis}
+                      </td>
+                      <td className="p-3">
+                        <p className="font-bold text-slate-900">{s.nama}</p>
+                        <p className="text-[11px] text-slate-400">
+                          {s.jenis_kelamin || "Laki-laki"}
+                        </p>
+                      </td>
+                      <td className="p-3 font-semibold text-slate-700">
+                        {s.kelas}
+                      </td>
+                      <td className="p-3">
+                        <span
+                          className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                            s.status === "Alumni"
+                              ? "bg-slate-100 text-slate-600"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          }`}
+                        >
+                          {s.status || "Aktif"}
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          Belum Ada
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {isAlumni ? (
-                          <button
-                            title="Aktifkan Kembali Siswa Ini"
-                            onClick={() => onAktifkanSingle(s)}
-                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors border border-emerald-200 cursor-pointer"
-                          >
-                            <UserCheck className="w-3.5 h-3.5" />
-                          </button>
+                      </td>
+                      <td className="p-3">
+                        {s.terdaftar ? (
+                          <div className="flex items-center gap-1.5 text-emerald-700 font-semibold">
+                            <span>
+                              {s.sample_count
+                                ? `${s.sample_count} Sampel`
+                                : "Terdaftar"}
+                            </span>
+                          </div>
                         ) : (
-                          <button
-                            title="Luluskan Siswa Ini ke Status Alumni"
-                            onClick={() => onLuluskanSingle(s)}
-                            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors border border-indigo-200 cursor-pointer"
-                          >
-                            <GraduationCap className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1.5 text-rose-600 font-semibold">
+                            <span>Belum Terdaftar</span>
+                          </div>
                         )}
-
-                        <button
-                          title="Rekam Ulang Foto Wajah"
-                          onClick={() => onReRecord(s)}
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors border border-blue-200/60 cursor-pointer"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          title="Edit Data Siswa"
-                          onClick={() => onEdit(s)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          title={`Reset Kata Sandi ${s.nama} ke Default (NIS ${s.nis})`}
-                          onClick={() => onResetPassword(s)}
-                          className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors border border-amber-200 cursor-pointer"
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </button>
-
-                        {s.face_encoding && (
-                          <button
-                            title={`Reset Biometrik Wajah ${s.nama}`}
-                            onClick={() => onResetFace(s)}
-                            className="p-1.5 rounded-lg text-cyan-700 hover:bg-cyan-50 transition-colors border border-cyan-200 cursor-pointer"
+                        {isExempt && (
+                          <div
+                            className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200"
+                            title={`Dispensasi medis sampai ${s.medical_exemption_until}`}
                           >
-                            <Camera className="w-3.5 h-3.5" />
-                          </button>
+                            <Activity className="w-3 h-3" /> Dispensasi
+                          </div>
                         )}
-
-                        {s.tanda_tangan && (
-                          <button
-                            title={`Reset Tanda Tangan Digital ${s.nama}`}
-                            onClick={() => onResetSignature(s)}
-                            className="p-1.5 rounded-lg text-purple-700 hover:bg-purple-50 transition-colors border border-purple-200 cursor-pointer"
+                      </td>
+                      <td className="p-3 text-right">
+                        <div className="inline-flex items-center gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            icon={<Edit2 className="h-3.5 w-3.5" />}
+                            onClick={() => onEdit(s)}
                           >
-                            <PenTool className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                            Edit
+                          </Button>
+                          <ActionMenu
+                            title={s.nama}
+                            subtitle={`NIS: ${s.nis} • ${s.kelas}`}
+                            items={rowActions(s)}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-                        <button
-                          title={`Dispensasi Medis Biometrik ${s.nama}`}
-                          onClick={() =>
-                            onMedicalExemption && onMedicalExemption(s)
-                          }
-                          className="p-1.5 rounded-lg text-teal-600 hover:bg-teal-50 transition-colors border border-teal-200 cursor-pointer"
-                        >
-                          <Activity className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          title={`Reset 2FA Authenticator ${s.nama}`}
-                          onClick={() => onReset2fa && onReset2fa(s)}
-                          className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors border border-rose-200 cursor-pointer"
-                        >
-                          <ShieldOff className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          title="Hapus Permanen dari Database"
-                          onClick={() => onDelete(s)}
-                          className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors border border-rose-200 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+          {/* Pagination Footer */}
+          <DashboardPagination variant="footer" {...paging} />
+        </>
+      )}
     </div>
   );
 }

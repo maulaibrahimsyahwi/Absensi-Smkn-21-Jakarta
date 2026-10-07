@@ -8,7 +8,6 @@ import {
   Trash2,
   AlertCircle,
   Loader2,
-  X,
   LogIn,
   LogOut,
   PenTool,
@@ -24,7 +23,10 @@ import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import DeleteIzinModal from "../components/piket/DeleteIzinModal";
 import SignaturePadModal from "../components/SignaturePadModal";
 import ToastNotification from "../components/common/ToastNotification";
-import { useRealtimeSubscription } from "../services/realtimeService";
+import StudentPicker from "../components/common/StudentPicker";
+import { useDebouncedRealtime } from "../hooks/useDebouncedRealtime";
+import { unwrapList } from "../utils/api";
+import { todayWib } from "../utils/date";
 import { Siswa } from "../types/auth";
 
 const NAMA_HARI_MAP = [
@@ -57,10 +59,8 @@ const JAM_MULAI_OPTIONS = JAM_LIST.map((j) => ({
 
 const QUICK_JAM_PRESETS = [
   { label: "Jam 1", mulai: "1", selesai: "1" },
-  { label: "Jam 2", mulai: "2", selesai: "2" },
   { label: "Jam 1 s/d 2", mulai: "1", selesai: "2" },
   { label: "Jam 1 s/d 4", mulai: "1", selesai: "4" },
-  { label: "Jam 1 s/d 6", mulai: "1", selesai: "6" },
   { label: "Jam 3 s/d 6", mulai: "3", selesai: "6" },
   { label: "Jam 5 s/d Selesai", mulai: "5", selesai: "Selesai" },
   { label: "Jam 1 s/d Selesai", mulai: "1", selesai: "Selesai" },
@@ -123,16 +123,10 @@ export default function GuruPiket(): React.JSX.Element {
     : isAdmin
       ? "/portal-admin"
       : "/";
-  const todayStr = useMemo(() => getTodayStr(), []);
+  const todayStr = useMemo(() => todayWib(), []);
 
-  // State Daftar Siswa Aktif untuk Autocomplete
-  const [siswaList, setSiswaList] = useState<Siswa[]>([]);
-  const [loadingSiswa, setLoadingSiswa] = useState(false);
-  const [siswaSearchInput, setSiswaSearchInput] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  // State Siswa Terpilih (menggunakan StudentPicker)
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null);
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // State Formulir Penerbitan Surat
   const [tipe, setTipe] = useState("Izin Masuk"); // "Izin Masuk" atau "Izin Meninggalkan Kelas"
@@ -145,9 +139,6 @@ export default function GuruPiket(): React.JSX.Element {
     () => user?.nama || "Guru Piket SMKN 21",
   );
   const [showSignatureModal, setShowSignatureModal] = useState(false);
-  const [localSignature, setLocalSignature] = useState(() => {
-    return localStorage.getItem("smkn21_piket_signature") || "";
-  });
 
   // Selalu sinkronkan nama petugas piket dengan nama akun yang sedang aktif
   useEffect(() => {
@@ -156,17 +147,16 @@ export default function GuruPiket(): React.JSX.Element {
     }
   }, [user]);
 
-  const currentSignature = user?.tanda_tangan || localSignature;
+  // Keamanan tanda tangan: hanya gunakan tanda tangan profil akun resmi (hindari kebocoran localStorage perangkat bersama)
+  const currentSignature = user?.tanda_tangan;
 
   const handleSaveSignature = async (sigBase64: string) => {
-    setLocalSignature(sigBase64);
-    localStorage.setItem("smkn21_piket_signature", sigBase64);
     if (user) {
       await saveSignature(sigBase64);
     }
     setNotification({
       type: "success",
-      message: "Tanda tangan digital Guru Piket berhasil disimpan!",
+      message: "Tanda tangan digital Guru Piket berhasil disimpan ke akun!",
     });
   };
 
@@ -218,18 +208,28 @@ export default function GuruPiket(): React.JSX.Element {
   // State Riwayat Izin Meja Piket
   const [riwayatList, setRiwayatList] = useState<IzinPiketRecord[]>([]);
   const [loadingRiwayat, setLoadingRiwayat] = useState(false);
-  const [filterTanggalMode, setFilterTanggalMode] = useState<"today" | "all" | "custom">("today");
+  const [filterTanggalMode, setFilterTanggalMode] = useState<
+    "today" | "all" | "custom"
+  >("today");
   const [filterTanggalCustom, setFilterTanggalCustom] = useState(todayStr);
   const [riwayatSearch, setRiwayatSearch] = useState("");
+  const reqIdRef = useRef(0);
 
   // Modal E-Slip
-  const [selectedSlip, setSelectedSlip] = useState<IzinPiketRecord | null>(null);
+  const [selectedSlip, setSelectedSlip] = useState<IzinPiketRecord | null>(
+    null,
+  );
 
   // Form Submitting, Modal Hapus, & Floating Notification
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
-  const [notification, setNotification] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
-  const [deletingIzin, setDeletingIzin] = useState<IzinPiketRecord | null>(null);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const [deletingIzin, setDeletingIzin] = useState<IzinPiketRecord | null>(
+    null,
+  );
   const [deletingLoading, setDeletingLoading] = useState(false);
 
   // Auto-dismiss notification setelah 5 detik
@@ -253,26 +253,9 @@ export default function GuruPiket(): React.JSX.Element {
     }
   }, [tanggal]);
 
-  // Fetch Siswa Aktif
-  useEffect(() => {
-    const fetchSiswa = async () => {
-      setLoadingSiswa(true);
-      try {
-        const res = await api.get("/siswa", {
-          params: { status: "Aktif" },
-        });
-        setSiswaList(res.data || []);
-      } catch (err) {
-        console.error("Gagal memuat siswa:", err);
-      } finally {
-        setLoadingSiswa(false);
-      }
-    };
-    fetchSiswa();
-  }, []);
-
-  // Fetch Riwayat Izin Piket
+  // Fetch Riwayat Izin Piket dengan race guard
   const fetchRiwayat = async () => {
+    const currentReqId = ++reqIdRef.current;
     setLoadingRiwayat(true);
     try {
       let tglParam = "ALL";
@@ -288,11 +271,17 @@ export default function GuruPiket(): React.JSX.Element {
           search: riwayatSearch.trim() || undefined,
         },
       });
-      setRiwayatList(res.data || []);
+      if (currentReqId === reqIdRef.current) {
+        setRiwayatList(unwrapList<IzinPiketRecord>(res.data));
+      }
     } catch (err) {
-      console.error("Gagal memuat riwayat izin piket:", err);
+      if (currentReqId === reqIdRef.current) {
+        console.error("Gagal memuat riwayat izin piket:", err);
+      }
     } finally {
-      setLoadingRiwayat(false);
+      if (currentReqId === reqIdRef.current) {
+        setLoadingRiwayat(false);
+      }
     }
   };
 
@@ -300,40 +289,14 @@ export default function GuruPiket(): React.JSX.Element {
     fetchRiwayat();
   }, [filterTanggalMode, filterTanggalCustom, riwayatSearch]);
 
-  // Sinkronisasi data realtime otomatis saat ada izin piket atau perubahan presensi baru
-  useRealtimeSubscription(["piket", "presensi", "siswa"], () => {
-    fetchRiwayat();
-  });
-
-  // Autocomplete Siswa Search
-  const filteredSiswaOptions = useMemo(() => {
-    if (!siswaSearchInput.trim()) return siswaList.slice(0, 8);
-    const query = siswaSearchInput.toLowerCase();
-    return siswaList
-      .filter(
-        (s) =>
-          s.nama?.toLowerCase().includes(query) ||
-          s.nis?.toLowerCase().includes(query) ||
-          s.kelas?.toLowerCase().includes(query),
-      )
-      .slice(0, 10);
-  }, [siswaList, siswaSearchInput]);
-
-  // Handle outside click for autocomplete
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node) &&
-        searchInputRef.current &&
-        !searchInputRef.current.contains(e.target as Node)
-      ) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  // Sinkronisasi data realtime otomatis dengan debounce 500ms
+  useDebouncedRealtime(
+    ["piket", "presensi", "siswa"],
+    () => {
+      fetchRiwayat();
+    },
+    500,
+  );
 
   // Submit Formulir Izin Piket
   const handleSubmit = async (e: React.FormEvent) => {
@@ -409,7 +372,6 @@ export default function GuruPiket(): React.JSX.Element {
 
         // Reset form input spesifik siswa
         setSelectedSiswa(null);
-        setSiswaSearchInput("");
         setAlasan("");
         setNotification({
           type: "success",
@@ -547,102 +509,14 @@ export default function GuruPiket(): React.JSX.Element {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* STEP 1: CARI & PILIH SISWA */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  1. Pilih Siswa <span className="text-rose-500">*</span>
-                </label>
-
-                {selectedSiswa ? (
-                  /* Kartu Siswa Terpilih */
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50/70 border border-blue-200 animate-in fade-in">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                        {selectedSiswa.nama?.charAt(0) || "S"}
-                      </div>
-                      <div>
-                        <p className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
-                          {selectedSiswa.nama}
-                        </p>
-                        <p className="text-[11px] text-slate-500 font-medium">
-                          {selectedSiswa.nis} •{" "}
-                          <span className="font-bold text-blue-700">
-                            {selectedSiswa.kelas}
-                          </span>
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedSiswa(null);
-                        setSiswaSearchInput("");
-                      }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/80 transition-colors cursor-pointer"
-                      title="Ganti Siswa"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                ) : (
-                  /* Input Autocomplete Siswa */
-                  <div className="relative">
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        value={siswaSearchInput}
-                        onChange={(e) => {
-                          setSiswaSearchInput(e.target.value);
-                          setIsDropdownOpen(true);
-                        }}
-                        onFocus={() => setIsDropdownOpen(true)}
-                        placeholder="Ketik Nama, NIS, atau Kelas..."
-                        className="w-full text-xs sm:text-sm pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-2xs"
-                      />
-                      {loadingSiswa && (
-                        <Loader2 className="w-4 h-4 text-blue-500 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
-                      )}
-                    </div>
-
-                    {/* Dropdown Menu Hasil Autocomplete */}
-                    {isDropdownOpen && (
-                      <div
-                        ref={dropdownRef}
-                        className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto z-30 divide-y divide-slate-100"
-                      >
-                        {filteredSiswaOptions.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-slate-400">
-                            Tidak ada siswa yang cocok
-                          </div>
-                        ) : (
-                          filteredSiswaOptions.map((s) => (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedSiswa(s);
-                                setIsDropdownOpen(false);
-                                setFormError("");
-                              }}
-                              className="w-full text-left px-3.5 py-2 hover:bg-blue-50/80 transition-colors flex items-center justify-between group cursor-pointer"
-                            >
-                              <div>
-                                <p className="text-xs font-bold text-slate-800 group-hover:text-blue-600">
-                                  {s.nama}
-                                </p>
-                                <p className="text-[10px] text-slate-400">
-                                  NIS {s.nis} • {s.kelas}
-                                </p>
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <StudentPicker
+                label="1. Pilih Siswa"
+                value={selectedSiswa}
+                onChange={(s) => {
+                  setSelectedSiswa(s);
+                  setFormError("");
+                }}
+              />
 
               {/* STEP 2: KEPERLUAN IZIN (RADIO CARDS) */}
               <div>

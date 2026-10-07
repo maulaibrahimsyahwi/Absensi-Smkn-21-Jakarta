@@ -1,20 +1,17 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
 import {
   Wifi,
   WifiOff,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  X,
-  ChevronDown,
-  ChevronUp,
   Laptop,
   CheckSquare,
   Square,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import api from "../../services/api";
-import { liburService } from "../../services/liburService";
 import { useAuth } from "../../context/AuthContext";
 import {
   DAFTAR_KELAS_SMKN21,
@@ -22,6 +19,9 @@ import {
   KELAS_PER_JURUSAN,
 } from "../../constants/schoolData";
 import CustomDatePicker from "../CustomDatePicker";
+import Sheet, { SheetHeader, SheetBody, SheetFooter } from "../ui/Sheet";
+import Button from "../ui/Button";
+import { todayWib } from "../../utils/date";
 
 export interface ModalPengaturanPJJProps {
   isOpen: boolean;
@@ -29,54 +29,81 @@ export interface ModalPengaturanPJJProps {
   onUpdated?: (data?: any) => void;
 }
 
+const TINGKAT = ["X", "XI", "XII"] as const;
+const kelasDi = (t: string) =>
+  DAFTAR_KELAS_SMKN21.filter((k) => k.startsWith(`${t} `));
+
+const PRESET = {
+  SEMUA_PJJ: {
+    tingkat: ["X", "XI", "XII"],
+    ket: "Seluruh Siswa Pembelajaran Daring",
+  },
+  X_XI_PJJ: {
+    tingkat: ["X", "XI"],
+    ket: "Kelas X & XI PJJ (Kelas XII masuk sekolah)",
+  },
+  XII_ONLY_PJJ: {
+    tingkat: ["XII"],
+    ket: "Hanya Kelas XII PJJ (Kelas X & XI masuk sekolah)",
+  },
+} as const;
+
 export default function ModalPengaturanPJJ({
   isOpen,
   onClose,
   onUpdated,
 }: ModalPengaturanPJJProps): React.JSX.Element | null {
-  const { isAdmin } = useAuth();
+  const { isAdmin, todayStatus } = useAuth();
+  const holidayStatus = todayStatus as any;
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
-  const [holidayStatus, setHolidayStatus] = useState<any>(null);
 
   // Form State
   const [isActive, setIsActive] = useState(false);
-  const [tipeLingkup, setTipeLingkup] = useState<"semua" | "tingkat" | "kelas">("tingkat"); // 'semua' | 'tingkat' | 'kelas'
-  const [tingkatAktif, setTingkatAktif] = useState<string[]>([]); // ['X', 'XI', 'XII']
-  const [kelasAktif, setKelasAktif] = useState<string[]>([]); // ['X PPLG 1', ...]
+  const [kelasAktif, setKelasAktif] = useState<string[]>([]);
   const [tanggalMulai, setTanggalMulai] = useState("");
   const [tanggalSelesai, setTanggalSelesai] = useState("");
   const [keterangan, setKeterangan] = useState("");
 
   // UI Accordion State per Jurusan
-  const [expandedJurusan, setExpandedJurusan] = useState<Record<string, boolean>>({
+  const [expandedJurusan, setExpandedJurusan] = useState<
+    Record<string, boolean>
+  >({
     PPLG: false,
     AKL: false,
     MPLB: false,
     BR: false,
   });
 
-  const todayStr = useMemo(() => {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }, []);
+  const todayStr = useMemo(() => todayWib(), [isOpen]);
 
-  // Tanggal hari kerja sekolah yang valid pertama (bila hari ini Sabtu/Minggu, lompat ke Senin)
   const defaultSchoolDayStr = useMemo(() => {
-    const d = new Date();
-    const day = d.getDay(); // 0 = Minggu, 6 = Sabtu
-    if (day === 6) d.setDate(d.getDate() + 2);
-    else if (day === 0) d.setDate(d.getDate() + 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const dayStr = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${dayStr}`;
-  }, []);
+    const [y, m, d] = todayStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    while (dt.getDay() === 0 || dt.getDay() === 6) {
+      dt.setDate(dt.getDate() + 1);
+    }
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  }, [todayStr]);
+
+  // Derived Scope dari satu sumber kebenaran: kelasAktif
+  const scope = useMemo(() => {
+    const penuh = TINGKAT.filter((t) => {
+      const l = kelasDi(t);
+      return l.length > 0 && l.every((k) => kelasAktif.includes(k));
+    });
+    const tercakup = penuh.reduce((n, t) => n + kelasDi(t).length, 0);
+    const tipe =
+      kelasAktif.length === DAFTAR_KELAS_SMKN21.length
+        ? "semua"
+        : kelasAktif.length > 0 && tercakup === kelasAktif.length
+          ? "tingkat"
+          : "kelas";
+    return { tingkat: penuh as unknown as string[], tipe };
+  }, [kelasAktif]);
 
   // Fetch status PJJ saat modal dibuka
   useEffect(() => {
@@ -91,33 +118,25 @@ export default function ModalPengaturanPJJ({
         if (res.data?.success && res.data?.data) {
           const d = res.data.data;
           setIsActive(Boolean(d.is_active));
-          setTipeLingkup(d.tipe_lingkup || "tingkat");
-          setTingkatAktif(
-            Array.isArray(d.tingkat_aktif) ? d.tingkat_aktif : [],
-          );
-          setKelasAktif(Array.isArray(d.kelas_aktif) ? d.kelas_aktif : []);
 
-          // Pastikan tanggal awal bukan hari yang sudah lewat atau hari libur akhir pekan
+          const kelasServer: string[] = Array.isArray(d.kelas_aktif)
+            ? d.kelas_aktif
+            : [];
+          setKelasAktif(
+            kelasServer.length
+              ? kelasServer
+              : (Array.isArray(d.tingkat_aktif) ? d.tingkat_aktif : []).flatMap(
+                  kelasDi,
+                ),
+          );
+
           let initialMulai = d.tanggal_mulai || defaultSchoolDayStr;
           if (initialMulai < todayStr) {
             initialMulai = defaultSchoolDayStr;
-          } else {
-            const [y, m, dayNum] = initialMulai.split("-").map(Number);
-            const dow = new Date(y, m - 1, dayNum).getDay();
-            if (dow === 0 || dow === 6) {
-              initialMulai = defaultSchoolDayStr;
-            }
           }
-
           let initialSelesai = d.tanggal_selesai || initialMulai;
           if (initialSelesai < initialMulai) {
             initialSelesai = initialMulai;
-          } else {
-            const [y, m, dayNum] = initialSelesai.split("-").map(Number);
-            const dow = new Date(y, m - 1, dayNum).getDay();
-            if (dow === 0 || dow === 6) {
-              initialSelesai = initialMulai;
-            }
           }
 
           setTanggalMulai(initialMulai);
@@ -132,97 +151,34 @@ export default function ModalPengaturanPJJ({
       .finally(() => {
         setLoading(false);
       });
-
-    // Ambil status operasional sekolah hari ini (apakah sedang libur/weekend)
-    liburService
-      .getStatusToday()
-      .then((res) => {
-        if (res && res.success) {
-          setHolidayStatus(res);
-        }
-      })
-      .catch(() => {});
   }, [isOpen, todayStr, defaultSchoolDayStr]);
 
-  // SMART PRESETS
-  const applyPreset = (presetName: string) => {
+  const applyPreset = (name: keyof typeof PRESET) => {
     setErrorMsg("");
-    if (presetName === "SEMUA_PJJ") {
-      setIsActive(true);
-      setTipeLingkup("semua");
-      setTingkatAktif(["X", "XI", "XII"]);
-      setKelasAktif([...DAFTAR_KELAS_SMKN21]);
-      setKeterangan("Seluruh Siswa Pembelajaran Daring");
-    } else if (presetName === "X_XI_PJJ") {
-      setIsActive(true);
-      setTipeLingkup("tingkat");
-      setTingkatAktif(["X", "XI"]);
-      const filtered = DAFTAR_KELAS_SMKN21.filter(
-        (k) => k.startsWith("X ") || k.startsWith("XI "),
-      );
-      setKelasAktif(filtered);
-      setKeterangan("Kelas X & XI PJJ (Kelas XII Masuk Sekolah / Ujian)");
-    } else if (presetName === "XII_ONLY_PJJ") {
-      setIsActive(true);
-      setTipeLingkup("tingkat");
-      setTingkatAktif(["XII"]);
-      const filtered = DAFTAR_KELAS_SMKN21.filter((k) => k.startsWith("XII "));
-      setKelasAktif(filtered);
-      setKeterangan("Hanya Kelas XII PJJ (Kelas X & XI Masuk Sekolah)");
-    } else if (presetName === "NORMAL_PTM") {
-      setIsActive(false);
-      setTipeLingkup("tingkat");
-      setTingkatAktif([]);
-      setKelasAktif([]);
-      setKeterangan("Normal Pembelajaran Tatap Muka (PTM)");
-    }
+    setIsActive(true);
+    setKelasAktif(PRESET[name].tingkat.flatMap(kelasDi));
+    setKeterangan(PRESET[name].ket);
   };
 
-  // Toggle Tingkat (X, XI, XII)
-  const toggleTingkat = (tingkat: string) => {
-    let nextTingkat = [...tingkatAktif];
-    if (nextTingkat.includes(tingkat)) {
-      nextTingkat = nextTingkat.filter((t) => t !== tingkat);
-    } else {
-      nextTingkat.push(tingkat);
-    }
-    setTingkatAktif(nextTingkat);
-
-    // Otomatis sinkronkan kelasAktif
-    const kelasTingkat = DAFTAR_KELAS_SMKN21.filter((k) =>
-      k.startsWith(`${tingkat} `),
+  const toggleTingkat = (t: string) => {
+    const l = kelasDi(t);
+    setKelasAktif((prev) =>
+      l.every((k) => prev.includes(k))
+        ? prev.filter((k) => !l.includes(k))
+        : Array.from(new Set([...prev, ...l])),
     );
-    if (nextTingkat.includes(tingkat)) {
-      setKelasAktif((prev) => Array.from(new Set([...prev, ...kelasTingkat])));
-    } else {
-      setKelasAktif((prev) => prev.filter((k) => !k.startsWith(`${tingkat} `)));
-    }
-
-    if (nextTingkat.length === 3) {
-      setTipeLingkup("semua");
-    } else if (nextTingkat.length > 0) {
-      setTipeLingkup("tingkat");
-    }
   };
 
-  // Toggle Kelas Individual
-  const toggleKelas = (kelasName: string) => {
-    setTipeLingkup("kelas");
-    setKelasAktif((prev) => {
-      if (prev.includes(kelasName)) {
-        return prev.filter((k) => k !== kelasName);
-      } else {
-        return [...prev, kelasName];
-      }
-    });
+  const toggleKelas = (k: string) => {
+    setKelasAktif((prev) =>
+      prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k],
+    );
   };
 
-  // Toggle Semua Kelas dalam Jurusan
   const toggleJurusan = (kodeJurusan: string) => {
-    const listKelas = (KELAS_PER_JURUSAN as Record<string, string[]>)[kodeJurusan] || [];
+    const listKelas =
+      (KELAS_PER_JURUSAN as Record<string, string[]>)[kodeJurusan] || [];
     const allSelected = listKelas.every((k) => kelasAktif.includes(k));
-
-    setTipeLingkup("kelas");
     if (allSelected) {
       setKelasAktif((prev) => prev.filter((k) => !listKelas.includes(k)));
     } else {
@@ -230,7 +186,6 @@ export default function ModalPengaturanPJJ({
     }
   };
 
-  // Simpan Konfigurasi
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isAdmin) {
@@ -245,6 +200,11 @@ export default function ModalPengaturanPJJ({
 
     try {
       if (isActive) {
+        if (kelasAktif.length === 0) {
+          setErrorMsg("Pilih minimal satu kelas untuk mode daring.");
+          setSubmitting(false);
+          return;
+        }
         if (!tanggalMulai) {
           setErrorMsg("Tanggal mulai daring wajib dipilih.");
           setSubmitting(false);
@@ -270,27 +230,7 @@ export default function ModalPengaturanPJJ({
           return;
         }
 
-        const [y1, m1, d1] = tanggalMulai.split("-").map(Number);
-        const dow1 = new Date(y1, m1 - 1, d1).getDay();
-        if (dow1 === 0 || dow1 === 6) {
-          setErrorMsg(
-            "Tanggal mulai daring tidak boleh jatuh pada hari Sabtu atau Minggu",
-          );
-          setSubmitting(false);
-          return;
-        }
-
-        const [y2, m2, d2] = tanggalSelesai.split("-").map(Number);
-        const dow2 = new Date(y2, m2 - 1, d2).getDay();
-        if (dow2 === 0 || dow2 === 6) {
-          setErrorMsg(
-            "Tanggal selesai daring tidak boleh jatuh pada hari Sabtu atau Minggu (hari libur).",
-          );
-          setSubmitting(false);
-          return;
-        }
-
-        // Cek jika hari ini / tanggal mulai adalah hari libur sekolah resmi
+        // Cek jika hari libur sekolah resmi
         if (
           holidayStatus &&
           !holidayStatus.is_school_day &&
@@ -311,8 +251,8 @@ export default function ModalPengaturanPJJ({
 
       const payload = {
         is_active: isActive,
-        tipe_lingkup: tipeLingkup,
-        tingkat_aktif: tingkatAktif,
+        tipe_lingkup: scope.tipe,
+        tingkat_aktif: scope.tingkat,
         kelas_aktif: kelasAktif,
         tanggal_mulai: tanggalMulai || todayStr,
         tanggal_selesai: tanggalSelesai || todayStr,
@@ -331,6 +271,10 @@ export default function ModalPengaturanPJJ({
         setTimeout(() => {
           onClose();
         }, 1200);
+      } else {
+        setErrorMsg(
+          res.data?.message || "Server tidak menyimpan pengaturan. Coba lagi.",
+        );
       }
     } catch (err: any) {
       console.error("Gagal memperbarui pengaturan PJJ:", err);
@@ -343,82 +287,57 @@ export default function ModalPengaturanPJJ({
     }
   };
 
-  if (!isOpen) return null;
+  return (
+    <Sheet isOpen={isOpen} onClose={onClose} size="lg">
+      <SheetHeader
+        title="Pengaturan Mode Daring (PJJ)"
+        subtitle="Pembelajaran Jarak Jauh Berdasarkan Kelas & Tingkat"
+        icon={<Laptop className="w-5 h-5 text-indigo-600" />}
+        onClose={onClose}
+      />
 
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-700 via-indigo-750 to-slate-900 p-5 text-white flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20">
-              <Laptop className="w-5 h-5 text-blue-200" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-bold">
-                Pengaturan Mode Daring
-              </h3>
-              <p className="text-xs text-blue-200">
-                Pembelajaran Daring Berdasarkan Kelas & Tingkat
-              </p>
-            </div>
+      <SheetBody className="space-y-4">
+        {errorMsg && (
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500" />
+            <span>{errorMsg}</span>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl cursor-pointer transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        )}
 
-        {/* Content Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 flex-1 text-slate-800">
-          {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
+        {successMsg && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500" />
+            <span>{successMsg}</span>
+          </div>
+        )}
 
-          {successMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-xs flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-500" />
-              <span>{successMsg}</span>
+        {holidayStatus && !holidayStatus.is_school_day && (
+          <div className="p-3.5 bg-amber-50/90 border border-amber-200 text-amber-950 rounded-2xl text-xs space-y-1 shadow-2xs">
+            <div className="flex items-center gap-2 font-bold text-amber-800">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Hari Libur Sekolah ({holidayStatus.tanggal})</span>
             </div>
-          )}
+            <p className="text-[11px] text-amber-800 leading-relaxed">
+              <strong className="text-amber-950 font-extrabold underline decoration-amber-400">
+                {holidayStatus.holiday_event?.nama ||
+                  (holidayStatus.is_weekend
+                    ? `Libur Akhir Pekan (${holidayStatus.nama_hari})`
+                    : "Hari Libur Sekolah")}
+              </strong>{" "}
+              Seluruh kegiatan presensi dan operasional belajar diliburkan.
+            </p>
+          </div>
+        )}
 
-          {holidayStatus && !holidayStatus.is_school_day && (
-            <div className="p-4 bg-amber-50/90 border border-amber-200 text-amber-950 rounded-2xl text-xs space-y-1.5 shadow-2xs">
-              <div className="flex items-center gap-2 font-bold text-amber-800">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>
-                  Hari Libur Sekolah Terdeteksi ({holidayStatus.tanggal})
-                </span>
-              </div>
-              <p className="text-[11px] text-amber-800 leading-relaxed">
-                Hari ini berstatus:{" "}
-                <strong className="text-amber-950 font-extrabold underline decoration-amber-400">
-                  {holidayStatus.holiday_event?.nama ||
-                    (holidayStatus.is_weekend
-                      ? `Libur Akhir Pekan (${holidayStatus.nama_hari})`
-                      : "Hari Libur Sekolah")}
-                </strong>
-                . Seluruh kegiatan presensi dan operasional belajar tatap muka
-                maupun daring diliburkan penuh. Mode PJJ dinonaktifkan otomatis
-                selama masa libur.
-              </p>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
-              <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
-              <p className="text-xs">Memuat konfigurasi PJJ...</p>
-            </div>
-          ) : (
-            <form id="pjj-form" onSubmit={handleSubmit} className="space-y-3">
-              {/* STATUS TOGGLE MASTER */}
+        {loading ? (
+          <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+            <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+            <p className="text-xs">Memuat konfigurasi PJJ...</p>
+          </div>
+        ) : (
+          <form id="pjj-form" onSubmit={handleSubmit}>
+            <fieldset disabled={!isAdmin} className="min-w-0 space-y-4">
+              {/* TOGGLE STATUS UTAMA */}
               <div
                 className={`p-4 rounded-2xl border transition-colors flex items-center justify-between gap-4 ${
                   isActive
@@ -442,9 +361,9 @@ export default function ModalPengaturanPJJ({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900">
-                      Status Mode Daring{" "}
-                      <span className="text-xs font-normal text-slate-500 ml-1">
-                        {isActive ? "AKTIF" : "NONAKTIF"}
+                      Status Pembelajaran Daring{" "}
+                      <span className="text-xs font-semibold text-indigo-600 ml-1">
+                        {isActive ? "Aktif" : "Nonaktif"}
                       </span>
                     </h4>
                     <p className="text-xs text-slate-500">
@@ -458,15 +377,13 @@ export default function ModalPengaturanPJJ({
                 <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                   <input
                     type="checkbox"
+                    role="switch"
+                    aria-label="Mode daring"
                     checked={isActive}
                     onChange={(e) => {
                       const val = e.target.checked;
                       setIsActive(val);
-                      if (
-                        val &&
-                        tingkatAktif.length === 0 &&
-                        kelasAktif.length === 0
-                      ) {
+                      if (val && kelasAktif.length === 0) {
                         applyPreset("SEMUA_PJJ");
                       }
                     }}
@@ -479,23 +396,23 @@ export default function ModalPengaturanPJJ({
               {isActive && (
                 <>
                   {/* 1. TOGGLE PER TINGKAT (X, XI, XII) */}
-                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-2.5">
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Pilihan Kelas
+                      Tingkat Kelas
                     </label>
 
                     <div className="grid grid-cols-3 gap-2.5">
-                      {["X", "XI", "XII"].map((tingkat) => {
-                        const isTingkatActive = tingkatAktif.includes(tingkat);
+                      {TINGKAT.map((tingkat) => {
+                        const isTingkatActive = scope.tingkat.includes(tingkat);
                         return (
                           <button
                             key={tingkat}
                             type="button"
                             onClick={() => toggleTingkat(tingkat)}
-                            className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                            className={`min-h-11 py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                               isTingkatActive
-                                ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-white"
+                                ? "bg-indigo-600 text-white border-indigo-600 shadow-xs"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                             }`}
                           >
                             <span>Kelas {tingkat}</span>
@@ -505,12 +422,12 @@ export default function ModalPengaturanPJJ({
                     </div>
                   </div>
 
-                  {/* 2. RINCIAN PER JURUSAN & KELAS (ACCORDION DETAIL) */}
+                  {/* 2. RINCIAN PER JURUSAN & KELAS */}
                   <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
                     <div className="bg-slate-100/80 px-4 py-2.5 flex items-center justify-between text-xs font-bold text-slate-700">
                       <span>
-                        Pilih {kelasAktif.length} dari{" "}
-                        {DAFTAR_KELAS_SMKN21.length}
+                        {kelasAktif.length} dari {DAFTAR_KELAS_SMKN21.length}{" "}
+                        Kelas
                       </span>
                     </div>
 
@@ -535,7 +452,7 @@ export default function ModalPengaturanPJJ({
                                 <button
                                   type="button"
                                   onClick={() => toggleJurusan(kodeJurusan)}
-                                  className="text-slate-500 hover:text-indigo-600 cursor-pointer"
+                                  className="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-500 hover:text-indigo-600 cursor-pointer"
                                   title={
                                     allInJurusan
                                       ? "Hapus semua kelas"
@@ -543,9 +460,9 @@ export default function ModalPengaturanPJJ({
                                   }
                                 >
                                   {allInJurusan ? (
-                                    <CheckSquare className="w-4 h-4 text-indigo-600" />
+                                    <CheckSquare className="w-5 h-5 text-indigo-600" />
                                   ) : (
-                                    <Square className="w-4 h-4 text-slate-300" />
+                                    <Square className="w-5 h-5 text-slate-300" />
                                   )}
                                 </button>
                                 <div
@@ -568,13 +485,13 @@ export default function ModalPengaturanPJJ({
 
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                                     selectedInJurusan > 0
                                       ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
                                       : "bg-slate-100 text-slate-500"
                                   }`}
                                 >
-                                  {selectedInJurusan} / {listKelas.length}{" "}
+                                  {selectedInJurusan} / {listKelas.length}
                                 </span>
                                 <button
                                   type="button"
@@ -584,7 +501,7 @@ export default function ModalPengaturanPJJ({
                                       [kodeJurusan]: !prev[kodeJurusan],
                                     }))
                                   }
-                                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
                                 >
                                   {isExpanded ? (
                                     <ChevronUp className="w-4 h-4" />
@@ -605,9 +522,9 @@ export default function ModalPengaturanPJJ({
                                       key={kelas}
                                       type="button"
                                       onClick={() => toggleKelas(kelas)}
-                                      className={`py-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-between border transition-all cursor-pointer ${
+                                      className={`min-h-10 py-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-between border transition-all cursor-pointer ${
                                         isSelected
-                                          ? "bg-indigo-500 text-white border-indigo-500 font-bold"
+                                          ? "bg-indigo-600 text-white border-indigo-600 font-bold"
                                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                                       }`}
                                     >
@@ -623,14 +540,12 @@ export default function ModalPengaturanPJJ({
                     )}
                   </div>
 
-                  {/* 3. PERIODE WAKTU & KETERANGAN ALASAN PJJ */}
+                  {/* 3. PERIODE WAKTU & KETERANGAN */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-xs font-bold text-slate-700">
-                          Tanggal Mulai <span className="text-rose-500">*</span>
-                        </label>
-                      </div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Tanggal Mulai <span className="text-rose-500">*</span>
+                      </label>
                       <CustomDatePicker
                         className="w-full"
                         value={tanggalMulai}
@@ -647,12 +562,9 @@ export default function ModalPengaturanPJJ({
                       />
                     </div>
                     <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-xs font-bold text-slate-700">
-                          Tanggal Selesai{" "}
-                          <span className="text-rose-500">*</span>
-                        </label>
-                      </div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Tanggal Selesai <span className="text-rose-500">*</span>
+                      </label>
                       <CustomDatePicker
                         className="w-full"
                         value={tanggalSelesai}
@@ -673,51 +585,37 @@ export default function ModalPengaturanPJJ({
                       type="text"
                       value={keterangan}
                       onChange={(e) => setKeterangan(e.target.value)}
-                      placeholder="Contoh: Persiapan Ruang Ujian LSP / Cuaca Ekstrem / Banjir"
-                      className="w-full text-xs sm:text-sm px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Contoh: Persiapan Ruang Ujian LSP / Cuaca Ekstrem / Renovasi Lab"
+                      className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </>
               )}
-            </form>
-          )}
-        </div>
+            </fieldset>
+          </form>
+        )}
+      </SheetBody>
 
-        {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 flex-shrink-0">
-          <div className="flex items-center gap-2 justify-between w-full">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/80 transition-colors cursor-pointer"
-            >
-              Batal
-            </button>
-            {isAdmin ? (
-              <button
-                type="submit"
-                form="pjj-form"
-                disabled={submitting || loading}
-                className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2 transition-all"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <span>Simpan Perubahan</span>
-                )}
-              </button>
-            ) : (
-              <span className="text-xs text-amber-600 font-semibold px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">
-                Mode Lihat
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
+      <SheetFooter className="flex items-center justify-between gap-3">
+        <Button variant="outline" onClick={onClose}>
+          Batal
+        </Button>
+        {isAdmin ? (
+          <Button
+            type="submit"
+            form="pjj-form"
+            variant="primary"
+            loading={submitting}
+            disabled={loading}
+          >
+            Simpan Perubahan
+          </Button>
+        ) : (
+          <span className="text-xs text-amber-600 font-semibold px-3 py-1.5 bg-amber-50 rounded-lg border border-amber-200">
+            Mode Lihat (Hanya Admin)
+          </span>
+        )}
+      </SheetFooter>
+    </Sheet>
   );
 }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import api from "../../../services/api";
 import { SkeletonTable } from "../../common/Skeleton";
 import {
@@ -9,16 +8,14 @@ import {
   PenLine,
   Trash2,
   Edit,
-  CheckCircle2,
   AlertCircle,
-  Loader2,
-  X,
   Search,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
 } from "lucide-react";
 import { useRealtimeSubscription } from "../../../services/realtimeService";
+import Sheet, { SheetHeader, SheetBody, SheetFooter } from "../../ui/Sheet";
+import Button from "../../ui/Button";
+import SortableTh from "../../ui/SortableTh";
+import ToastNotification from "../../common/ToastNotification";
 
 export interface StafItem {
   id: number;
@@ -61,7 +58,7 @@ export default function ManajemenPiketTab() {
 
   // Modal State: Reset Password
   const [resetStaf, setResetStaf] = useState<StafItem | null>(null);
-  const [resetNewPass, setResetNewPass] = useState("piket123");
+  const [resetNewPass, setResetNewPass] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
   // Modal State: Reset Tanda Tangan
@@ -102,9 +99,6 @@ export default function ManajemenPiketTab() {
 
   const showNotification = (type: "success" | "error", message: string) => {
     setNotification({ type, message });
-    setTimeout(() => {
-      setNotification(null);
-    }, 4000);
   };
 
   const handleSort = (key: string) => {
@@ -253,16 +247,17 @@ export default function ManajemenPiketTab() {
     if (!resetStaf) return;
     setResetLoading(true);
     try {
+      const targetPass = resetNewPass.trim() || resetStaf.username;
       const res = await api.post<{ success: boolean; message?: string }>(
         `/staf/${resetStaf.id}/reset_password`,
         {
-          new_password: resetNewPass.trim() || resetStaf.username,
+          new_password: targetPass,
         },
       );
       if (res.data && res.data.success) {
         showNotification(
           "success",
-          `Kata sandi ${resetStaf.nama} berhasil direset ke: ${resetNewPass.trim() || resetStaf.username}`,
+          `Kata sandi ${resetStaf.nama} berhasil direset ke: ${targetPass}`,
         );
         setResetStaf(null);
       }
@@ -350,54 +345,38 @@ export default function ManajemenPiketTab() {
 
   return (
     <div className="space-y-4">
-      {/* Toast Notifikasi */}
-      {notification && (
-        <div
-          className={`p-3.5 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-semibold shadow-md animate-in fade-in duration-200 border ${
-            notification.type === "success"
-              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-              : "bg-rose-50 text-rose-800 border-rose-200"
-          }`}
-        >
-          {notification.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-          )}
-          <span>{notification.message}</span>
-        </div>
-      )}
+      {/* Toast Notifikasi Melayang */}
+      <ToastNotification
+        notification={notification}
+        onClose={() => setNotification(null)}
+      />
 
       {/* Header Info & Action Card */}
       <div className="bg-gradient-to-r from-blue-700 via-blue-800 to-indigo-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-80 h-80 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 relative z-10">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div>
-                <h3 className="text-base sm:text-lg font-black tracking-tight">
-                  Manajemen Akun Guru Piket
-                </h3>
-                <p className="text-xs text-blue-200">SMKN 21 Jakarta</p>
-              </div>
-            </div>
+            <h3 className="text-base sm:text-lg font-black tracking-tight">
+              Manajemen Akun Guru Piket
+            </h3>
+            <p className="text-xs text-blue-200">SMKN 21 Jakarta</p>
           </div>
 
           <div className="shrink-0">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              icon={<UserPlus className="w-4 h-4 text-blue-600" />}
               onClick={() => {
                 setAddNama("");
                 setAddUsername("");
-                setAddPassword("piket123");
+                setAddPassword("");
                 setAddError("");
                 setShowAddModal(true);
               }}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl sm:rounded-2xl bg-white text-blue-700 font-bold text-xs sm:text-sm shadow-md hover:bg-blue-50 transition-colors duration-150 cursor-pointer w-full sm:w-auto"
+              className="bg-white text-blue-700 hover:bg-blue-50 border-white shadow-md font-bold w-full sm:w-auto"
             >
-              <UserPlus className="w-4 h-4 text-blue-600" />
-              <span>Tambah Guru Piket</span>
-            </button>
+              Tambah Guru Piket
+            </Button>
           </div>
         </div>
 
@@ -432,7 +411,7 @@ export default function ManajemenPiketTab() {
         </div>
       </div>
 
-      {/* Toolbar Pencarian & Realtime Status */}
+      {/* Toolbar Pencarian */}
       <div className="flex items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -441,7 +420,7 @@ export default function ManajemenPiketTab() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Cari nama guru atau username/NIP..."
-            className="w-full text-xs sm:text-sm pl-9 pr-4 py-2 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+            className="w-full text-xs sm:text-sm pl-9 pr-4 min-h-11 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
         </div>
       </div>
@@ -464,15 +443,15 @@ export default function ManajemenPiketTab() {
           </div>
         ) : (
           <>
-            {/* 1. Mobile Cards View (< md) */}
-            <div className="md:hidden divide-y divide-slate-100">
+            {/* 1. Mobile & Tablet Cards View (< lg) */}
+            <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 lg:hidden p-0 md:p-3">
               {sortedStaf.map((staf) => {
                 const isPrimaryAdmin =
                   staf.username === "admin" || staf.role === "admin";
                 return (
                   <div
                     key={staf.id}
-                    className="p-3.5 hover:bg-slate-50/60 transition-colors space-y-2.5"
+                    className="p-3.5 hover:bg-slate-50/60 transition-colors space-y-2.5 md:rounded-2xl md:border md:border-slate-200/80 md:bg-white"
                   >
                     {/* Baris Atas: Avatar, Nama, dan Badge Peran */}
                     <div className="flex items-start justify-between gap-2">
@@ -538,36 +517,36 @@ export default function ManajemenPiketTab() {
 
                     {/* Tombol Aksi Mobile */}
                     <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-100">
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
+                        variant="soft"
+                        icon={<Edit className="w-3.5 h-3.5 text-blue-700" />}
                         onClick={() => handleOpenEdit(staf)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors border border-blue-200 cursor-pointer"
                       >
-                        <Edit className="w-3.5 h-3.5" />
-                        <span>Edit</span>
-                      </button>
+                        Edit
+                      </Button>
 
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        icon={<KeyRound className="w-3.5 h-3.5 text-amber-700" />}
                         onClick={() => {
                           setResetStaf(staf);
-                          setResetNewPass("piket123");
+                          setResetNewPass(staf.username);
                         }}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200 cursor-pointer"
                       >
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span>Reset Pass</span>
-                      </button>
+                        Reset Pass
+                      </Button>
 
                       {!isPrimaryAdmin && (
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant="dangerSoft"
+                          icon={<Trash2 className="w-3.5 h-3.5" />}
                           onClick={() => setDeletingStaf(staf)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Hapus</span>
-                        </button>
+                          Hapus
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -575,97 +554,49 @@ export default function ManajemenPiketTab() {
               })}
             </div>
 
-            {/* 2. Desktop & Tablet Table View (>= md) */}
-            <div className="hidden md:block overflow-x-auto">
+            {/* 2. Desktop Table View (>= lg) */}
+            <div className="hidden lg:block overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[680px]">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                      onClick={() => handleSort("nama")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Nama Lengkap & Gelar</span>
-                        {sortKey === "nama" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-blue-600" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                        )}
-                      </div>
+                    <SortableTh
+                      label="Nama Lengkap & Gelar"
+                      field="nama"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Username / NIP"
+                      field="username"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Peran"
+                      field="role"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Tanda Tangan Digital"
+                      field="has_signature"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Terdaftar Sejak"
+                      field="created_at"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <th className="py-3 px-4 text-center font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      Aksi Manajemen
                     </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                      onClick={() => handleSort("username")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Username / NIP</span>
-                        {sortKey === "username" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-blue-600" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                      onClick={() => handleSort("role")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Peran</span>
-                        {sortKey === "role" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-blue-600" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                      onClick={() => handleSort("has_signature")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Tanda Tangan Digital</span>
-                        {sortKey === "has_signature" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-blue-600" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                        )}
-                      </div>
-                    </th>
-                    <th
-                      className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                      onClick={() => handleSort("created_at")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <span>Terdaftar Sejak</span>
-                        {sortKey === "created_at" ? (
-                          sortDirection === "asc" ? (
-                            <ArrowUp className="w-3 h-3 text-blue-600" />
-                          ) : (
-                            <ArrowDown className="w-3 h-3 text-blue-600" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                        )}
-                      </div>
-                    </th>
-                    <th className="py-3 px-4 text-center">Aksi Manajemen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
@@ -711,7 +642,7 @@ export default function ManajemenPiketTab() {
                                 : "bg-emerald-100 text-emerald-700 border border-emerald-200"
                             }`}
                           >
-                            {isPrimaryAdmin ? "Admin " : "Guru Piket"}
+                            {isPrimaryAdmin ? "Admin" : "Guru Piket"}
                           </span>
                         </td>
 
@@ -753,7 +684,7 @@ export default function ManajemenPiketTab() {
                               type="button"
                               onClick={() => handleOpenEdit(staf)}
                               title="Edit nama / username"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              className="press grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer border border-transparent hover:border-blue-100"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
@@ -763,10 +694,10 @@ export default function ManajemenPiketTab() {
                               type="button"
                               onClick={() => {
                                 setResetStaf(staf);
-                                setResetNewPass("piket123");
+                                setResetNewPass(staf.username);
                               }}
                               title="Reset Kata Sandi Akun"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer"
+                              className="press grid h-9 w-9 place-items-center rounded-xl text-slate-500 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer border border-transparent hover:border-amber-100"
                             >
                               <KeyRound className="w-4 h-4" />
                             </button>
@@ -777,7 +708,7 @@ export default function ManajemenPiketTab() {
                                 type="button"
                                 onClick={() => setDeletingStaf(staf)}
                                 title="Hapus Akun Guru Piket"
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                className="press grid h-9 w-9 place-items-center rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer border border-transparent hover:border-rose-100"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -795,395 +726,330 @@ export default function ManajemenPiketTab() {
       </div>
 
       {/* ================= MODAL TAMBAH GURU PIKET ================= */}
-      {showAddModal &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-4 text-white flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <h4 className="text-base font-bold">
-                      Tambah Guru Piket Baru
-                    </h4>
-                    <p className="text-xs text-blue-200">
-                      Pendaftaran akun resmi SMKN 21
-                    </p>
-                  </div>
+      <Sheet
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        labelledBy="add-guru-piket-title"
+        size="md"
+      >
+        <SheetHeader
+          id="add-guru-piket-title"
+          title="Tambah Guru Piket Baru"
+          subtitle="Pendaftaran akun resmi SMKN 21 Jakarta"
+          onClose={() => setShowAddModal(false)}
+        />
+        <form onSubmit={handleCreateStaf}>
+          <SheetBody>
+            <div className="space-y-3 pt-1">
+              {addError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{addError}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Lengkap Beserta Gelar{" "}
+                  <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addNama}
+                  onChange={(e) => setAddNama(e.target.value)}
+                  placeholder="Contoh: Drs. H. Mulyadi, M.Pd"
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  required
+                />
               </div>
 
-              {/* Form Body */}
-              <form onSubmit={handleCreateStaf} className="p-5 space-y-3">
-                {addError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{addError}</span>
-                  </div>
-                )}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  NIP Guru (Nomor Induk Pegawai){" "}
+                  <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addUsername}
+                  onChange={(e) => {
+                    setAddUsername(e.target.value);
+                    if (!addPassword) setAddPassword(e.target.value);
+                  }}
+                  placeholder="Contoh: 197805122005011002"
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
+                  required
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Lengkap Beserta Gelar{" "}
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={addNama}
-                    onChange={(e) => setAddNama(e.target.value)}
-                    placeholder="Contoh: Drs. H. Mulyadi, M.Pd"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    NIP Guru (Nomor Induk Pegawai){" "}
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={addUsername}
-                    onChange={(e) => {
-                      setAddUsername(e.target.value);
-                      if (!addPassword) setAddPassword(e.target.value);
-                    }}
-                    placeholder="Contoh: 197805122005011002"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi Awal
-                  </label>
-                  <input
-                    type="text"
-                    value={addPassword}
-                    onChange={(e) => setAddPassword(e.target.value)}
-                    placeholder={
-                      addUsername
-                        ? `Otomatis sama: ${addUsername}`
-                        : "Otomatis sama dengan NIP"
-                    }
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
-                  />
-                  <p className="text-[11px] text-blue-600 mt-1 font-medium">
-                    * Kata sandi awal otomatis sama seperti NIP guru jika
-                    dikosongkan
-                  </p>
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={addLoading}
-                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {addLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Menyimpan...</span>
-                      </>
-                    ) : (
-                      <span>Daftar</span>
-                    )}
-                  </button>
-                </div>
-              </form>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Kata Sandi Awal
+                </label>
+                <input
+                  type="text"
+                  value={addPassword}
+                  onChange={(e) => setAddPassword(e.target.value)}
+                  placeholder={
+                    addUsername
+                      ? `Otomatis sama: ${addUsername}`
+                      : "Otomatis sama dengan NIP"
+                  }
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
+                />
+                <p className="text-[11px] text-blue-600 mt-1 font-medium">
+                  * Kata sandi awal otomatis sama seperti NIP guru jika dikosongkan
+                </p>
+              </div>
             </div>
-          </div>,
-          document.body,
-        )}
+          </SheetBody>
+          <SheetFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddModal(false)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={addLoading}
+            >
+              Daftarkan
+            </Button>
+          </SheetFooter>
+        </form>
+      </Sheet>
 
       {/* ================= MODAL EDIT GURU PIKET ================= */}
-      {editingStaf &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center">
-                    <Edit className="w-5 h-5 text-blue-300" />
-                  </div>
-                  <div>
-                    <h4 className="text-base font-bold">
-                      Edit Akun Guru Piket
-                    </h4>
-                  </div>
+      <Sheet
+        isOpen={Boolean(editingStaf)}
+        onClose={() => setEditingStaf(null)}
+        labelledBy="edit-guru-piket-title"
+        size="md"
+      >
+        <SheetHeader
+          id="edit-guru-piket-title"
+          title="Edit Akun Guru Piket"
+          subtitle={editingStaf?.nama}
+          onClose={() => setEditingStaf(null)}
+        />
+        <form onSubmit={handleUpdateStaf}>
+          <SheetBody>
+            <div className="space-y-3 pt-1">
+              {editError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{editError}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEditingStaf(null)}
-                  className="p-1.5 text-white/70 hover:text-white hover:bg-white/10 rounded-xl cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Nama Lengkap Beserta Gelar
+                </label>
+                <input
+                  type="text"
+                  value={editNama}
+                  onChange={(e) => setEditNama(e.target.value)}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  required
+                />
               </div>
 
-              <form onSubmit={handleUpdateStaf} className="p-5 space-y-4">
-                {editError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{editError}</span>
-                  </div>
-                )}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Username / NIP Akun
+                </label>
+                <input
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
+                  required
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nama Lengkap Beserta Gelar
-                  </label>
-                  <input
-                    type="text"
-                    value={editNama}
-                    onChange={(e) => setEditNama(e.target.value)}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Username / NIP Akun
-                  </label>
-                  <input
-                    type="text"
-                    value={editUsername}
-                    onChange={(e) => setEditUsername(e.target.value)}
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500 font-mono"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi Baru (Kosongkan jika tidak diubah)
-                  </label>
-                  <input
-                    type="password"
-                    value={editPassword}
-                    onChange={(e) => setEditPassword(e.target.value)}
-                    placeholder="Kosongkan jika tetap"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div className="pt-2 flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingStaf(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={editLoading}
-                    className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {editLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Menyimpan...</span>
-                      </>
-                    ) : (
-                      <span>Simpan Perubahan</span>
-                    )}
-                  </button>
-                </div>
-              </form>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Kata Sandi Baru (Kosongkan jika tidak diubah)
+                </label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Kosongkan jika tetap"
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
-          </div>,
-          document.body,
-        )}
+          </SheetBody>
+          <SheetFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEditingStaf(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={editLoading}
+            >
+              Simpan Perubahan
+            </Button>
+          </SheetFooter>
+        </form>
+      </Sheet>
 
       {/* ================= MODAL RESET KATA SANDI ================= */}
-      {resetStaf &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              <div className="p-4 border-b border-slate-100 flex items-center gap-3 bg-amber-50">
-                <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Reset Kata Sandi Akun
-                  </h4>
-                  <p className="text-xs text-slate-500">{resetStaf.nama}</p>
-                </div>
+      <Sheet
+        isOpen={Boolean(resetStaf)}
+        onClose={() => setResetStaf(null)}
+        labelledBy="reset-password-title"
+        size="sm"
+      >
+        <SheetHeader
+          id="reset-password-title"
+          title="Reset Kata Sandi Akun"
+          subtitle={resetStaf?.nama}
+          onClose={() => setResetStaf(null)}
+        />
+        <form onSubmit={handleResetPassword}>
+          <SheetBody>
+            <div className="space-y-3 pt-1">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Atur ulang kata sandi akun guru piket ini agar guru dapat login kembali jika lupa kata sandinya.
+              </p>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Kata Sandi Baru
+                </label>
+                <input
+                  type="text"
+                  value={resetNewPass}
+                  onChange={(e) => setResetNewPass(e.target.value)}
+                  placeholder="Masukkan kata sandi baru"
+                  className="w-full text-xs sm:text-sm px-3.5 py-2.5 min-h-11 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
+                  required
+                />
               </div>
-
-              <form onSubmit={handleResetPassword} className="p-5 space-y-4">
-                <p className="text-xs text-slate-600">
-                  Atur ulang kata sandi akun guru piket ini agar guru dapat
-                  login kembali jika lupa kata sandinya
-                </p>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Kata Sandi Baru
-                  </label>
-                  <input
-                    type="text"
-                    value={resetNewPass}
-                    onChange={(e) => setResetNewPass(e.target.value)}
-                    placeholder="Contoh: piket123"
-                    className="w-full text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-amber-500 font-mono"
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setResetStaf(null)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={resetLoading}
-                    className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {resetLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <span>Reset</span>
-                    )}
-                  </button>
-                </div>
-              </form>
             </div>
-          </div>,
-          document.body,
-        )}
+          </SheetBody>
+          <SheetFooter>
+            <Button
+              variant="outline"
+              onClick={() => setResetStaf(null)}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={resetLoading}
+            >
+              Reset Kata Sandi
+            </Button>
+          </SheetFooter>
+        </form>
+      </Sheet>
 
       {/* ================= MODAL KONFIRMASI RESET TANDA TANGAN ================= */}
-      {resetSignatureStaf &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
-                <PenLine className="w-6 h-6" />
-              </div>
-              <div className="text-center">
-                <h4 className="text-base font-bold text-slate-900">
-                  Reset Tanda Tangan Digital?
-                </h4>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+      <Sheet
+        isOpen={Boolean(resetSignatureStaf)}
+        onClose={() => setResetSignatureStaf(null)}
+        labelledBy="reset-signature-title"
+        size="sm"
+      >
+        {resetSignatureStaf && (
+          <>
+            <SheetHeader
+              id="reset-signature-title"
+              title="Reset Tanda Tangan Digital?"
+              subtitle={resetSignatureStaf.nama}
+              onClose={() => setResetSignatureStaf(null)}
+            />
+            <SheetBody>
+              <div className="space-y-3 pt-1">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
+                  <PenLine className="w-6 h-6" />
+                </div>
+                <p className="text-xs text-slate-600 text-center leading-relaxed">
                   Tanda tangan digital untuk{" "}
-                  <strong>{resetSignatureStaf.nama}</strong> (
-                  {resetSignatureStaf.username}) akan dihapus dari sistem. Guru
-                  ini dapat menggambar tanda tangan baru saat login berikutnya.
+                  <strong className="text-slate-900">{resetSignatureStaf.nama}</strong> (
+                  NIP: {resetSignatureStaf.username}) akan dihapus dari sistem. Guru
+                  dapat menggambar tanda tangan baru saat login berikutnya.
                 </p>
               </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setResetSignatureStaf(null)}
-                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmResetSignature}
-                  disabled={resetSigLoading}
-                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                >
-                  {resetSigLoading ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Mereset...</span>
-                    </>
-                  ) : (
-                    <span>Ya, Reset TTD</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
+            </SheetBody>
+            <SheetFooter>
+              <Button
+                variant="outline"
+                disabled={resetSigLoading}
+                onClick={() => setResetSignatureStaf(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="primary"
+                loading={resetSigLoading}
+                onClick={handleConfirmResetSignature}
+              >
+                Ya, Reset TTD
+              </Button>
+            </SheetFooter>
+          </>
         )}
+      </Sheet>
 
       {/* ================= MODAL KONFIRMASI HAPUS ================= */}
-      {deletingStaf &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-                <Trash2 className="w-6 h-6" />
-              </div>
-              <div className="text-center">
-                <h4 className="text-base font-bold text-slate-900">
-                  Hapus Akun Guru Piket?
-                </h4>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+      <Sheet
+        isOpen={Boolean(deletingStaf)}
+        onClose={() => setDeletingStaf(null)}
+        labelledBy="delete-staf-title"
+        size="sm"
+      >
+        {deletingStaf && (
+          <>
+            <SheetHeader
+              id="delete-staf-title"
+              title="Hapus Akun Guru Piket?"
+              subtitle={deletingStaf.nama}
+              onClose={() => setDeletingStaf(null)}
+            />
+            <SheetBody>
+              <div className="space-y-3 pt-1">
+                <p className="text-xs text-slate-600 leading-relaxed">
                   Apakah Anda yakin ingin menghapus akun{" "}
-                  <strong className="text-slate-800">
-                    {deletingStaf.nama}
-                  </strong>{" "}
-                  (NIP:{" "}
-                  <span className="font-mono font-semibold">
-                    {deletingStaf.username}
-                  </span>
-                  )? Seluruh riwayat operasional piket tetap tercatat, namun
-                  guru ini tidak akan dapat login kembali.
+                  <strong className="text-slate-800">{deletingStaf.nama}</strong>{" "}
+                  (NIP: <span className="font-mono font-semibold">{deletingStaf.username}</span>)?
+                  Seluruh riwayat operasional piket tetap tercatat, namun guru ini tidak akan dapat login kembali.
                 </p>
+                <div className="p-3 bg-rose-50/70 border border-rose-200/60 rounded-xl text-[11px] text-rose-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Tindakan ini permanen dan tidak dapat dibatalkan.</span>
+                </div>
               </div>
-
-              <div className="p-3 bg-rose-50/70 border border-rose-200/60 rounded-xl text-[11px] text-rose-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Tindakan ini permanen dan tidak dapat dibatalkan.</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setDeletingStaf(null)}
-                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteStaf}
-                  disabled={deleteLoading}
-                  className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                >
-                  {deleteLoading ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Menghapus...</span>
-                    </>
-                  ) : (
-                    <span>Ya, Hapus Akun</span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
+            </SheetBody>
+            <SheetFooter>
+              <Button
+                variant="outline"
+                disabled={deleteLoading}
+                onClick={() => setDeletingStaf(null)}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteLoading}
+                onClick={handleDeleteStaf}
+              >
+                Ya, Hapus Akun
+              </Button>
+            </SheetFooter>
+          </>
         )}
+      </Sheet>
     </div>
   );
 }

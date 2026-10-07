@@ -1,91 +1,78 @@
-import React, { useState, useMemo } from "react";
-import {
-  Inbox,
-  Clock,
-  CheckCircle2,
-  X,
-  Eye,
-  MapPin,
-  Loader2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-
-export interface PengajuanIzinItem {
-  id: number;
-  nama: string;
-  nis: string;
-  kelas: string;
-  jenis: string;
-  tanggal_mulai: string;
-  tanggal_selesai: string;
-  alasan: string;
-  catatan_guru?: string;
-  status_pengajuan: string;
-  surat_bukti?: string;
-  latitude?: number | string;
-  longitude?: number | string;
-  maps_url?: string;
-  created_at?: string;
-  [key: string]: unknown;
-}
+import React, { useMemo } from "react";
+import { Inbox, Eye, MapPin } from "lucide-react";
+import { useTableSort } from "../../../hooks/useTableSort";
+import { useNewIds } from "../../../hooks/useNewIds";
+import Button from "../../ui/Button";
+import SortableTh from "../../ui/SortableTh";
+import type { AksiVerifikasi } from "../../../services/izinService";
+import type { PengajuanIzinItem } from "../../../types";
 
 interface VerifikasiIzinTabProps {
   filteredPengajuan?: PengajuanIzinItem[];
   paginatedPengajuan?: PengajuanIzinItem[];
+  startIndex?: number;
+  endIndex?: number;
   statusIzinFilter: string;
   verifyingId?: number | null;
-  onVerifikasi: (id: number, status: string) => void;
+  onVerifikasi: (id: number, status: AksiVerifikasi) => void;
   onOpenRejectModal: (item: PengajuanIzinItem) => void;
   onOpenSuratModal: (item: PengajuanIzinItem) => void;
 }
 
+const STATUS = {
+  Menunggu: {
+    pill: "bg-amber-50 text-amber-800 border-amber-200",
+    bar: "border-l-amber-400",
+  },
+  Disetujui: {
+    pill: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    bar: "border-l-emerald-400",
+  },
+  Ditolak: {
+    pill: "bg-rose-50 text-rose-800 border-rose-200",
+    bar: "border-l-rose-400",
+  },
+} as const;
+
 export default function VerifikasiIzinTab({
   filteredPengajuan = [],
   paginatedPengajuan = [],
+  startIndex,
+  endIndex,
   statusIzinFilter,
   verifyingId,
   onVerifikasi,
   onOpenRejectModal,
   onOpenSuratModal,
 }: VerifikasiIzinTabProps) {
-  const [sortKey, setSortKey] = useState<string>("created_at");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection(
-        key === "created_at" || key === "tanggal_mulai" ? "desc" : "asc",
-      );
-    }
-  };
+  const { sorted, sortKey, sortDir, onSort } = useTableSort(
+    filteredPengajuan,
+    "created_at",
+    "desc",
+    ["created_at", "tanggal_mulai"],
+  );
 
   const displayList = useMemo(() => {
-    const list = [...paginatedPengajuan];
-    return list.sort((a, b) => {
-      const valA = (a as Record<string, unknown>)[sortKey] ?? "";
-      const valB = (b as Record<string, unknown>)[sortKey] ?? "";
-      if (typeof valA === "number" && typeof valB === "number") {
-        return sortDirection === "asc" ? valA - valB : valB - valA;
-      }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirection === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
-    });
-  }, [paginatedPengajuan, sortKey, sortDirection]);
+    if (endIndex !== undefined) {
+      return sorted.slice(startIndex ?? 0, endIndex);
+    }
+    return paginatedPengajuan.length > 0 ? paginatedPengajuan : sorted;
+  }, [sorted, startIndex, endIndex, paginatedPengajuan]);
+
+  const ids = useMemo(
+    () => filteredPengajuan.map((p) => p.id),
+    [filteredPengajuan],
+  );
+  const fresh = useNewIds(ids);
+
+  const sortProps = { sortKey, sortDir, onSort };
 
   return (
     <div>
-      {/* 1. Mobile Cards View (< md) */}
-      <div className="md:hidden divide-y divide-slate-100">
+      {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+      <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 md:p-3 lg:hidden">
         {filteredPengajuan.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 p-4">
+          <div className="col-span-2 py-12 text-center text-slate-400 p-4">
             <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
             <p className="font-semibold text-slate-600 text-sm">
               Tidak Ada Pengajuan Izin / Sakit
@@ -98,272 +85,155 @@ export default function VerifikasiIzinTab({
           </div>
         ) : (
           displayList.map((item) => {
+            const tone =
+              STATUS[item.status_pengajuan as keyof typeof STATUS] ??
+              STATUS.Ditolak;
             const isMenunggu = item.status_pengajuan === "Menunggu";
-            const isDisetujui = item.status_pengajuan === "Disetujui";
+            const busy = verifyingId === item.id;
+            const mapsHref =
+              item.latitude && item.longitude
+                ? item.maps_url ||
+                  `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
+                : null;
+
             return (
-              <div
+              <article
                 key={item.id}
-                className="p-4 hover:bg-slate-50/60 transition-colors space-y-3"
+                className={`space-y-3 border-l-4 bg-white p-4 md:rounded-2xl md:border md:border-l-4 md:border-slate-200 transition-colors ${
+                  tone.bar
+                } ${fresh.has(item.id) ? "animate-flash" : ""}`}
               >
-                {/* Card Header */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-bold text-slate-900 text-sm truncate">
+                    <p className="truncate text-sm font-bold text-slate-900">
                       {item.nama}
                     </p>
-                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        NIS {item.nis}
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-[11px] font-bold text-slate-700">
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      <span className="font-mono">{item.nis}</span> &middot;{" "}
+                      <span className="font-semibold text-slate-700">
                         {item.kelas}
                       </span>
-                    </div>
+                    </p>
                   </div>
-
-                  {/* Status Badge */}
                   <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0 ${
-                      isMenunggu
-                        ? "bg-amber-50 text-amber-800 border-amber-200"
-                        : isDisetujui
-                          ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                          : "bg-rose-50 text-rose-800 border-rose-200"
-                    }`}
+                    className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-bold ${tone.pill}`}
                   >
-                    {isMenunggu && (
-                      <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
-                    )}
-                    {isDisetujui && (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    )}
-                    {!isMenunggu && !isDisetujui && (
-                      <X className="w-3 h-3 text-rose-600" />
-                    )}
-                    <span>{item.status_pengajuan}</span>
+                    {item.status_pengajuan}
                   </span>
                 </div>
 
-                {/* Details Box */}
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/60 text-xs space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Jenis</span>
-                    <span
-                      className={`font-bold px-2 py-0.2 rounded-md ${
-                        item.jenis === "Sakit"
-                          ? "bg-rose-100 text-rose-700"
-                          : "bg-amber-100 text-amber-800"
-                      }`}
-                    >
-                      {item.jenis === "Sakit" ? "Sakit" : "Izin"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">Periode</span>
-                    <span className="font-semibold text-slate-800">
-                      {item.tanggal_mulai} s/d {item.tanggal_selesai}
-                    </span>
-                  </div>
-                  <div className="pt-1 border-t border-slate-200/40">
-                    <span className="text-slate-500 font-medium block mb-0.5">
-                      Alasan
-                    </span>
-                    <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs ">
-                      "{item.alasan}"
-                    </p>
-                  </div>
-                  {item.catatan_guru && (
-                    <div className="pt-1 border-t border-slate-200/40 text-slate-600 text-xs">
-                      <span className="font-bold text-slate-700">
-                        Catatan Guru
-                      </span>{" "}
-                      {item.catatan_guru}
-                    </div>
-                  )}
-                  {item.latitude && item.longitude && (
-                    <div className="pt-1.5 border-t border-slate-200/40 flex items-center justify-between">
-                      <span className="text-slate-500 font-medium flex items-center gap-1">
-                        <a
-                          href={
-                            item.maps_url ||
-                            `https://www.google.com/maps?q=${item.latitude},${item.longitude}`
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md border border-blue-200/70 transition-colors"
-                        >
-                          <MapPin className="w-3 h-3 text-blue-600" />
-                          <span> Maps</span>
-                        </a>
-                      </span>
-                      {/* Surat & Actions */}
-                      <div className="flex items-center justify-between gap-2 pt-1">
-                        {item.surat_bukti ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenSuratModal(item)}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200/70 transition-colors cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Lihat Bukti</span>
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 italic">
-                            Tanpa lampiran foto
-                          </span>
-                        )}
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+                  <dt className="text-slate-500">Jenis</dt>
+                  <dd className="text-right font-bold text-slate-800">
+                    {item.jenis}
+                  </dd>
+                  <dt className="text-slate-500">Periode</dt>
+                  <dd className="text-right font-semibold text-slate-800">
+                    {item.tanggal_mulai} s/d {item.tanggal_selesai}
+                  </dd>
+                </dl>
 
-                        {isMenunggu && (
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              disabled={verifyingId === item.id}
-                              onClick={() => onVerifikasi(item.id, "Disetujui")}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                            >
-                              {verifyingId === item.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <span>Setujui</span>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={verifyingId === item.id}
-                              onClick={() => onOpenRejectModal(item)}
-                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                            >
-                              <span>Tolak</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                <p className="rounded-xl bg-slate-50 p-3 text-sm italic leading-relaxed text-slate-700 break-words">
+                  "{item.alasan}"
+                </p>
+                {item.catatan_guru && (
+                  <p className="text-xs text-slate-600">
+                    <span className="font-bold text-slate-700">
+                      Catatan guru:
+                    </span>{" "}
+                    {item.catatan_guru}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {item.surat_bukti ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={<Eye className="h-3.5 w-3.5" />}
+                      onClick={() => onOpenSuratModal(item)}
+                    >
+                      Lihat bukti
+                    </Button>
+                  ) : (
+                    <span className="text-xs italic text-slate-400">
+                      Tanpa lampiran foto
+                    </span>
+                  )}
+                  {mapsHref && (
+                    <a
+                      href={mapsHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="press inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100 lg:min-h-9"
+                    >
+                      <MapPin className="h-3.5 w-3.5" /> Lokasi
+                    </a>
                   )}
                 </div>
-              </div>
+
+                {isMenunggu && (
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                    <Button
+                      variant="dangerSoft"
+                      disabled={busy}
+                      onClick={() => onOpenRejectModal(item)}
+                    >
+                      Tolak
+                    </Button>
+                    <Button
+                      variant="success"
+                      loading={busy}
+                      onClick={() => onVerifikasi(item.id, "Disetujui")}
+                    >
+                      Setujui
+                    </Button>
+                  </div>
+                )}
+              </article>
             );
           })
         )}
       </div>
 
-      {/* 2. Desktop Table View (>= md) */}
-      <div className="hidden md:block overflow-x-auto">
+      {/* 2. Desktop Table View (>= lg) */}
+      <div className="hidden max-h-[calc(100dvh-18rem)] overflow-auto lg:block">
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[920px]">
-          <thead>
-            <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th
-                onClick={() => handleSort("created_at")}
-                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Waktu Pengajuan"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Waktu Pengajuan</span>
-                  {sortKey === "created_at" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+          <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226,232,240)]">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <SortableTh
+                label="Waktu Pengajuan"
+                field="created_at"
+                {...sortProps}
+              />
+              <SortableTh label="Siswa" field="nama" {...sortProps} />
+              <SortableTh
+                label="Jenis"
+                field="jenis"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Periode"
+                field="tanggal_mulai"
+                {...sortProps}
+              />
+              <SortableTh label="Alasan" field="alasan" {...sortProps} />
+              <th className="px-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Bukti
               </th>
-              <th
-                onClick={() => handleSort("nama")}
-                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Siswa"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Siswa</span>
-                  {sortKey === "nama" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+              <th className="px-4 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Lokasi GPS
               </th>
-              <th
-                onClick={() => handleSort("jenis")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Jenis"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Jenis</span>
-                  {sortKey === "jenis" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+              <SortableTh
+                label="Status"
+                field="status_pengajuan"
+                align="center"
+                {...sortProps}
+              />
+              <th className="px-5 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                Verifikasi
               </th>
-              <th
-                onClick={() => handleSort("tanggal_mulai")}
-                className="py-3.5 px-5 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Periode"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Periode</span>
-                  {sortKey === "tanggal_mulai" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("alasan")}
-                className="py-3.5 px-5 min-w-[200px] max-w-[300px] cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Alasan"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Alasan</span>
-                  {sortKey === "alasan" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th className="py-3.5 px-4 text-center">Bukti</th>
-              <th className="py-3.5 px-4 text-center">Lokasi GPS</th>
-              <th
-                onClick={() => handleSort("status_pengajuan")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Status"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Status</span>
-                  {sortKey === "status_pengajuan" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th className="py-3.5 px-5 text-right">Verifikasi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -387,24 +257,27 @@ export default function VerifikasiIzinTab({
               displayList.map((item) => {
                 const isMenunggu = item.status_pengajuan === "Menunggu";
                 const isDisetujui = item.status_pengajuan === "Disetujui";
+                const busy = verifyingId === item.id;
                 return (
                   <tr
                     key={item.id}
-                    className="hover:bg-slate-50/70 transition-colors"
+                    className={`hover:bg-slate-50/70 transition-colors ${
+                      fresh.has(item.id) ? "animate-flash" : ""
+                    }`}
                   >
-                    <td className="py-4 px-5 text-slate-500 font-medium whitespace-nowrap text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <span>{item.created_at}</span>
-                      </div>
+                    <td className="py-4 px-4 text-slate-500 font-medium whitespace-nowrap text-xs">
+                      {item.created_at || "-"}
                     </td>
-                    <td className="py-4 px-5">
-                      <div>
-                        <p className="font-bold text-slate-900">{item.nama}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-xs font-semibold text-slate-700">
-                            {item.kelas}
-                          </span>
-                        </div>
+                    <td className="py-4 px-4">
+                      <p className="font-bold text-slate-900">{item.nama}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs font-semibold text-slate-700">
+                          {item.kelas}
+                        </span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-xs font-mono text-slate-400">
+                          {item.nis}
+                        </span>
                       </div>
                     </td>
                     <td className="py-4 px-4 text-center whitespace-nowrap">
@@ -415,21 +288,21 @@ export default function VerifikasiIzinTab({
                             : "bg-amber-50 text-amber-800 border-amber-200"
                         }`}
                       >
-                        {item.jenis === "Sakit" ? "Sakit" : "Izin"}
+                        {item.jenis}
                       </span>
                     </td>
-                    <td className="py-4 px-5 text-xs text-slate-700 whitespace-nowrap font-medium">
+                    <td className="py-4 px-4 text-xs text-slate-700 whitespace-nowrap font-medium">
                       <div>{item.tanggal_mulai}</div>
                       <div className="text-[11px] text-slate-400">
                         s/d {item.tanggal_selesai}
                       </div>
                     </td>
-                    <td className="py-4 px-5 text-xs text-slate-700 min-w-[200px] max-w-[300px]">
+                    <td className="py-4 px-4 text-xs text-slate-700 min-w-[200px] max-w-[300px]">
                       <div>"{item.alasan}"</div>
                       {item.catatan_guru && (
                         <div className="text-[11px] text-slate-600 mt-1.5 flex items-start gap-1 bg-amber-50/70 border border-amber-200/60 p-1.5 rounded-lg">
                           <span className="font-bold text-amber-900 shrink-0">
-                            Catatan
+                            Catatan:
                           </span>
                           <span className="break-words">
                             {item.catatan_guru}
@@ -445,7 +318,7 @@ export default function VerifikasiIzinTab({
                           className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Lihat Foto</span>
+                          <span>Lihat Bukti</span>
                         </button>
                       ) : (
                         <span className="text-[11px] text-slate-400 italic">
@@ -490,30 +363,26 @@ export default function VerifikasiIzinTab({
                     <td className="py-4 px-5 text-right whitespace-nowrap">
                       {isMenunggu ? (
                         <div className="inline-flex items-center gap-2">
-                          <button
-                            type="button"
-                            disabled={verifyingId === item.id}
-                            onClick={() => onVerifikasi(item.id, "Disetujui")}
-                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                          >
-                            {verifyingId === item.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <span>Setujui</span>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={verifyingId === item.id}
+                          <Button
+                            size="sm"
+                            variant="dangerSoft"
+                            disabled={busy}
                             onClick={() => onOpenRejectModal(item)}
-                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50 cursor-pointer"
                           >
-                            <span>Tolak</span>
-                          </button>
+                            Tolak
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="success"
+                            loading={busy}
+                            onClick={() => onVerifikasi(item.id, "Disetujui")}
+                          >
+                            Setujui
+                          </Button>
                         </div>
                       ) : (
                         <span className="text-xs text-slate-400 font-medium">
-                          Selesai diverifikasi
+                          Selesai
                         </span>
                       )}
                     </td>

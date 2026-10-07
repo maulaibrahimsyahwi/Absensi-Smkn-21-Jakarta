@@ -23,6 +23,7 @@ import ProfileModal from "../components/ProfileModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
 import SignaturePadModal from "../components/SignaturePadModal";
 import ToastNotification, { ToastNotificationProps } from "../components/common/ToastNotification";
+import ConfirmSheet from "../components/ui/ConfirmSheet";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { liburService } from "../services/liburService";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
@@ -76,6 +77,8 @@ export default function PortalPiket() {
   const [modeDarurat, setModeDarurat] = useState<boolean>(false);
   const [toleransiMenit, setToleransiMenit] = useState<number>(30);
   const [togglingDarurat, setTogglingDarurat] = useState<boolean>(false);
+  const [showDaruratConfirm, setShowDaruratConfirm] = useState<boolean>(false);
+  const [selectedToleransi, setSelectedToleransi] = useState<number>(30);
 
   // State Pelanggaran Menunggu Konfirmasi (Lapor Mandiri Siswa)
   const [pendingPelanggaran, setPendingPelanggaran] = useState<any[]>([]);
@@ -185,31 +188,35 @@ export default function PortalPiket() {
     }
   };
 
-  const handleToggleModeDarurat = async () => {
-    const nextStatus = !modeDarurat;
-    const confirmMsg = nextStatus
-      ? `Aktifkan Mode Darurat Jaringan? Siswa yang presensi akan diberikan toleransi keterlambatan tambahan ${toleransiMenit} menit.`
-      : "Nonaktifkan Mode Darurat Jaringan dan kembali ke jadwal presensi normal?";
-    if (!window.confirm(confirmMsg)) return;
+  const handleToggleModeDarurat = () => {
+    setSelectedToleransi(toleransiMenit || 30);
+    setShowDaruratConfirm(true);
+  };
 
+  const executeToggleModeDarurat = async () => {
+    const nextStatus = !modeDarurat;
     setTogglingDarurat(true);
     try {
       const res = await api.post("/piket/mode_darurat", {
         status: nextStatus,
-        toleransi_menit: toleransiMenit,
+        toleransi_menit: nextStatus ? selectedToleransi : toleransiMenit,
         keterangan: nextStatus
-          ? "Diaktifkan oleh Guru Piket karena kendala jaringan di gerbang sekolah"
+          ? `Diaktifkan oleh ${user?.nama || "Guru Piket"} (+${selectedToleransi} menit) karena kendala jaringan di gerbang`
           : "",
       });
       if (res.data?.success) {
         setModeDarurat(nextStatus);
+        if (nextStatus) {
+          setToleransiMenit(selectedToleransi);
+        }
+        setShowDaruratConfirm(false);
         setNotification({
           type: "success",
           message:
             res.data.message ||
             (nextStatus
-              ? "Mode Darurat Jaringan Aktif"
-              : "Mode Darurat Dinonaktifkan"),
+              ? `Mode Darurat Jaringan Aktif (+${selectedToleransi} Menit Toleransi)`
+              : "Mode Darurat Dinonaktifkan, kembali normal"),
         });
       } else {
         setNotification({
@@ -514,46 +521,80 @@ export default function PortalPiket() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5">
           {/* Total Izin Piket */}
-          <div className="p-3.5 sm:p-5 rounded-2xl bg-blue-50/70 border border-blue-200/60">
-            <p className="text-[10px] sm:text-xs font-bold text-blue-800 uppercase tracking-wider mb-1 truncate">
-              Surat Izin
-            </p>
+          <Link
+            to="/piket"
+            className="p-3.5 sm:p-5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] sm:text-xs font-bold text-blue-800 uppercase tracking-wider truncate">
+                Surat Izin
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <div className="flex items-baseline gap-2">
               <p className="text-xl sm:text-2xl md:text-3xl font-black text-blue-700">
                 {summaryData.total_izin_hari_ini}
               </p>
+              <span className="text-[11px] font-semibold text-blue-600">Diterbitkan</span>
             </div>
-          </div>
+          </Link>
 
           {/* Siswa Terlambat */}
-          <div className="p-3.5 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200/60">
-            <p className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider mb-1 truncate">
-              Siswa Terlambat
-            </p>
-            <p className="text-xl sm:text-2xl md:text-3xl font-black text-amber-700">
-              {summaryData.total_terlambat_hari_ini}
-            </p>
-          </div>
+          <Link
+            to="/dashboard?tab=riwayat_harian"
+            className="p-3.5 sm:p-5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] sm:text-xs font-bold text-amber-800 uppercase tracking-wider truncate">
+                Siswa Terlambat
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl sm:text-2xl md:text-3xl font-black text-amber-700">
+                {summaryData.total_terlambat_hari_ini}
+              </p>
+              <span className="text-[11px] font-semibold text-amber-600">Siswa</span>
+            </div>
+          </Link>
 
           {/* Pengajuan Izin Menunggu */}
-          <div className="p-3.5 sm:p-5 rounded-2xl bg-purple-50/70 border border-purple-200/60">
-            <p className="text-[10px] sm:text-xs font-bold text-purple-800 uppercase tracking-wider mb-1 truncate">
-              Izin Menunggu
-            </p>
-            <p className="text-xl sm:text-2xl md:text-3xl font-black text-purple-700">
-              {summaryData.pengajuan_izin_menunggu}
-            </p>
-          </div>
+          <Link
+            to="/dashboard?tab=verifikasi_izin"
+            className="p-3.5 sm:p-5 rounded-2xl bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] sm:text-xs font-bold text-purple-800 uppercase tracking-wider truncate">
+                Izin Menunggu
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl sm:text-2xl md:text-3xl font-black text-purple-700">
+                {summaryData.pengajuan_izin_menunggu}
+              </p>
+              <span className="text-[11px] font-semibold text-purple-600">Perlu Verifikasi</span>
+            </div>
+          </Link>
 
           {/* Pelanggaran Hari Ini */}
-          <div className="p-3.5 sm:p-5 rounded-2xl bg-rose-50/70 border border-rose-200/60">
-            <p className="text-[10px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider mb-1 truncate">
-              Pelanggaran Tercatat
-            </p>
-            <p className="text-xl sm:text-2xl md:text-3xl font-black text-rose-700">
-              {summaryData.pelanggaran_hari_ini}
-            </p>
-          </div>
+          <Link
+            to="/dashboard?tab=pelanggaran_siswa"
+            className="p-3.5 sm:p-5 rounded-2xl bg-rose-50/70 hover:bg-rose-100/70 border border-rose-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[10px] sm:text-xs font-bold text-rose-800 uppercase tracking-wider truncate">
+                Pelanggaran Tercatat
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-rose-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+            <div className="flex items-baseline gap-2">
+              <p className="text-xl sm:text-2xl md:text-3xl font-black text-rose-700">
+                {summaryData.pelanggaran_hari_ini}
+              </p>
+              <span className="text-[11px] font-semibold text-rose-600">Kasus</span>
+            </div>
+          </Link>
         </div>
       </div>
 
@@ -640,77 +681,86 @@ export default function PortalPiket() {
         </Link>
       </div>
 
-      {/* Verifikasi Pelanggaran Siswa Lapor Mandiri */}
+      {/* Verifikasi Pelanggaran & Prestasi Siswa Lapor Mandiri */}
       {pendingPelanggaran.length > 0 && (
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8  shadow-sm space-y-4">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-sm space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2.5">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                    Konfirmasi Pelanggaran Siswa
+                    Konfirmasi Catatan Kedisiplinan & Prestasi Siswa
                   </h2>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
                     {pendingPelanggaran.length} Menunggu
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Laporan pelanggaran yang dicatat mandiri oleh siswa
+                  Laporan pelanggaran dan prestasi yang dicatat mandiri oleh siswa
                 </p>
               </div>
             </div>
           </div>
 
           <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
-            {pendingPelanggaran.map((item) => (
-              <div
-                key={item.id}
-                className="p-4 bg-slate-50/50 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold text-sm text-slate-900">
-                      {item.nama_siswa}
-                    </span>
-                    <span className="text-xs text-slate-500">{item.kelas}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
-                      {item.poin} Poin
-                    </span>
-                  </div>
-                  <p className="text-xs font-semibold text-slate-700 mt-1">
-                    {item.jenis_pelanggaran}
-                  </p>
-                  {item.keterangan && (
-                    <p className="text-[11px] text-slate-500 italic mt-0.5">
-                      &ldquo;{item.keterangan}&rdquo;
+            {pendingPelanggaran.map((item) => {
+              const isPrestasi = item.kategori === "Prestasi";
+              return (
+                <div
+                  key={item.id}
+                  className="p-4 bg-slate-50/50 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-slate-900">
+                        {item.nama_siswa}
+                      </span>
+                      <span className="text-xs text-slate-500">{item.kelas}</span>
+                      {isPrestasi ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Prestasi (+{item.poin} Poin)
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                          {item.kategori || "Pelanggaran"} (-{item.poin} Poin)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold text-slate-700 mt-1">
+                      {item.jenis_pelanggaran}
                     </p>
-                  )}
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    {item.tanggal_waktu_formatted}
-                  </p>
+                    {item.keterangan && (
+                      <p className="text-[11px] text-slate-500 italic mt-0.5">
+                        &ldquo;{item.keterangan}&rdquo;
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {item.tanggal_waktu_formatted}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleKonfirmasiPelanggaran(item.id, "tolak")
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
+                    >
+                      <span>Tolak</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleKonfirmasiPelanggaran(item.id, "setujui")
+                      }
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                    >
+                      <span>Setujui</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleKonfirmasiPelanggaran(item.id, "tolak")
-                    }
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
-                  >
-                    <span>Tolak</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleKonfirmasiPelanggaran(item.id, "setujui")
-                    }
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                  >
-                    <span>Setujui</span>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -890,6 +940,67 @@ export default function PortalPiket() {
         onClose={() => setPreviewSuratData(null)}
         suratData={previewSuratData}
       />
+
+      {/* Modal Konfirmasi Mode Darurat Jaringan */}
+      <ConfirmSheet
+        isOpen={showDaruratConfirm}
+        onClose={() => setShowDaruratConfirm(false)}
+        onConfirm={executeToggleModeDarurat}
+        loading={togglingDarurat}
+        title={
+          modeDarurat
+            ? "Nonaktifkan Mode Darurat?"
+            : "Aktifkan Mode Darurat Jaringan?"
+        }
+        subtitle={
+          modeDarurat
+            ? "Jadwal dan toleransi presensi akan kembali normal."
+            : "Beri kompensasi waktu toleransi keterlambatan presensi siswa."
+        }
+        confirmLabel={
+          modeDarurat
+            ? "Ya, Kembalikan Normal"
+            : `Aktifkan (+${selectedToleransi} Menit)`
+        }
+        cancelLabel="Batal"
+        danger={modeDarurat}
+      >
+        {modeDarurat ? (
+          <p className="text-xs sm:text-sm text-slate-600">
+            Apakah Anda yakin ingin menonaktifkan Mode Darurat Jaringan? Jam masuk
+            dan aturan keterlambatan presensi gerbang sekolah akan diberlakukan normal
+            kembali sesuai jadwal operasional sekolah.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs sm:text-sm text-slate-600">
+              Gunakan mode ini ketika koneksi internet, WiFi gerbang, atau server
+              mengalami kendala. Pilih durasi toleransi keterlambatan tambahan bagi
+              siswa yang melakukan presensi:
+            </p>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              {[15, 30, 45].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setSelectedToleransi(m)}
+                  className={`py-2 px-3 rounded-xl border text-center transition-all cursor-pointer font-bold text-xs sm:text-sm ${
+                    selectedToleransi === m
+                      ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                  }`}
+                >
+                  +{m} Menit
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-relaxed">
+              Siswa yang hadir dalam rentang waktu toleransi tambahan ini tidak akan
+              tercatat terlambat ataupun terkena pengurangan poin kedisiplinan.
+            </p>
+          </div>
+        )}
+      </ConfirmSheet>
     </div>
   );
 }

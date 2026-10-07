@@ -1,4 +1,4 @@
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from flask import Blueprint, request, jsonify
 from sqlalchemy import extract
 from sqlalchemy.orm import joinedload
@@ -199,8 +199,9 @@ def get_rekap_siswa_periode():
         if sid in siswa_map:
             siswa_map[sid]["kunjungan_perpus"] += count_val
 
-    # 4. Hitung Hari Sekolah Efektif untuk Mengkalkulasi Alpa Otomatis
-    from utils.helpers import is_school_day
+    # 4. Hitung Hari Sekolah Efektif untuk Mengkalkulasi Alpa Otomatis (Batch In-Memory Optimizer)
+    from models import HariLibur
+    from utils.national_holidays import get_national_holiday_on_date
     import calendar
 
     now = datetime.now()
@@ -209,26 +210,68 @@ def get_rekap_siswa_periode():
 
     if mode == 'bulan':
         _, num_days = calendar.monthrange(tahun, bulan)
-        # Jika bulan berjalan, hitung sampai hari ini
-        max_day = min(num_days, today_date.day) if (tahun == today_date.year and bulan == today_date.month) else num_days
+        start_d = date(tahun, bulan, 1)
+        max_d = min(num_days, today_date.day) if (tahun == today_date.year and bulan == today_date.month) else num_days
         if tahun > today_date.year or (tahun == today_date.year and bulan > today_date.month):
-            max_day = 0
-
-        for d in range(1, max_day + 1):
-            check_d = date(tahun, bulan, d)
-            if is_school_day(check_d):
-                effective_school_days += 1
+            max_d = 0
+        end_d = date(tahun, bulan, max_d) if max_d > 0 else start_d
     else:
+        start_d = date(tahun, 1, 1)
         max_month = today_date.month if tahun == today_date.year else 12
         if tahun > today_date.year:
             max_month = 0
+            end_d = start_d
+        else:
+            _, num_days = calendar.monthrange(tahun, max_month)
+            max_d = min(num_days, today_date.day) if (tahun == today_date.year and max_month == today_date.month) else num_days
+            end_d = date(tahun, max_month, max_d)
 
+    # 1 Batch Query untuk mengeliminasi ratusan network round-trips ke PostgreSQL Cloud
+    holidays_in_period = HariLibur.query.filter(
+        HariLibur.is_active == True,
+        HariLibur.tanggal_mulai <= end_d,
+        HariLibur.tanggal_selesai >= start_d
+    ).all()
+
+    special_days_set = set()
+    holiday_days_set = set()
+    for h in holidays_in_period:
+        cur_t = h.tanggal_mulai
+        while cur_t <= h.tanggal_selesai:
+            if h.tipe_hari == "masuk_khusus":
+                special_days_set.add(cur_t)
+            elif h.tipe_hari == "libur":
+                holiday_days_set.add(cur_t)
+            cur_t += timedelta(days=1)
+
+    if mode == 'bulan':
+        for d in range(1, max_d + 1):
+            cur_dt = date(tahun, bulan, d)
+            if cur_dt in special_days_set:
+                effective_school_days += 1
+            elif cur_dt in holiday_days_set:
+                continue
+            elif cur_dt.weekday() >= 5:
+                continue
+            elif get_national_holiday_on_date(cur_dt):
+                continue
+            else:
+                effective_school_days += 1
+    else:
         for m in range(1, max_month + 1):
             _, num_days = calendar.monthrange(tahun, m)
-            max_d = min(num_days, today_date.day) if (tahun == today_date.year and m == today_date.month) else num_days
-            for d in range(1, max_d + 1):
-                check_d = date(tahun, m, d)
-                if is_school_day(check_d):
+            m_max_d = min(num_days, today_date.day) if (tahun == today_date.year and m == today_date.month) else num_days
+            for d in range(1, m_max_d + 1):
+                cur_dt = date(tahun, m, d)
+                if cur_dt in special_days_set:
+                    effective_school_days += 1
+                elif cur_dt in holiday_days_set:
+                    continue
+                elif cur_dt.weekday() >= 5:
+                    continue
+                elif get_national_holiday_on_date(cur_dt):
+                    continue
+                else:
                     effective_school_days += 1
 
     # Kalkulasi Alpa otomatis untuk setiap siswa aktif:

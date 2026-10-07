@@ -99,7 +99,6 @@ def parse_date_flexible(val):
     return None
 
 @libur_bp.route('/api/hari_libur', methods=['GET'])
-@token_required
 def get_hari_libur_list():
     """
     Mengambil daftar seluruh jadwal libur dan hari masuk khusus.
@@ -131,7 +130,21 @@ def get_hari_libur_list():
         db_list = [r.to_dict() for r in db_records]
 
         # Ambil tanggal merah nasional bawaan untuk tahun terpilih
-        builtin_holidays = get_national_holidays_for_year(tahun_int)
+        builtin_holidays = list(get_national_holidays_for_year(tahun_int) or [])
+
+        # Sertakan tanggal merah nasional batas akhir tahun sebelumnya (Desember)
+        # dan awal tahun berikutnya (Januari) agar trailing cells di kalender tetap tersinkron
+        try:
+            prev_builtin = get_national_holidays_for_year(tahun_int - 1) or []
+            next_builtin = get_national_holidays_for_year(tahun_int + 1) or []
+            boundary_holidays = [
+                h for h in prev_builtin if str(h.get("tanggal_selesai", "")).startswith(f"{tahun_int - 1}-12")
+            ] + [
+                h for h in next_builtin if str(h.get("tanggal_mulai", "")).startswith(f"{tahun_int + 1}-01")
+            ]
+            builtin_holidays.extend(boundary_holidays)
+        except Exception:
+            pass
 
         # Cek tanggal yang sudah terdaftar di database sekolah agar tidak dobel
         existing_covered_dates = set()

@@ -5,12 +5,12 @@ export interface ModalPreviewSuratEdaranProps {
   isOpen: boolean;
   onClose: () => void;
   suratData: {
-    lampiran_surat?: string;
-    url?: string;
+    lampiran_surat?: string | null;
+    url?: string | null;
     nama?: string;
     judul?: string;
-    nama_file_surat?: string;
-    filename?: string;
+    nama_file_surat?: string | null;
+    filename?: string | null;
     [key: string]: any;
   } | null;
 }

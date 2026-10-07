@@ -1,9 +1,9 @@
 // ====================================================================
 // Service Worker - Sistem Absensi & Presensi SMKN 21 Jakarta
-// Memberikan kemampuan PWA Offline-Aware & Cache Cepat
+// Memberikan kemampuan PWA Offline-Aware, Cache Cepat, & Background Sync
 // ====================================================================
 
-const CACHE_NAME = "smkn21-absensi-cache-v1";
+const CACHE_NAME = "smkn21-absensi-cache-v3";
 
 // Aset statis inti yang dicache saat instalasi service worker
 const CORE_ASSETS = [
@@ -16,17 +16,17 @@ const CORE_ASSETS = [
   "/icon-512.png",
 ];
 
-// 1. Install Event: Pra-cache aset inti
+// 1. Install Event: Pra-cache aset inti (satu aset 404 tidak menggagalkan seluruh SW)
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(CORE_ASSETS))
+      .then((cache) => Promise.all(CORE_ASSETS.map((a) => cache.add(a).catch(() => {}))))
       .then(() => self.skipWaiting()),
   );
 });
 
-// 2. Activate Event: Bersihkan cache versi lama
+// 2. Activate Event: Bersihkan cache versi lama (termasuk unggahan lama di v2)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -65,6 +65,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // JANGAN pernah meng-cache unggahan dinamis pengguna (surat izin, bukti, foto profil di /static/uploads/)
+  if (url.pathname.startsWith("/static/uploads/")) {
+    return;
+  }
+
   // A. Panggilan API Backend (/api/): Network-First
   // Jika offline, kembalikan respons JSON ramah agar aplikasi frontend tidak crash
   if (url.pathname.startsWith("/api/")) {
@@ -89,15 +94,15 @@ self.addEventListener("fetch", (event) => {
   }
 
   // B. Navigasi Halaman HTML (SPA Route Fallback)
-  // Jika siswa membuka halaman (misal: /portal-siswa) saat offline,
-  // sajikan cached index.html shell agar React Router tetap bisa merender halaman
+  // Hanya simpan respons sukses (ok), jangan simpan 404/500 ke cache
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Update cache jika fetch berhasil
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
           return response;
         })
         .catch(() => {
@@ -110,7 +115,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // C. Aset Statis (JS, CSS, Gambar, Font, SVG)
-  // Gunakan Stale-While-Revalidate untuk performa loading 0 detik
+  // Gunakan Stale-While-Revalidate untuk performa loading cepat
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)
@@ -128,11 +133,30 @@ self.addEventListener("fetch", (event) => {
           return networkResponse;
         })
         .catch(() => {
-          // Gagal ambil dari jaringan, andalkan cachedResponse
           return cachedResponse;
         });
 
       return cachedResponse || fetchPromise;
     }),
+  );
+});
+
+// ====================================================================
+// 4. PWA Background Sync: Membangunkan Tab Aplikasi untuk Sinkronisasi
+// ====================================================================
+// Pengiriman payload dilakukan oleh thread utama aplikasi karena token autentikasi
+// tersimpan di sesi aman/localStorage yang tidak dapat diakses secara langsung oleh Service Worker.
+self.addEventListener("sync", (event) => {
+  if (event.tag !== "sync-attendance-queue") return;
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      if (clients.length === 0) {
+        throw new Error("Tidak ada tab aktif untuk sinkronisasi antrean");
+      }
+      clients.forEach((client) => {
+        client.postMessage({ type: "OFFLINE_SYNC_REQUEST" });
+      });
+    })(),
   );
 });

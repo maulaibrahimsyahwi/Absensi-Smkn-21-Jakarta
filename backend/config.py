@@ -14,10 +14,26 @@ load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Konfigurasi Database (Mendukung SQLite lokal & PostgreSQL/MySQL produksi)
 DATABASE_PATH = os.path.join(BASE_DIR, 'absensi.db')
-SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or ('sqlite:///' + DATABASE_PATH)
+_raw_db_url = os.environ.get('DATABASE_URL', '').strip()
+if _raw_db_url.startswith('postgres://'):
+    _raw_db_url = _raw_db_url.replace('postgres://', 'postgresql://', 1)
+
+if _raw_db_url.startswith('postgresql://') and '+pg8000' not in _raw_db_url and '+psycopg' not in _raw_db_url:
+    try:
+        import psycopg2  # noqa: F401
+    except Exception:
+        # Gunakan pg8000 jika psycopg2 DLL diblokir oleh Windows Application Control
+        _raw_db_url = _raw_db_url.replace('postgresql://', 'postgresql+pg8000://', 1)
+
+# Jika menggunakan Supabase Pooler pada port 5432 (Session Mode max 15 klien),
+# alihkan otomatis ke port 6543 (Transaction Mode) agar anti-freeze dan mendukung banyak request konkuren
+if 'pooler.supabase.com:5432' in _raw_db_url:
+    _raw_db_url = _raw_db_url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543')
+
+SQLALCHEMY_DATABASE_URI = _raw_db_url or ('sqlite:///' + DATABASE_PATH)
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-# Konfigurasi Concurrency Engine (Mencegah 'database is locked' saat peak hour)
+# Konfigurasi Concurrency Engine (Mencegah connection exhaustion & dropped sockets)
 if 'sqlite' in SQLALCHEMY_DATABASE_URI:
     SQLALCHEMY_ENGINE_OPTIONS = {
         "connect_args": {
@@ -27,12 +43,13 @@ if 'sqlite' in SQLALCHEMY_DATABASE_URI:
         "pool_pre_ping": True,
     }
 else:
-    # Connection Pool untuk PostgreSQL / MySQL Produksi
+    # Connection Pool untuk PostgreSQL / Supabase PgBouncer (Aman terhadap batas koneksi)
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": 25,
-        "max_overflow": 50,
-        "pool_recycle": 1800,
-        "pool_pre_ping": True,
+        "pool_size": 10,
+        "max_overflow": 10,
+        "pool_recycle": 300,   # Segarkan koneksi idle setiap 5 menit agar tidak di-drop pooler
+        "pool_pre_ping": True,  # Cek keaktifan koneksi sebelum digunakan
+        "pool_timeout": 30,    # Batas toleransi antrean koneksi
     }
 
 

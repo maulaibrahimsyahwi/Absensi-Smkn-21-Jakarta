@@ -1,5 +1,7 @@
-import React from "react";
-import { X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { ExternalLink, ZoomIn, ZoomOut } from "lucide-react";
+import Sheet, { SheetHeader, SheetFooter } from "../../ui/Sheet";
+import Button from "../../ui/Button";
 import { getFileUrl } from "../../../services/api";
 
 export interface SuratLightboxItem {
@@ -20,45 +22,63 @@ export default function SuratLightboxModal({
   item,
   onClose,
 }: SuratLightboxModalProps) {
-  if (!item) return null;
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => setZoomed(false), [item]);
+  const src = item ? getFileUrl(item.surat_bukti) : "";
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">
-              Foto Surat Bukti {item.nama}
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              {item.jenis} • {item.tanggal_mulai} s/d {item.tanggal_selesai}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="p-4 overflow-auto flex items-center justify-center bg-slate-900/5 min-h-[200px] sm:min-h-[300px]">
-          <img
-            src={getFileUrl(item.surat_bukti)}
-            alt="Foto Surat Keterangan"
-            className="max-h-[55vh] sm:max-h-[70vh] object-contain rounded-lg shadow-xs"
+    <Sheet
+      isOpen={Boolean(item)}
+      onClose={onClose}
+      size="xl"
+      tall
+      labelledBy="surat-title"
+    >
+      {item && (
+        <>
+          <SheetHeader
+            id="surat-title"
+            title={`Surat bukti ${item.nama}`}
+            subtitle={`${item.jenis} \u00b7 ${item.tanggal_mulai} s/d ${item.tanggal_selesai}`}
+            onClose={onClose}
           />
-        </div>
-        <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
-          >
-            Tutup
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="min-h-0 flex-1 overflow-auto bg-slate-900/5 p-3 sm:p-4">
+            <img
+              src={src}
+              alt={`Foto surat keterangan ${item.nama}`}
+              onClick={() => setZoomed((z) => !z)}
+              className={`rounded-lg shadow-xs select-none ${
+                zoomed
+                  ? "w-[220%] max-w-none cursor-zoom-out sm:w-[160%]"
+                  : "mx-auto max-h-[65dvh] w-auto max-w-full cursor-zoom-in object-contain"
+              }`}
+            />
+          </div>
+          <SheetFooter>
+            <a
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="press inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+            >
+              <ExternalLink className="h-4 w-4" /> Tab baru
+            </a>
+            <Button
+              variant="primary"
+              icon={
+                zoomed ? (
+                  <ZoomOut className="h-4 w-4" />
+                ) : (
+                  <ZoomIn className="h-4 w-4" />
+                )
+              }
+              onClick={() => setZoomed((z) => !z)}
+            >
+              {zoomed ? "Perkecil" : "Perbesar"}
+            </Button>
+          </SheetFooter>
+        </>
+      )}
+    </Sheet>
   );
 }

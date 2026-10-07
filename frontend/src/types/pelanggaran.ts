@@ -8,24 +8,29 @@ export interface PelanggaranRule {
 export interface PelanggaranRecord {
   id: number;
   siswa_id: number;
-  nama: string;
   nis: string;
+  nama_siswa: string;
+  nama?: string;
   kelas: string;
-  jurusan: string;
-  tanggal: string;
+  jurusan?: string;
+  tanggal_waktu: string;
+  tanggal_waktu_formatted?: string;
+  tanggal?: string;
   kategori: string;
-  pelanggaran: string;
+  jenis_pelanggaran: string;
+  pelanggaran?: string;
   poin: number;
-  tindakan?: string;
+  nama_penanggung_jawab?: string;
   petugas?: string;
+  tanda_tangan_siswa?: string | null;
+  status_verifikasi?: string;
+  keterangan?: string | null;
+  tindakan?: string;
   total_poin?: number;
   sanksi?: string;
+  tahun_ajaran?: string;
+  semester?: string;
   created_at?: string;
-  tanggal_waktu_formatted?: string;
-  jenis_pelanggaran?: string;
-  nama_penanggung_jawab?: string;
-  tanda_tangan_siswa?: string;
-  [key: string]: any;
 }
 
 export type Pelanggaran = PelanggaranRecord;

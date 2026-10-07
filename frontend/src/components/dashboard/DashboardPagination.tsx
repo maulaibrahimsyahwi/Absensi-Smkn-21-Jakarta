@@ -1,17 +1,21 @@
 import React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-interface DashboardPaginationProps {
+export interface DashboardPaginationProps {
   displayLimit: number;
   setDisplayLimit: (limit: number) => void;
   currentPage: number;
-  setCurrentPage: React.Dispatch<React.SetStateAction<number>>;
+  setCurrentPage: (page: number) => void;
   totalItems: number;
   totalPages: number;
   safeCurrentPage: number;
   startIndex: number;
   endIndex: number;
+  variant?: "toolbar" | "footer";
+  scrollTargetId?: string;
 }
+
+const PRESETS = [15, 25, 50];
 
 export default function DashboardPagination({
   displayLimit,
@@ -22,79 +26,92 @@ export default function DashboardPagination({
   safeCurrentPage,
   startIndex,
   endIndex,
+  variant = "toolbar",
+  scrollTargetId,
 }: DashboardPaginationProps) {
-  return (
-    <div className="px-3.5 sm:px-6 py-3 bg-slate-50/80 border-b border-slate-200/80 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 text-xs">
-      {/* Kontrol Slider & Preset */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-700">Batas Tampilan</span>
-        </div>
+  const go = (p: number) => {
+    setCurrentPage(Math.min(totalPages, Math.max(1, p)));
+    if (scrollTargetId) {
+      document
+        .getElementById(scrollTargetId)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
-        {/* Preset Buttons */}
-        <div className="flex items-center gap-1">
-          {[15, 20, 25, 50].map((preset) => (
+  const range =
+    totalItems === 0
+      ? "0 data"
+      : `${startIndex + 1}-${endIndex} dari ${totalItems.toLocaleString("id-ID")}`;
+
+  const arrow =
+    "press grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed sm:h-9 sm:w-9 cursor-pointer select-none";
+
+  const pager = totalPages > 1 && (
+    <nav aria-label="Navigasi halaman" className="flex items-center gap-1.5 select-none">
+      <button
+        type="button"
+        disabled={safeCurrentPage <= 1}
+        onClick={() => go(safeCurrentPage - 1)}
+        aria-label="Halaman sebelumnya"
+        className={arrow}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span
+        aria-live="polite"
+        className="min-w-[4.5rem] text-center text-xs font-semibold tabular-nums text-slate-700"
+      >
+        {safeCurrentPage} / {totalPages}
+      </span>
+      <button
+        type="button"
+        disabled={safeCurrentPage >= totalPages}
+        onClick={() => go(safeCurrentPage + 1)}
+        aria-label="Halaman berikutnya"
+        className={arrow}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </nav>
+  );
+
+  if (variant === "footer") {
+    return (
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+        <p className="text-xs text-slate-500 font-medium">{range}</p>
+        {pager}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 bg-slate-50/80 px-3 py-2 sm:px-6">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-slate-500">Tampilkan</span>
+        <div role="group" aria-label="Jumlah baris" className="flex gap-1">
+          {PRESETS.map((p) => (
             <button
-              key={preset}
+              key={p}
               type="button"
+              aria-pressed={displayLimit === p}
               onClick={() => {
-                setDisplayLimit(preset);
+                setDisplayLimit(p);
                 setCurrentPage(1);
               }}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
-                displayLimit === preset
-                  ? "bg-blue-600 text-white shadow-2xs"
-                  : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+              className={`press min-h-9 min-w-9 rounded-lg px-2 text-xs font-bold transition-colors cursor-pointer ${
+                displayLimit === p
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
               }`}
             >
-              {preset}
+              {p}
             </button>
           ))}
         </div>
       </div>
-
-      {/* Info Range & Pagination Controls */}
-      <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200/60">
-        <span className="text-slate-500 font-medium text-[11px] sm:text-xs">
-          {totalItems === 0 ? (
-            "0 data"
-          ) : (
-            <>
-              Menampilkan{" "}
-              <strong className="text-slate-800 font-bold">
-                {startIndex + 1}–{endIndex}
-              </strong>{" "}
-            </>
-          )}
-        </span>
-
-        {totalPages > 1 && (
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={safeCurrentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="p-1 sm:px-2 sm:py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 transition-all cursor-pointer"
-              title="Halaman Sebelumnya"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <span className="px-2 py-1 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">
-              {safeCurrentPage} / {totalPages}
-            </span>
-
-            <button
-              type="button"
-              disabled={safeCurrentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1 sm:px-2 sm:py-1 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium text-xs flex items-center gap-1 transition-all cursor-pointer"
-              title="Halaman Selanjutnya"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+      <div className="ml-auto flex items-center gap-3">
+        <p className="text-xs text-slate-500 font-medium">{range}</p>
+        <div className="hidden sm:block">{pager}</div>
       </div>
     </div>
   );

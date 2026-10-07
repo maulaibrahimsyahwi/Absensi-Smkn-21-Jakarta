@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   ShieldCheck,
@@ -9,24 +9,45 @@ import {
   Info,
   HelpCircle,
   X,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { liburService } from "../services/liburService";
 import { User as AuthUser } from "../types/auth";
+import BiometricPrivacyModal from "../components/common/BiometricPrivacyModal";
+import Sheet, {
+  SheetHeader,
+  SheetBody,
+  SheetFooter,
+} from "../components/ui/Sheet";
+import Button from "../components/ui/Button";
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, login, loadingAuth } = useAuth();
+  const { user, login, loadingAuth, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"siswa" | "staf">("siswa");
   const [username, setUsername] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [step, setStep] = useState<"credentials" | "2fa">("credentials");
   const [totpCode, setTotpCode] = useState<string>("");
   const [hpField, setHpField] = useState<string>(""); // Anti-bot honeypot field
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [showForgotModal, setShowForgotModal] = useState<boolean>(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
+  const form2faRef = useRef<HTMLFormElement>(null);
+  const lastAutoCode = useRef<string>("");
+
+  // Auto-submit 2FA saat 6 digit lengkap tanpa perulangan tak hingga jika salah
+  useEffect(() => {
+    if (step !== "2fa" || totpCode.length !== 6 || loadingAuth) return;
+    if (lastAutoCode.current === totpCode) return;
+    lastAutoCode.current = totpCode;
+    form2faRef.current?.requestSubmit();
+  }, [totpCode, step, loadingAuth]);
 
   // Jika sudah pernah login (sesi aktif), langsung arahkan ke portal masing-masing
   useEffect(() => {
@@ -39,12 +60,19 @@ export default function Login() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("deleted") === "1") {
+      logout();
       setErrorMessage(
         "Akun Anda telah dinonaktifkan atau dihapus oleh Administrator. Sesi login telah dihentikan.",
       );
     } else if (params.get("expired") === "1") {
+      logout();
       setErrorMessage(
         "Sesi login Anda telah berakhir demi keamanan. Silakan masuk kembali.",
+      );
+    } else if (params.get("conflict") === "1") {
+      logout();
+      setErrorMessage(
+        "Akun Anda masuk di perangkat lain, sehingga sesi di perangkat ini diakhiri. Silakan masuk kembali.",
       );
     }
   }, [location.search]);
@@ -54,7 +82,7 @@ export default function Login() {
     setErrorMessage("");
 
     if (step === "credentials") {
-      if (!username.trim() || !password.trim()) {
+      if (!username.trim() || !password) {
         setErrorMessage("Username/NIS dan Password wajib diisi.");
         return;
       }
@@ -62,7 +90,7 @@ export default function Login() {
       const roleRequested = activeTab === "siswa" ? "siswa" : "staf";
       const result = await login(
         username.trim(),
-        password.trim(),
+        password,
         roleRequested,
         "",
         hpField,
@@ -73,6 +101,7 @@ export default function Login() {
       } else if (result.requires_2fa) {
         setStep("2fa");
         setTotpCode("");
+        lastAutoCode.current = "";
       } else {
         setErrorMessage(result.message || "Gagal masuk.");
       }
@@ -88,7 +117,7 @@ export default function Login() {
       const roleRequested = activeTab === "siswa" ? "siswa" : "staf";
       const result = await login(
         username.trim(),
-        password.trim(),
+        password,
         roleRequested,
         totpCode.trim(),
         hpField,
@@ -97,14 +126,19 @@ export default function Login() {
       if (result.success && result.user) {
         handleRedirect(result.user);
       } else {
+        lastAutoCode.current = "";
+        setTotpCode("");
         setErrorMessage(result.message || "Kode 2FA tidak valid.");
       }
     }
   };
 
   const handleRedirect = async (currentUser: AuthUser) => {
+    const fromPath = (location.state as { from?: { pathname?: string } })?.from
+      ?.pathname;
+
     if (currentUser.role === "admin") {
-      navigate("/portal-admin", { replace: true });
+      navigate(fromPath || "/portal-admin", { replace: true });
       return;
     }
 
@@ -122,11 +156,11 @@ export default function Login() {
     const defaultPortal =
       currentUser.role === "siswa" ? "/portal-siswa" : "/portal-piket";
 
-    navigate(defaultPortal, { replace: true });
+    navigate(fromPath || defaultPortal, { replace: true });
   };
 
   return (
-    <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6">
+    <div className="min-h-dvh flex items-center justify-center py-12 px-4 sm:px-6">
       <div className="max-w-md w-full space-y-6">
         {/* Brand Header */}
         <div className="text-center space-y-2">
@@ -140,43 +174,47 @@ export default function Login() {
 
         {/* Role Selector Tabs (Hanya saat step credentials) */}
         {step === "credentials" && (
-          <div className="bg-slate-200/70 p-1.5 rounded-2xl grid grid-cols-2 gap-1 text-xs sm:text-sm text-slate-600">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("siswa");
-                setErrorMessage("");
-              }}
-              className={`py-2.5 rounded-xl font-bold transition-colors duration-150 flex items-center justify-center gap-2 cursor-pointer border ${
-                activeTab === "siswa"
-                  ? "bg-white text-blue-600 shadow-xs border-slate-200/60"
-                  : "text-slate-600 hover:text-slate-900 border-transparent hover:bg-slate-200/50"
+          <div
+            role="tablist"
+            aria-label="Pilih jenis akun"
+            className="relative grid grid-cols-2 rounded-2xl bg-slate-200/70 p-1 text-xs sm:text-sm"
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-xl bg-white shadow-xs transition-transform duration-300 ease-out-expo ${
+                activeTab === "staf" ? "translate-x-full" : ""
               }`}
-            >
-              <span>Siswa</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab("staf");
-                setErrorMessage("");
-              }}
-              className={`py-2.5 rounded-xl font-bold transition-colors duration-150 flex items-center justify-center gap-2 cursor-pointer border ${
-                activeTab === "staf"
-                  ? "bg-white text-blue-600 shadow-xs border-slate-200/60"
-                  : "text-slate-600 hover:text-slate-900 border-transparent hover:bg-slate-200/50"
-              }`}
-            >
-              <span>Guru Piket & Admin</span>
-            </button>
+            />
+            {(["siswa", "staf"] as const).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                onClick={() => {
+                  setActiveTab(tab);
+                  setErrorMessage("");
+                }}
+                className={`relative z-10 min-h-[44px] font-bold transition-colors cursor-pointer flex items-center justify-center ${
+                  activeTab === tab
+                    ? "text-blue-700"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {tab === "siswa" ? "Siswa" : "Guru Piket & Admin"}
+              </button>
+            ))}
           </div>
         )}
 
         {/* Card Form */}
         <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-200/70">
           {errorMessage && (
-            <div className="mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-start gap-2.5 animate-in fade-in">
+            <div
+              key={errorMessage}
+              role="alert"
+              className="animate-shake mb-5 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm flex items-start gap-2.5"
+            >
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-rose-600" />
               <span className="leading-snug">{errorMessage}</span>
             </div>
@@ -184,6 +222,7 @@ export default function Login() {
 
           {step === "2fa" ? (
             <form
+              ref={form2faRef}
               onSubmit={handleSubmit}
               className="space-y-4 animate-in fade-in"
             >
@@ -196,6 +235,7 @@ export default function Login() {
                 aria-hidden="true"
                 value={hpField}
                 onChange={(e) => setHpField(e.target.value)}
+                style={{ display: "none" }}
                 className="opacity-0 absolute -left-[9999px] w-1 h-1 pointer-events-none"
               />
 
@@ -222,6 +262,7 @@ export default function Login() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
+                  autoComplete="one-time-code"
                   autoFocus
                   value={totpCode}
                   onChange={(e) =>
@@ -253,6 +294,7 @@ export default function Login() {
                 onClick={() => {
                   setStep("credentials");
                   setTotpCode("");
+                  lastAutoCode.current = "";
                   setErrorMessage("");
                 }}
                 className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors text-center cursor-pointer"
@@ -272,11 +314,15 @@ export default function Login() {
                   aria-hidden="true"
                   value={hpField}
                   onChange={(e) => setHpField(e.target.value)}
+                  style={{ display: "none" }}
                   className="opacity-0 absolute -left-[9999px] w-1 h-1 pointer-events-none"
                 />
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <label
+                    htmlFor="username"
+                    className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
+                  >
                     {activeTab === "siswa"
                       ? "Nomor Induk Siswa (NIS)"
                       : "Username Staf"}
@@ -286,21 +332,17 @@ export default function Login() {
                       <User className="w-4 h-4" />
                     </div>
                     <input
+                      id="username"
+                      name="username"
                       type="text"
+                      autoComplete="username"
                       inputMode={activeTab === "siswa" ? "numeric" : "text"}
-                      pattern={activeTab === "siswa" ? "[0-9]*" : undefined}
                       value={username}
-                      onChange={(e) => {
-                        if (activeTab === "siswa") {
-                          setUsername(e.target.value.replace(/\D/g, ""));
-                        } else {
-                          setUsername(e.target.value);
-                        }
-                      }}
+                      onChange={(e) => setUsername(e.target.value)}
                       placeholder={
                         activeTab === "siswa"
                           ? "Masukkan NIS Anda (contoh: 21312)"
-                          : "NIP / Username Guru Piket atau Admin"
+                          : "Username Admin atau Guru Piket"
                       }
                       required
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
@@ -310,7 +352,10 @@ export default function Login() {
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <label
+                      htmlFor="password"
+                      className="block text-xs font-bold text-slate-700 uppercase tracking-wider"
+                    >
                       Kata Sandi (Password)
                     </label>
                     <button
@@ -326,7 +371,11 @@ export default function Login() {
                       <Lock className="w-4 h-4" />
                     </div>
                     <input
-                      type="password"
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete="current-password"
+                      enterKeyHint="go"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder={
@@ -335,8 +384,24 @@ export default function Login() {
                           : "Masukkan password akun"
                       }
                       required
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                      className="w-full pl-10 pr-11 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={
+                        showPassword
+                          ? "Sembunyikan kata sandi"
+                          : "Tampilkan kata sandi"
+                      }
+                      className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
                   {activeTab === "siswa" ? (
                     <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
@@ -373,74 +438,76 @@ export default function Login() {
             </>
           )}
         </div>
+
+        {/* Footer Hak Privasi & Kepatuhan UU PDP */}
+        <div className="mt-4 text-center space-y-1">
+          <button
+            type="button"
+            onClick={() => setShowPrivacyModal(true)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition cursor-pointer"
+          >
+            <span>Kebijakan Privasi</span>
+          </button>
+          <p className="text-[11px] text-slate-400">
+            SMK Negeri 21 Jakarta • Layanan Presensi
+          </p>
+        </div>
       </div>
 
-      {/* Modal Bantuan Lupa Kata Sandi */}
-      {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
-                  <HelpCircle className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
-                    Bantuan Lupa Kata Sandi
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    SMKN 21 Jakarta • Layanan Presensi
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Modal Kebijakan Privasi Biometrik UU PDP */}
+      <BiometricPrivacyModal
+        isOpen={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
 
-            <div className="p-5 space-y-3.5 text-xs sm:text-sm text-slate-600 leading-relaxed">
-              <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 space-y-1">
-                <p className="font-bold text-xs">Untuk Siswa SMKN 21</p>
-                <p className="text-xs text-blue-800">
-                  Untuk menjaga integritas dan keamanan akun presensi sekolah,
-                  silakan melapor langsung ke <strong>Guru Piket</strong> atau{" "}
-                  <strong>Petugas Admin Sekolah</strong> di Ruang Piket / Tata
-                  Usaha
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 space-y-1">
-                <p className="font-bold text-xs">Prosedur Reset</p>
-                <p className="text-xs text-emerald-800">
-                  Petugas admin dapat mereset kata sandi Anda dalam 1 detik.
-                  Setelah direset, kata sandi Anda akan kembali ke default yaitu{" "}
-                  <strong>Nomor Induk Siswa (NIS)</strong> Anda
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-xs">
-                <strong>Catatan Staf:</strong> Guru Piket & Admin dapat
-                menghubungi tim IT / Admin SMKN 21 untuk permohonan reset sandi
-                akun staf
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowForgotModal(false)}
-                className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-all cursor-pointer shadow-xs"
-              >
-                Mengerti
-              </button>
-            </div>
+      {/* Sheet Bantuan Lupa Kata Sandi */}
+      <Sheet
+        isOpen={showForgotModal}
+        onClose={() => setShowForgotModal(false)}
+        size="sm"
+      >
+        <SheetHeader
+          title="Bantuan Lupa Kata Sandi"
+          subtitle="SMKN 21 Jakarta • Layanan Presensi"
+          icon={<HelpCircle className="w-5 h-5 text-blue-600" />}
+          onClose={() => setShowForgotModal(false)}
+        />
+        <SheetBody className="space-y-3.5 text-xs sm:text-sm text-slate-600 leading-relaxed">
+          <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 text-blue-900 space-y-1">
+            <p className="font-bold text-xs">Untuk Siswa SMKN 21</p>
+            <p className="text-xs text-blue-800">
+              Untuk menjaga integritas dan keamanan akun presensi sekolah,
+              silakan melapor langsung ke <strong>Guru Piket</strong> atau{" "}
+              <strong>Petugas Admin Sekolah</strong> di Ruang Piket / Tata
+              Usaha.
+            </p>
           </div>
-        </div>
-      )}
+
+          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 space-y-1">
+            <p className="font-bold text-xs">Prosedur Reset</p>
+            <p className="text-xs text-emerald-800">
+              Petugas admin dapat mereset kata sandi Anda dalam 1 detik. Setelah
+              direset, kata sandi Anda akan kembali ke default yaitu{" "}
+              <strong>Nomor Induk Siswa (NIS)</strong> Anda.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-100 text-emerald-900 space-y-1">
+            <p className="font-bold text-xs">Catatan Staf</p>
+            Guru Piket & Admin dapat menghubungi tim IT / Admin SMKN 21 untuk
+            permohonan reset sandi akun staf
+          </div>
+        </SheetBody>
+        <SheetFooter>
+          <Button
+            variant="primary"
+            onClick={() => setShowForgotModal(false)}
+            className="w-full sm:w-auto"
+          >
+            Mengerti
+          </Button>
+        </SheetFooter>
+      </Sheet>
     </div>
   );
 }

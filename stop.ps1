@@ -25,6 +25,16 @@ foreach ($port in $ports) {
     }
 }
 
+# Hentikan juga instance python backend jika masih ada
+$orphanPythons = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match "sistem_absensi_smkn21\\backend" }
+foreach ($oldPy in $orphanPythons) {
+    try {
+        Stop-Process -Id $oldPy.ProcessId -Force -ErrorAction SilentlyContinue
+        $stoppedCount++
+    } catch {}
+}
+
 if ($stoppedCount -eq 0) {
     Write-Host "[INFO] Tidak ada proses yang sedang berjalan pada port 5000 atau 5173." -ForegroundColor Gray
 } else {

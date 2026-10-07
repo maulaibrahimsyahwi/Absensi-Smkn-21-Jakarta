@@ -23,29 +23,38 @@ const PortalPiket = React.lazy(() => import("./pages/PortalPiket"));
 const PortalAdmin = React.lazy(() => import("./pages/PortalAdmin"));
 const CatatPelanggaran = React.lazy(() => import("./pages/CatatPelanggaran"));
 const HalamanLibur = React.lazy(() => import("./pages/HalamanLibur"));
+const KebijakanPrivasi = React.lazy(() => import("./pages/KebijakanPrivasi"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 import RouteAwareSkeleton from "./components/common/Skeleton";
 import OfflineBanner from "./components/common/OfflineBanner";
 import PwaInstallPrompt from "./components/common/PwaInstallPrompt";
 import BottomNav from "./components/BottomNav";
+import IdleLockScreen from "./components/common/IdleLockScreen";
+import ModalSessionConflict from "./components/common/ModalSessionConflict";
+import ForcePasswordChange from "./components/common/ForcePasswordChange";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import { FULLSCREEN_ROUTES, NO_BOTTOM_NAV_ROUTES } from "./utils/navVisibility";
+import { useAuth } from "./context/AuthContext";
 
 function AppLayout() {
   const location = useLocation();
-  // Mode kiosk layar penuh untuk kamera absensi (tanpa navbar & tanpa footer)
-  const isKioskMode =
-    location.pathname === "/harian" || location.pathname === "/perpus";
-  // Halaman yang menyembunyikan navbar standar (kiosk kamera dan halaman pengumuman libur mandiri)
+  const { isAuthenticated } = useAuth();
+  const isKioskMode = FULLSCREEN_ROUTES.includes(location.pathname);
   const hideNavbar = isKioskMode || location.pathname === "/libur";
+  const showBottomNav = isAuthenticated && !NO_BOTTOM_NAV_ROUTES.includes(location.pathname);
 
   return (
     <div
-      className={`min-h-screen font-sans ${
+      className={`font-sans ${
         isKioskMode
-          ? "bg-black overflow-hidden h-screen w-screen"
-          : "bg-slate-50 flex flex-col text-slate-800 w-full max-w-full overflow-x-hidden"
+          ? "h-screen w-screen overflow-hidden bg-black"
+          : "flex min-h-dvh w-full max-w-full flex-col overflow-x-clip bg-slate-50 text-slate-800"
       }`}
     >
+      <ForcePasswordChange />
+      <IdleLockScreen />
+      <ModalSessionConflict />
       <OfflineBanner />
       {!hideNavbar && <Navbar />}
 
@@ -53,14 +62,21 @@ function AppLayout() {
         className={
           isKioskMode
             ? "h-screen w-screen overflow-hidden"
-            : "flex-1 flex flex-col w-full max-w-full overflow-x-hidden pb-20 md:pb-6"
+            : `flex w-full max-w-full flex-1 flex-col overflow-x-clip ${
+                showBottomNav
+                  ? "pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+                  : "pb-6"
+              }`
         }
       >
-        <Suspense fallback={<RouteAwareSkeleton />}>
-          <Routes>
+        <div key={location.pathname} className="flex flex-1 flex-col animate-in fade-in duration-300">
+          <ErrorBoundary resetKey={location.pathname} fullscreen={!isKioskMode}>
+            <Suspense fallback={<RouteAwareSkeleton />}>
+              <Routes>
             {/* Rute Publik Terbatas */}
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/kebijakan-privasi" element={<KebijakanPrivasi />} />
 
             {/* Rute Presensi & Perpustakaan (Wajib Login: Siswa, Piket, Admin; Siswa Wajib Biometrik) */}
             <Route
@@ -183,9 +199,11 @@ function AppLayout() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
+        </div>
       </main>
 
-      {!hideNavbar && <BottomNav />}
+      {showBottomNav && <BottomNav />}
       {!hideNavbar && <PwaInstallPrompt />}
     </div>
   );

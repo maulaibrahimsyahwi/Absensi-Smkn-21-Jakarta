@@ -5,3 +5,4 @@ export * from './pelanggaran';
 export * from './libur';
 export * from './pjj';
 export * from './api';
+export type { ParsedDapodikRow, ParseDapodikResult } from '../utils/dapodikUtils';

@@ -86,12 +86,11 @@ def get_storage_stats():
     Mengambil metrik statistik penggunaan ruang penyimpanan (Disk Storage & Database)
     meliputi ukuran database SQLite, folder upload surat izin, berkas cadangan, dan log audit.
     """
-    from config import BASE_DIR
-    from models import AuditTrail
+    from config import BASE_DIR, DATABASE_PATH
+    from models import AuditLog
 
     # 1. Database Size
-    db_path = os.path.join(BASE_DIR, 'sistem_absensi.db')
-    db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    db_size = os.path.getsize(DATABASE_PATH) if os.path.exists(DATABASE_PATH) else 0
 
     # 2. Upload Surat Size
     upload_surat_dir = os.path.join(BASE_DIR, 'static', 'uploads', 'surat')
@@ -115,7 +114,7 @@ def get_storage_stats():
                 backup_size += os.path.getsize(fp)
 
     # 4. Audit Log Count
-    audit_count = AuditTrail.query.count()
+    audit_count = AuditLog.query.count()
 
     def format_size(bytes_val):
         if bytes_val < 1024:
@@ -130,7 +129,7 @@ def get_storage_stats():
         "database": {
             "size_bytes": db_size,
             "size_formatted": format_size(db_size),
-            "file": "sistem_absensi.db"
+            "file": os.path.basename(DATABASE_PATH)
         },
         "surat_uploads": {
             "count": surat_count,
@@ -160,7 +159,7 @@ def run_storage_cleanup():
     2. Menjalankan SQLite VACUUM untuk mengklaim ulang ruang disk yang terfragmentasi.
     """
     from datetime import datetime, timedelta
-    from models import db, AuditTrail
+    from models import db, AuditLog
     data = request.json or {}
     prune_audit = data.get('prune_audit', True)
     vacuum_db = data.get('vacuum_db', True)
@@ -171,7 +170,7 @@ def run_storage_cleanup():
     # 1. Prune audit logs older than N days
     if prune_audit:
         cutoff = datetime.now() - timedelta(days=days)
-        deleted_audit = AuditTrail.query.filter(AuditTrail.timestamp < cutoff).delete()
+        deleted_audit = AuditLog.query.filter(AuditLog.created_at < cutoff).delete()
         db.session.commit()
         cleaned_actions.append(f"Membersihkan {deleted_audit} baris log audit (> {days} hari)")
 

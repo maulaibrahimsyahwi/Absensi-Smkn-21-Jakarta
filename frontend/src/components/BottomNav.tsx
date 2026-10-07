@@ -11,13 +11,18 @@ import {
   User,
   BookOpen,
   MailPen,
+  MoreHorizontal,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import ProfileModal from "./ProfileModal";
+import Sheet, { SheetHeader, SheetBody } from "./ui/Sheet";
+import { NO_BOTTOM_NAV_ROUTES } from "../utils/navVisibility";
+import { getNavEntries, NavEntry } from "../utils/navConfig";
 
 export interface NavItem {
   to?: string;
-  type?: "link" | "profile";
+  type?: "link" | "profile" | "more";
   label: string;
   icon: ReactNode;
   active: boolean;
@@ -25,21 +30,23 @@ export interface NavItem {
 }
 
 /**
- * Komponen Bottom Navigation Bar Khusus Smartphone (HP) & Tablet Kecil (< 768px).
+ * Komponen Bottom Navigation Bar Khusus Smartphone (HP) & Tablet (< 1024px / lg:hidden).
  * Memberikan pengalaman navigasi jempol yang ergonomis, cepat, dan mirip aplikasi mobile native.
  */
 export default function BottomNav() {
   const location = useLocation();
-  const { user, isAuthenticated, isSiswa, isPiket, isAdmin } = useAuth();
+  const { user, role, isAuthenticated, isSiswa, isPiket, isAdmin } = useAuth();
   const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+  const [showMoreSheet, setShowMoreSheet] = useState<boolean>(false);
 
-  // Jangan tampilkan pada pengunjung yang belum login atau di halaman kiosk kamera fullscreen
-  if (!isAuthenticated) return null;
-  if (
-    location.pathname === "/harian" ||
-    location.pathname === "/perpus" ||
-    location.pathname === "/libur"
-  ) {
+  const haptic = () => {
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      navigator.vibrate(10);
+    }
+  };
+
+  // Jangan tampilkan pada pengunjung yang belum login atau di rute yang dilarang (kiosk, libur, izin)
+  if (!isAuthenticated || NO_BOTTOM_NAV_ROUTES.includes(location.pathname)) {
     return null;
   }
 
@@ -47,6 +54,7 @@ export default function BottomNav() {
 
   // Item navigasi berdasarkan peran pengguna
   let navItems: NavItem[] = [];
+  let moreItems: NavEntry[] = [];
 
   if (isSiswa) {
     if (isAlumni) {
@@ -59,7 +67,7 @@ export default function BottomNav() {
         },
         {
           type: "profile",
-          label: "Profil",
+          label: "Akun",
           icon: (user as { foto_profil?: string })?.foto_profil ? (
             <img
               src={(user as { foto_profil?: string }).foto_profil}
@@ -101,7 +109,7 @@ export default function BottomNav() {
         },
         {
           type: "profile",
-          label: "Profil",
+          label: "Akun",
           icon: (user as { foto_profil?: string })?.foto_profil ? (
             <img
               src={(user as { foto_profil?: string }).foto_profil}
@@ -150,6 +158,16 @@ export default function BottomNav() {
       },
     ];
   } else if (isAdmin) {
+    const isMoreActive = ["/piket", "/pelanggaran", "/izin"].includes(
+      location.pathname,
+    );
+
+    const allAdminEntries = getNavEntries({ user, role });
+    moreItems = allAdminEntries.filter((entry) =>
+      ["/piket", "/pelanggaran", "/izin"].includes(entry.to),
+    );
+
+    // Admin: 4 tombol utama + 1 tombol "Lainnya" untuk membuka menu tambahan (Piket, Pelanggaran, Izin)
     navItems = [
       {
         to: "/portal-admin",
@@ -164,23 +182,23 @@ export default function BottomNav() {
         active: location.pathname === "/dashboard",
       },
       {
+        to: "/harian",
+        label: "Scan Kiosk",
+        isPrimary: true,
+        icon: <Camera className="w-5 h-5" />,
+        active: location.pathname === "/harian",
+      },
+      {
         to: "/registrasi",
         label: "Data Siswa",
         icon: <Users className="w-5 h-5" />,
         active: location.pathname === "/registrasi",
       },
       {
-        to: "/piket",
-        label: "Meja Piket",
-        icon: <ClipboardCheck className="w-5 h-5" />,
-        active: location.pathname === "/piket",
-      },
-      {
-        to: "/harian",
-        label: "Scan Kiosk",
-        isPrimary: true,
-        icon: <Camera className="w-5 h-5" />,
-        active: location.pathname === "/harian",
+        type: "more",
+        label: "Lainnya",
+        icon: <MoreHorizontal className="w-5 h-5" />,
+        active: isMoreActive,
       },
     ];
   }
@@ -188,29 +206,54 @@ export default function BottomNav() {
   return (
     <>
       <nav
-        aria-label="Navigasi Bawah Smartphone"
-        className="fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-xl border-t border-slate-200/90 z-40 md:hidden shadow-[0_-4px_20px_rgba(0,0,0,0.06)] safe-area-bottom-nav select-none"
+        aria-label="Navigasi bawah smartphone dan tablet"
+        className="fixed inset-x-0 bottom-0 z-40 lg:hidden px-3 pb-2 safe-area-bottom-nav pointer-events-none select-none"
       >
-        <div className="flex items-center justify-around px-2 py-1 max-w-lg mx-auto">
+        <div className="pointer-events-auto mx-auto flex max-w-md items-center justify-around rounded-3xl border border-slate-200/80 bg-white/95 px-1.5 py-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.12)] backdrop-blur-xl">
           {navItems.map((item, idx) => {
             if (item.type === "profile") {
               return (
                 <button
                   key={`nav-profile-${idx}`}
                   type="button"
-                  onClick={() => setShowProfileModal(true)}
-                  className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all cursor-pointer active:scale-90 ${
-                    item.active
-                      ? "text-blue-600 font-extrabold"
-                      : "text-slate-500 hover:text-slate-800 font-semibold"
+                  onClick={() => {
+                    haptic();
+                    setShowProfileModal(true);
+                  }}
+                  className="press flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-slate-500 cursor-pointer"
+                >
+                  <span className="grid h-8 w-12 place-items-center">
+                    {item.icon}
+                  </span>
+                  <span className="leading-none">{item.label}</span>
+                </button>
+              );
+            }
+
+            if (item.type === "more") {
+              return (
+                <button
+                  key={`nav-more-${idx}`}
+                  type="button"
+                  onClick={() => {
+                    haptic();
+                    setShowMoreSheet(true);
+                  }}
+                  aria-label="Buka menu lainnya"
+                  className={`press flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold transition-colors cursor-pointer ${
+                    item.active ? "text-blue-700" : "text-slate-500"
                   }`}
                 >
-                  <div className="p-1 rounded-lg transition-transform">
+                  <span
+                    className={`grid h-8 w-12 place-items-center rounded-full transition-all duration-300 ease-out-expo ${
+                      item.active
+                        ? "scale-100 bg-blue-100"
+                        : "scale-90 bg-transparent"
+                    }`}
+                  >
                     {item.icon}
-                  </div>
-                  <span className="text-[10px] leading-tight mt-0.5 tracking-tight truncate max-w-[64px]">
-                    {item.label}
                   </span>
+                  <span className="leading-none">{item.label}</span>
                 </button>
               );
             }
@@ -220,20 +263,19 @@ export default function BottomNav() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  className="flex flex-col items-center justify-center flex-1 -mt-4 group active:scale-95 transition-all"
+                  onClick={haptic}
+                  className="press -mt-6 flex flex-1 flex-col items-center gap-1 group"
                 >
-                  <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all ${
-                      item.active
-                        ? "bg-blue-600 text-white shadow-blue-500/40 ring-4 ring-blue-100"
-                        : "bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-blue-600/30"
+                  <span
+                    className={`grid h-14 w-14 place-items-center rounded-2xl text-white shadow-lg shadow-blue-600/30 ring-4 ring-white transition-colors ${
+                      item.active ? "bg-blue-700" : "bg-blue-600"
                     }`}
                   >
                     {item.icon}
-                  </div>
+                  </span>
                   <span
-                    className={`text-[10px] font-extrabold mt-1 tracking-tight truncate max-w-[64px] ${
-                      item.active ? "text-blue-600" : "text-slate-700"
+                    className={`text-[11px] font-bold leading-none ${
+                      item.active ? "text-blue-700" : "text-slate-700"
                     }`}
                   >
                     {item.label}
@@ -242,35 +284,114 @@ export default function BottomNav() {
               );
             }
 
-            if (item.to) {
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={`flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all active:scale-90 ${
+            return item.to ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={haptic}
+                aria-current={item.active ? "page" : undefined}
+                className={`press flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-semibold transition-colors ${
+                  item.active ? "text-blue-700" : "text-slate-500"
+                }`}
+              >
+                <span
+                  className={`grid h-8 w-12 place-items-center rounded-full transition-all duration-300 ease-out-expo ${
                     item.active
-                      ? "text-blue-600 font-extrabold"
-                      : "text-slate-500 hover:text-slate-800 font-semibold"
+                      ? "scale-100 bg-blue-100"
+                      : "scale-90 bg-transparent"
                   }`}
                 >
-                  <div
-                    className={`p-1 rounded-lg transition-transform ${
-                      item.active ? "bg-blue-50 text-blue-600 scale-105" : ""
-                    }`}
-                  >
-                    {item.icon}
-                  </div>
-                  <span className="text-[10px] leading-tight mt-0.5 tracking-tight truncate max-w-[64px]">
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            }
-
-            return null;
+                  {item.icon}
+                </span>
+                <span className="leading-none">{item.label}</span>
+              </Link>
+            ) : null;
           })}
         </div>
       </nav>
+
+      {/* Sheet Menu Lainnya untuk Admin di HP/Tablet */}
+      <Sheet
+        isOpen={showMoreSheet}
+        onClose={() => setShowMoreSheet(false)}
+        size="sm"
+      >
+        <SheetHeader
+          title="Menu Operasional"
+          subtitle="Modul tambahan khusus administrator"
+          onClose={() => setShowMoreSheet(false)}
+        />
+        <SheetBody className="p-4 space-y-2 pb-6">
+          {moreItems.map((entry) => {
+            const isActive = location.pathname === entry.to;
+            return (
+              <Link
+                key={entry.to}
+                to={entry.to}
+                onClick={() => {
+                  haptic();
+                  setShowMoreSheet(false);
+                }}
+                className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-blue-50/80 border-blue-200 text-blue-900"
+                    : "bg-slate-50/70 border-slate-200/80 hover:bg-slate-100 text-slate-800"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      isActive
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-white text-slate-600 border border-slate-200"
+                    }`}
+                  >
+                    {entry.icon({ className: "w-5 h-5" })}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold leading-tight">
+                      {entry.label}
+                    </h4>
+                    {entry.desc && (
+                      <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                        {entry.desc}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              </Link>
+            );
+          })}
+
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => {
+                haptic();
+                setShowMoreSheet(false);
+                setShowProfileModal(true);
+              }}
+              className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white border border-slate-200/80 hover:bg-slate-50 text-slate-800 transition-all cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center border border-slate-200">
+                  <User className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-sm font-bold leading-tight">
+                    Profil & Akun
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-snug">
+                    {user?.nama || user?.username} (Admin)
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
+        </SheetBody>
+      </Sheet>
 
       {/* Profile Modal triggered by Bottom Nav */}
       <ProfileModal

@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import api from "../services/api";
 import { liburService } from "../services/liburService";
-import { User, UserRole } from "../types";
+import { User, UserRole, normalizeUser } from "../types";
 
 export interface LoginResult {
   success: boolean;
@@ -30,6 +30,7 @@ export interface AuthContextType {
   isAdmin: boolean;
   isPiket: boolean;
   isSiswa: boolean;
+  initializing: boolean;
   login: (
     username: string,
     password: string,
@@ -53,6 +54,28 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 const STORAGE_KEY = "smkn21_auth_user";
 const TOKEN_KEY = "smkn21_auth_token";
+const SESSION_KEYS = [
+  STORAGE_KEY,
+  TOKEN_KEY,
+  "smkn21_piket_signature",
+  "smkn21_piket_idle_locked",
+  "smkn21_realtime_sync_event",
+];
+
+const persistUser = (u: User | null) => {
+  try {
+    if (!u) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+      return;
+    }
+    // Simpan versi profil ringan tanpa foto profil & tanda tangan base64
+    const { tanda_tangan, foto_profil, ...slim } = u as any;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+  } catch {
+    /* Sesi tetap aktif di memori */
+  }
+};
 
 export interface AuthProviderProps {
   children: ReactNode;
@@ -62,9 +85,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
+      return saved ? normalizeUser(JSON.parse(saved)) : null;
     } catch {
       return null;
+    }
+  });
+
+  const [initializing, setInitializing] = useState<boolean>(() => {
+    try {
+      return !!localStorage.getItem(STORAGE_KEY);
+    } catch {
+      return false;
     }
   });
 
@@ -76,7 +107,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const data = await liburService.getStatusToday();
       if (data && data.success) {
-        setTodayStatus(data);
+        setTodayStatus((prev: unknown) =>
+          JSON.stringify(prev) === JSON.stringify(data) ? prev : data,
+        );
         return data;
       }
     } catch (err) {
@@ -90,21 +123,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     refreshTodayStatus();
     const timer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === "visible") {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
         refreshTodayStatus();
       }
     }, 60000);
     return () => clearInterval(timer);
   }, [refreshTodayStatus]);
 
-  // Simpan perubahan user ke localStorage
+  // Simpan perubahan user ke localStorage dengan proteksi kuota
   useEffect(() => {
-    if (user) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(TOKEN_KEY);
-    }
+    persistUser(user);
   }, [user]);
 
   // Listener Cross-Tab Synchronizer (BroadcastChannel & Storage Event)
@@ -157,9 +185,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Ignore broadcast channel error
     }
 
+    // Ikuti perubahan akun di tab lain, bukan hanya logout
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY && !e.newValue) {
+      if (e.key !== STORAGE_KEY) return;
+      if (!e.newValue) {
         setUser(null);
+        return;
+      }
+      try {
+        const next = JSON.parse(e.newValue);
+        const norm = normalizeUser(next);
+        setUser((prev) =>
+          prev && String(prev.id) === String(norm.id) && prev.role === norm.role
+            ? prev
+            : norm,
+        );
+      } catch {
+        /* abaikan */
       }
     };
     window.addEventListener("storage", handleStorageChange);
@@ -170,40 +212,61 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [refreshTodayStatus, user]);
 
-  // Active Session Heartbeat: Memvalidasi eksistensi akun di DB setiap 8 detik
+  // Active Session Heartbeat: Pemeriksaan pertama selalu jalan, berikutnya santai 60s
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setInitializing(false);
+      return;
+    }
 
-    const verifySession = async () => {
-      if (typeof document !== 'undefined' && document.visibilityState !== "visible") return;
+    let isMounted = true;
+    const MERGE_FIELDS = [
+      "nama",
+      "kelas",
+      "status",
+      "role",
+      "foto_profil",
+      "terdaftar",
+      "tanda_tangan",
+      "two_factor_enabled",
+      "must_change_password",
+    ] as const;
+
+    const verifySession = async (force = false) => {
+      if (!force && document.visibilityState !== "visible") return;
       try {
         const res = await api.get("/auth/verify_session");
-        if (res.data?.success && res.data.user) {
-          const remoteUser = res.data.user;
-          // Sinkronisasi data jika ada perubahan data akun dari sisi Admin
+        if (res.data?.success && res.data.user && isMounted) {
+          const norm = normalizeUser(res.data.user);
           setUser((prev) => {
             if (!prev) return null;
-            if (
-              prev.nama !== remoteUser.nama ||
-              prev.kelas !== remoteUser.kelas ||
-              prev.status !== remoteUser.status ||
-              prev.foto_profil !== remoteUser.foto_profil
-            ) {
-              return { ...prev, ...remoteUser };
-            }
-            return prev;
+            const changed = MERGE_FIELDS.some(
+              (k) => (prev as any)[k] !== (norm as any)[k] && (norm as any)[k] !== undefined,
+            );
+            return changed ? { ...prev, ...norm } : prev;
           });
         }
-      } catch (_err) {
-        // Jika 401 ACCOUNT_DELETED, sudah otomatis ditangani oleh interceptor api.js
+      } catch {
+        /* 401 ditangani oleh interceptor api.ts */
+      } finally {
+        if (isMounted) setInitializing(false);
       }
     };
 
-    // Jalankan pemeriksaan awal saat komponen aktif
-    verifySession();
+    verifySession(true);
+    const intervalId = setInterval(() => verifySession(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") verifySession();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
 
-    const intervalId = setInterval(verifySession, 8000);
-    return () => clearInterval(intervalId);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [user?.id]);
 
   /**
@@ -230,11 +293,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (res.data.token) {
           localStorage.setItem(TOKEN_KEY, res.data.token);
         }
-        setUser(res.data.user);
+        const normalized = normalizeUser(res.data.user);
+        setUser(normalized);
         return {
           success: true,
           message: res.data.message,
-          user: res.data.user,
+          user: normalized,
         };
       } else if (res.data?.requires_2fa) {
         return {
@@ -265,86 +329,110 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   /**
-   * Logout pengguna
+   * Logout pengguna: bersihkan semua jejak sesi dan cabut token di server
    */
-  const logout = () => {
+  const logout = useCallback(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+      api
+        .post("/auth/logout", null, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        .catch(() => {});
+    }
+    SESSION_KEYS.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {
+        /* abaikan */
+      }
+    });
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TOKEN_KEY);
-  };
+    setInitializing(false);
+  }, []);
 
   /**
    * Simpan atau perbarui tanda tangan digital pengguna aktif
    */
-  const saveSignature = async (signatureBase64: string, password = ""): Promise<ServiceResult> => {
-    if (!user) return { success: false, message: "Pengguna belum login." };
-    try {
-      const payload: Record<string, unknown> = {
-        role: user.role,
-        id: user.id,
-        signature: signatureBase64,
-      };
-      if (password) {
-        payload.password = password;
-      }
-      const res = await api.post("/auth/signature", payload);
+  const saveSignature = useCallback(
+    async (signatureBase64: string, password = ""): Promise<ServiceResult> => {
+      if (!user) return { success: false, message: "Pengguna belum login." };
+      try {
+        const payload: Record<string, unknown> = {
+          role: user.role,
+          id: user.id,
+          signature: signatureBase64,
+        };
+        if (password) {
+          payload.password = password;
+        }
+        const res = await api.post("/auth/signature", payload);
 
-      if (res.data && res.data.success) {
-        const updated = { ...user, tanda_tangan: signatureBase64 };
-        setUser(updated);
-        return { success: true, message: res.data.message };
+        if (res.data && res.data.success) {
+          setUser((prev) =>
+            prev ? { ...prev, tanda_tangan: signatureBase64 } : prev,
+          );
+          return { success: true, message: res.data.message };
+        }
+        return {
+          success: false,
+          message: res.data?.message || "Gagal menyimpan tanda tangan.",
+        };
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        const msg =
+          axiosErr.response?.data?.message ||
+          "Gagal menyimpan tanda tangan digital.";
+        return { success: false, message: msg };
       }
-      return {
-        success: false,
-        message: res.data?.message || "Gagal menyimpan tanda tangan.",
-      };
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      const msg =
-        axiosErr.response?.data?.message || "Gagal menyimpan tanda tangan digital.";
-      return { success: false, message: msg };
-    }
-  };
+    },
+    [user?.id, user?.role],
+  );
 
   /**
    * Simpan atau perbarui foto profil pengguna aktif
    */
-  const updateFotoProfil = async (fotoBase64: string): Promise<ServiceResult> => {
-    if (!user) return { success: false, message: "Pengguna belum login." };
-    try {
-      const payload = {
-        role: user.role,
-        id: user.id,
-        foto_profil: fotoBase64,
-      };
-      const res = await api.post("/auth/foto_profil", payload);
-      if (res.data && res.data.success) {
-        setUser((prev) => (prev ? { ...prev, foto_profil: fotoBase64 } : null));
-        return { success: true, message: res.data.message };
+  const updateFotoProfil = useCallback(
+    async (fotoBase64: string): Promise<ServiceResult> => {
+      if (!user) return { success: false, message: "Pengguna belum login." };
+      try {
+        const payload = {
+          role: user.role,
+          id: user.id,
+          foto_profil: fotoBase64,
+        };
+        const res = await api.post("/auth/foto_profil", payload);
+        if (res.data && res.data.success) {
+          setUser((prev) =>
+            prev ? { ...prev, foto_profil: fotoBase64 } : prev,
+          );
+          return { success: true, message: res.data.message };
+        }
+        return {
+          success: false,
+          message: res.data?.message || "Gagal mengunggah foto profil.",
+        };
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        const msg =
+          axiosErr.response?.data?.message || "Gagal mengunggah foto profil.";
+        return { success: false, message: msg };
       }
-      return {
-        success: false,
-        message: res.data?.message || "Gagal mengunggah foto profil.",
-      };
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      const msg =
-        axiosErr.response?.data?.message || "Gagal mengunggah foto profil.";
-      return { success: false, message: msg };
-    }
-  };
+    },
+    [user?.id, user?.role],
+  );
 
   /**
    * Hapus foto profil pengguna aktif dan kembalikan ke avatar default
    */
-  const deleteFotoProfil = async (): Promise<ServiceResult> => {
+  const deleteFotoProfil = useCallback(async (): Promise<ServiceResult> => {
     if (!user) return { success: false, message: "Pengguna belum login." };
     try {
       const res = await api.delete("/auth/foto_profil", {
         data: { role: user.role, id: user.id },
       });
       if (res.data && res.data.success) {
-        setUser((prev) => (prev ? { ...prev, foto_profil: null } : null));
+        setUser((prev) => (prev ? { ...prev, foto_profil: null } : prev));
         return { success: true, message: res.data.message };
       }
       return {
@@ -353,66 +441,88 @@ export function AuthProvider({ children }: AuthProviderProps) {
       };
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
-      const msg = axiosErr.response?.data?.message || "Gagal menghapus foto profil.";
+      const msg =
+        axiosErr.response?.data?.message || "Gagal menghapus foto profil.";
       return { success: false, message: msg };
     }
-  };
+  }, [user?.id, user?.role]);
 
   /**
    * Perbarui nama lengkap pengguna aktif di server dan local state
    */
-  const updateName = async (nama: string): Promise<ServiceResult> => {
-    if (!user) return { success: false, message: "Pengguna belum login." };
-    try {
-      const res = await api.put("/auth/profile", { nama });
-      if (res.data && res.data.success) {
-        setUser((prev) => (prev ? { ...prev, nama } : null));
-        return { success: true, message: res.data.message };
+  const updateName = useCallback(
+    async (nama: string): Promise<ServiceResult> => {
+      if (!user) return { success: false, message: "Pengguna belum login." };
+      try {
+        const res = await api.put("/auth/profile", { nama });
+        if (res.data && res.data.success) {
+          setUser((prev) => (prev ? { ...prev, nama } : prev));
+          return { success: true, message: res.data.message };
+        }
+        return {
+          success: false,
+          message: res.data?.message || "Gagal memperbarui nama lengkap.",
+        };
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        const msg =
+          axiosErr.response?.data?.message || "Gagal memperbarui nama lengkap.";
+        return { success: false, message: msg };
       }
-      return {
-        success: false,
-        message: res.data?.message || "Gagal memperbarui nama lengkap.",
-      };
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      const msg =
-        axiosErr.response?.data?.message || "Gagal memperbarui nama lengkap.";
-      return { success: false, message: msg };
-    }
-  };
+    },
+    [user?.id],
+  );
 
   /**
    * Refresh profil pengguna (misal status wajah terdaftar)
    */
-  const updateUserProfile = (patchData: Partial<User>) => {
-    setUser((prev) => (prev ? { ...prev, ...patchData } : null));
-  };
+  const updateUserProfile = useCallback((patchData: Partial<User>) => {
+    setUser((prev) =>
+      prev
+        ? normalizeUser({ ...prev, ...patchData } as Record<string, unknown>)
+        : prev,
+    );
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        role: user ? user.role : null,
-        isAuthenticated: !!user,
-        isAdmin: user?.role === "admin",
-        isPiket: user?.role === "piket",
-        isSiswa: user?.role === "siswa",
-        login,
-        logout,
-        saveSignature,
-        updateFotoProfil,
-        deleteFotoProfil,
-        updateUserProfile,
-        updateName,
-        loadingAuth,
-        todayStatus,
-        loadingTodayStatus,
-        refreshTodayStatus,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = React.useMemo<AuthContextType>(
+    () => ({
+      user,
+      role: user ? user.role : null,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === "admin",
+      isPiket: user?.role === "piket",
+      isSiswa: user?.role === "siswa",
+      initializing,
+      login,
+      logout,
+      saveSignature,
+      updateFotoProfil,
+      deleteFotoProfil,
+      updateUserProfile,
+      updateName,
+      loadingAuth,
+      todayStatus,
+      loadingTodayStatus,
+      refreshTodayStatus,
+    }),
+    [
+      user,
+      initializing,
+      login,
+      logout,
+      saveSignature,
+      updateFotoProfil,
+      deleteFotoProfil,
+      updateUserProfile,
+      updateName,
+      loadingAuth,
+      todayStatus,
+      loadingTodayStatus,
+      refreshTodayStatus,
+    ],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextType {

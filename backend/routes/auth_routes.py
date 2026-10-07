@@ -165,6 +165,12 @@ def login():
     if role_requested == 'siswa':
         siswa = Siswa.query.filter_by(nis=username).first()
         if not siswa:
+            user_staf = User.query.filter_by(username=username).first()
+            if user_staf:
+                return jsonify({
+                    "success": False, 
+                    "message": f"Akun '{username}' terdaftar sebagai Guru Piket / Admin. Silakan pilih tab 'Guru Piket & Admin' di atas."
+                }), 400
             return jsonify({
                 "success": False, 
                 "message": "Akun siswa dengan NIS tersebut tidak ditemukan."
@@ -175,9 +181,15 @@ def login():
     elif role_requested in ['staf', 'piket', 'admin']:
         user = User.query.filter_by(username=username).first()
         if not user:
+            siswa = Siswa.query.filter_by(nis=username).first()
+            if siswa:
+                return jsonify({
+                    "success": False, 
+                    "message": f"NIS '{username}' terdaftar sebagai Siswa ({siswa.nama}). Silakan pilih tab 'Siswa' di atas."
+                }), 400
             return jsonify({
                 "success": False, 
-                "message": "Akun Guru Piket / Admin dengan username tersebut tidak ditemukan"
+                "message": "Akun Guru Piket / Admin dengan username tersebut tidak ditemukan."
             }), 404
         return handle_user_login(user)
 
@@ -872,6 +884,34 @@ def disable_2fa():
         "message": "2FA berhasil dinonaktifkan untuk akun Anda.",
         "two_factor_enabled": False
     })
+
+
+@auth_bp.route('/api/auth/logout', methods=['POST'])
+@token_required
+def logout():
+    """
+    Endpoint logout resmi untuk mengakhiri sesi aktif di server dan database.
+    """
+    current_user = getattr(request, 'current_user', {})
+    user_id = current_user.get('user_id')
+    role = current_user.get('role')
+
+    try:
+        if role == 'siswa':
+            siswa = Siswa.query.get(user_id)
+            if siswa:
+                siswa.active_session_token = None
+        else:
+            user = User.query.get(user_id)
+            if user:
+                user.active_session_token = None
+
+        db.session.commit()
+        return jsonify({"success": True, "message": "Berhasil logout."}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal logout: {str(e)}"}), 500
+
 
 
 

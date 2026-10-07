@@ -2,10 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import ErrorBoundary from "./components/common/ErrorBoundary";
+import { initOfflineQueue } from "./services/offlineQueue";
 import "./index.css";
 
 // Registrasi Service Worker untuk PWA Offline-Aware & Installability
-if (typeof navigator !== 'undefined' && "serviceWorker" in navigator) {
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
       .register("/sw.js")
@@ -20,11 +21,13 @@ if (typeof navigator !== 'undefined' && "serviceWorker" in navigator) {
 
 const rootElement = document.getElementById("root");
 if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
-    </React.StrictMode>,
-  );
+  void initOfflineQueue().finally(() => {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </React.StrictMode>,
+    );
+  });
 }

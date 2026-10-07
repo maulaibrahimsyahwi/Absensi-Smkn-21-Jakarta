@@ -1,34 +1,16 @@
-import React, { useState, useMemo } from "react";
-import {
-  Inbox,
-  Printer,
-  LogIn,
-  LogOut,
-  Trash2,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
+import React, { useMemo } from "react";
+import { Inbox, Printer, LogIn, LogOut, Trash2 } from "lucide-react";
 import { useAuth } from "../../../context/AuthContext";
-
-export interface IzinPiketItem {
-  id: number;
-  nama: string;
-  nis: string;
-  kelas: string;
-  tipe: string;
-  jam_ke: string | number;
-  hari: string;
-  tanggal: string;
-  tanggal_formatted?: string;
-  alasan: string;
-  petugas_piket: string;
-  [key: string]: unknown;
-}
+import { useTableSort } from "../../../hooks/useTableSort";
+import Button from "../../ui/Button";
+import SortableTh from "../../ui/SortableTh";
+import type { IzinPiketItem } from "../../../types";
 
 interface IzinPiketTabProps {
   filteredIzinPiket?: IzinPiketItem[];
   paginatedIzinPiket?: IzinPiketItem[];
+  startIndex?: number;
+  endIndex?: number;
   onOpenSlipModal?: (item: IzinPiketItem) => void;
   onDeleteIzin?: (id: number, nama: string) => void;
 }
@@ -36,44 +18,34 @@ interface IzinPiketTabProps {
 export default function IzinPiketTab({
   filteredIzinPiket = [],
   paginatedIzinPiket = [],
+  startIndex,
+  endIndex,
   onOpenSlipModal,
   onDeleteIzin,
 }: IzinPiketTabProps) {
   const { isAdmin } = useAuth();
-  const [sortKey, setSortKey] = useState<string>("id");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection("asc");
-    }
-  };
+  const { sorted, sortKey, sortDir, onSort } = useTableSort(
+    filteredIzinPiket,
+    "id",
+    "desc",
+    ["id", "tanggal", "jam_ke"],
+  );
 
   const displayList = useMemo(() => {
-    const list = [...paginatedIzinPiket];
-    return list.sort((a, b) => {
-      const valA = (a as Record<string, unknown>)[sortKey] ?? "";
-      const valB = (b as Record<string, unknown>)[sortKey] ?? "";
-      if (typeof valA === "number" && typeof valB === "number") {
-        return sortDirection === "asc" ? valA - valB : valB - valA;
-      }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirection === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
-    });
-  }, [paginatedIzinPiket, sortKey, sortDirection]);
+    if (endIndex !== undefined) {
+      return sorted.slice(startIndex ?? 0, endIndex);
+    }
+    return paginatedIzinPiket.length > 0 ? paginatedIzinPiket : sorted;
+  }, [sorted, startIndex, endIndex, paginatedIzinPiket]);
+
+  const sortProps = { sortKey, sortDir, onSort };
 
   return (
     <div>
-      {/* 1. Mobile Cards View (< md) */}
-      <div className="md:hidden divide-y divide-slate-100">
+      {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+      <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 md:p-3 lg:hidden">
         {filteredIzinPiket.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 p-4">
+          <div className="col-span-2 py-12 text-center text-slate-400 p-4">
             <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
             <p className="font-semibold text-slate-600 text-sm">
               Tidak Ada Data Izin Meja Piket
@@ -84,13 +56,13 @@ export default function IzinPiketTab({
             </p>
           </div>
         ) : (
-          paginatedIzinPiket.map((item) => {
+          displayList.map((item) => {
             const isMasuk = item.tipe === "Izin Masuk";
 
             return (
-              <div
+              <article
                 key={item.id}
-                className="p-4 hover:bg-slate-50/60 transition-colors space-y-3"
+                className="p-4 hover:bg-slate-50/60 transition-colors space-y-3 bg-white md:rounded-2xl md:border md:border-slate-200"
               >
                 {/* Header Card */}
                 <div className="flex items-start justify-between gap-2">
@@ -100,7 +72,7 @@ export default function IzinPiketTab({
                     </p>
                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                       <span className="text-[11px] text-slate-400 font-mono">
-                        {item.nis}
+                        NIS {item.nis}
                       </span>
                       <span className="text-slate-300">•</span>
                       <span className="text-[11px] font-bold text-slate-700">
@@ -133,173 +105,109 @@ export default function IzinPiketTab({
                       Jam Pelajaran
                     </span>
                     <span className="font-bold text-slate-800">
-                      {item.jam_ke}
+                      Jam ke-{item.jam_ke}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">
-                      Hari / Tanggal
-                    </span>
-                    <span className="font-semibold text-slate-700">
+                    <span className="text-slate-500 font-medium">Hari, Tanggal</span>
+                    <span className="font-semibold text-slate-800">
                       {item.hari}, {item.tanggal_formatted || item.tanggal}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 font-medium">
-                      Petugas Piket
-                    </span>
-                    <span className="font-semibold text-slate-800 flex items-center gap-1">
-                      {item.petugas_piket}
-                    </span>
-                  </div>
-                  <div className="pt-1 border-t border-slate-200/60">
+                  <div className="pt-1 border-t border-slate-200/40">
                     <span className="text-slate-500 font-medium block mb-0.5">
                       Alasan
                     </span>
-                    <p className="italic text-slate-700 bg-white p-2 rounded-lg border border-slate-200/50">
+                    <p className="text-slate-800 italic bg-white p-2.5 rounded-lg border border-slate-200/50 whitespace-normal break-words leading-relaxed text-xs">
                       "{item.alasan}"
                     </p>
+                  </div>
+                  <div className="pt-1 border-t border-slate-200/40 flex items-center justify-between text-slate-500 text-[11px]">
+                    <span>Petugas Piket</span>
+                    <span className="font-semibold text-slate-700">
+                      {item.petugas_piket}
+                    </span>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
+                <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={<Printer className="w-3.5 h-3.5" />}
                     onClick={() => onOpenSlipModal && onOpenSlipModal(item)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-colors cursor-pointer"
                   >
-                    <Printer className="w-3.5 h-3.5" />
-                    <span>Cetak E-Slip</span>
-                  </button>
+                    Cetak Slip
+                  </Button>
                   {isAdmin && onDeleteIzin && (
-                    <button
-                      type="button"
+                    <Button
+                      size="sm"
+                      variant="dangerSoft"
+                      icon={<Trash2 className="w-3.5 h-3.5" />}
+                      aria-label="Hapus surat izin"
                       onClick={() => onDeleteIzin(item.id, item.nama)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                      title="Hapus Izin (Khusus Admin)"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                      Hapus
+                    </Button>
                   )}
                 </div>
-              </div>
+              </article>
             );
           })
         )}
       </div>
 
-      {/* 2. Desktop Table View (>= md) */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-              <th className="py-3 px-4 w-12 text-center">No</th>
-              <th
-                onClick={() => handleSort("nama")}
-                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Siswa"
-              >
-                <div className="flex items-center gap-1">
-                  <span>Siswa</span>
-                  {sortKey === "nama" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-indigo-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-indigo-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+      {/* 2. Desktop Table View (>= lg) */}
+      <div className="hidden max-h-[calc(100dvh-18rem)] overflow-auto lg:block">
+        <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[760px]">
+          <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226,232,240)]">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="py-3.5 px-4 text-center w-12 font-bold uppercase tracking-wider text-[11px] text-slate-500">
+                No
               </th>
-              <th
-                onClick={() => handleSort("tipe")}
-                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Keperluan"
-              >
-                <div className="flex items-center gap-1">
-                  <span>Keperluan</span>
-                  {sortKey === "tipe" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-indigo-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-indigo-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+              <SortableTh label="Siswa" field="nama" {...sortProps} />
+              <SortableTh
+                label="Jenis Izin"
+                field="tipe"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Jam Ke-"
+                field="jam_ke"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Hari & Tanggal"
+                field="tanggal"
+                {...sortProps}
+              />
+              <SortableTh label="Alasan" field="alasan" {...sortProps} />
+              <SortableTh
+                label="Petugas Piket"
+                field="petugas_piket"
+                {...sortProps}
+              />
+              <th className="py-3.5 px-4 text-center w-28 font-bold uppercase tracking-wider text-[11px] text-slate-500">
+                Aksi
               </th>
-              <th
-                onClick={() => handleSort("jam_ke")}
-                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Jam Ke"
-              >
-                <div className="flex items-center gap-1">
-                  <span>Jam Ke-</span>
-                  {sortKey === "jam_ke" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-indigo-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-indigo-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("tanggal")}
-                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Tanggal"
-              >
-                <div className="flex items-center gap-1">
-                  <span>Hari / Tanggal</span>
-                  {sortKey === "tanggal" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-indigo-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-indigo-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th className="py-3 px-4">Alasan</th>
-              <th
-                onClick={() => handleSort("petugas_piket")}
-                className="py-3 px-4 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Petugas Piket"
-              >
-                <div className="flex items-center gap-1">
-                  <span>Petugas Piket</span>
-                  {sortKey === "petugas_piket" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-indigo-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-indigo-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th className="py-3 px-4 text-center w-28">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filteredIzinPiket.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-12 text-center text-slate-400">
-                  <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
-                  <p className="font-semibold text-slate-600 text-sm">
-                    Tidak Ada Surat Izin Meja Piket
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Belum ada surat izin yang diterbitkan dari meja guru piket.
-                  </p>
+                  <div className="flex flex-col items-center justify-center">
+                    <Inbox className="w-10 h-10 text-slate-300 mb-2 stroke-1" />
+                    <p className="font-semibold text-slate-600 text-sm">
+                      Tidak Ada Data Izin Meja Piket
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Belum ada surat izin yang diterbitkan dari meja guru piket.
+                    </p>
+                  </div>
                 </td>
               </tr>
             ) : (
@@ -312,7 +220,7 @@ export default function IzinPiketTab({
                     className="hover:bg-slate-50/60 transition-colors"
                   >
                     <td className="py-3.5 px-4 text-center font-mono text-slate-400">
-                      {idx + 1}
+                      {(startIndex ?? 0) + idx + 1}
                     </td>
 
                     {/* Siswa */}
@@ -334,9 +242,9 @@ export default function IzinPiketTab({
                     </td>
 
                     {/* Keperluan Badge */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3.5 px-4 text-center">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border ${
                           isMasuk
                             ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                             : "bg-amber-50 text-amber-800 border-amber-200"
@@ -345,13 +253,14 @@ export default function IzinPiketTab({
                         {isMasuk ? (
                           <LogIn className="w-3 h-3 text-emerald-600" />
                         ) : (
-                          <span>{item.tipe}</span>
+                          <LogOut className="w-3 h-3 text-amber-600" />
                         )}
+                        <span>{item.tipe}</span>
                       </span>
                     </td>
 
                     {/* Jam Ke- */}
-                    <td className="py-3.5 px-4 font-bold text-slate-800">
+                    <td className="py-3.5 px-4 text-center font-bold text-slate-800">
                       {item.jam_ke}
                     </td>
 
@@ -374,15 +283,13 @@ export default function IzinPiketTab({
                     </td>
 
                     {/* Petugas Piket */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-1 text-slate-800 font-medium">
-                        <span
-                          className="truncate max-w-[120px]"
-                          title={item.petugas_piket}
-                        >
-                          {item.petugas_piket}
-                        </span>
-                      </div>
+                    <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap">
+                      <span
+                        className="truncate max-w-[120px] block"
+                        title={item.petugas_piket}
+                      >
+                        {item.petugas_piket}
+                      </span>
                     </td>
 
                     {/* Aksi */}
@@ -393,17 +300,19 @@ export default function IzinPiketTab({
                           onClick={() =>
                             onOpenSlipModal && onOpenSlipModal(item)
                           }
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-colors cursor-pointer"
+                          className="press inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold transition-colors cursor-pointer"
                           title="Cetak E-Slip Resmi"
                         >
                           <Printer className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Slip</span>
                         </button>
                         {isAdmin && onDeleteIzin && (
                           <button
                             type="button"
                             onClick={() => onDeleteIzin(item.id, item.nama)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            className="press p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                             title="Hapus Surat Izin (Khusus Admin)"
+                            aria-label={`Hapus izin ${item.nama}`}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

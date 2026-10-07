@@ -9,17 +9,17 @@ import {
   Loader2,
   Sun,
   Flag,
-  Search,
   Upload,
   FileText,
   Check,
   Lock,
-  CalendarClock,
 } from "lucide-react";
-import { liburService } from "../../services/liburService";
+import { liburService, HolidayPayload } from "../../services/liburService";
 import ModalPreviewSuratEdaran from "./ModalPreviewSuratEdaran";
+import HolidayCalendarView from "./HolidayCalendarView";
 import CustomDatePicker from "../CustomDatePicker";
 import CustomDropdown from "../CustomDropdown";
+import Sheet from "../ui/Sheet";
 
 const KATEGORI_OPTIONS = [
   {
@@ -74,15 +74,27 @@ export default function ModalKalenderLibur({
   const [liburList, setLiburList] = useState<any[]>([]);
   const [statusToday, setStatusToday] = useState<any>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedTahun, setSelectedTahun] = useState(
     String(new Date().getFullYear()),
+  );
+  const [calendarMonth, setCalendarMonth] = useState<number>(
+    new Date().getMonth(),
   );
 
   // Import File State
   const [importFileObj, setImportFileObj] = useState<File | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importStats, setImportStats] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Auto-dismiss floating notification after 4.5s
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => {
+      setNotification(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   useEffect(() => {
     if (isOpen && initialTab) {
@@ -96,7 +108,7 @@ export default function ModalKalenderLibur({
   const [formKategori, setFormKategori] = useState("libur_semester");
   const [formTglMulai, setFormTglMulai] = useState("");
   const [formTglSelesai, setFormTglSelesai] = useState("");
-  const [formTipeHari, setFormTipeHari] = useState("libur");
+  const [formTipeHari, setFormTipeHari] = useState<"libur" | "masuk_khusus">("libur");
   const [formKeterangan, setFormKeterangan] = useState("");
   const [formFileSurat, setFormFileSurat] = useState<File | null>(null);
   const [formFileUrl, setFormFileUrl] = useState("");
@@ -154,7 +166,9 @@ export default function ModalKalenderLibur({
     setFormKategori(item.kategori || "libur_semester");
     setFormTglMulai(item.tanggal_mulai || "");
     setFormTglSelesai(item.tanggal_selesai || item.tanggal_mulai || "");
-    setFormTipeHari(item.tipe_hari || "libur");
+    setFormTipeHari(
+      item.tipe_hari === "masuk_khusus" ? "masuk_khusus" : "libur",
+    );
     setFormKeterangan(item.keterangan || "");
     setFormFileUrl(item.lampiran_surat || "");
     setFormFileName(item.nama_file_surat || "");
@@ -215,7 +229,7 @@ export default function ModalKalenderLibur({
         }
       }
 
-      const payload = {
+      const payload: HolidayPayload = {
         nama: formNama.trim(),
         kategori: formKategori,
         tanggal_mulai: formTglMulai,
@@ -303,6 +317,41 @@ export default function ModalKalenderLibur({
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const validExts = [".xlsx", ".xls", ".csv"];
+      const hasValidExt = validExts.some((ext) =>
+        file.name.toLowerCase().endsWith(ext),
+      );
+      if (hasValidExt) {
+        setImportFileObj(file);
+        setImportStats(null);
+      } else {
+        setNotification({
+          type: "error",
+          message:
+            "Format berkas harus berupa Excel (.xlsx, .xls) atau CSV (.csv).",
+        });
+      }
+    }
+  };
+
   const handleUploadFile = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!importFileObj) {
@@ -356,27 +405,16 @@ export default function ModalKalenderLibur({
     }
   };
 
-  const filteredList = useMemo(() => {
-    return liburList.filter((item) => {
-      const q = searchTerm.toLowerCase();
-      return (
-        item.nama?.toLowerCase().includes(q) ||
-        item.keterangan?.toLowerCase().includes(q) ||
-        item.kategori?.toLowerCase().includes(q)
-      );
-    });
-  }, [liburList, searchTerm]);
-
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in">
-      <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+    <>
+      <Sheet isOpen={isOpen} onClose={onClose} labelledBy="modal-libur-title" size="xl" tall>
         {/* Header Modal */}
-        <div className="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between shrink-0">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between shrink-0 select-none">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
-              <h2 className="text-base sm:text-xl font-bold tracking-tight truncate">
+              <h2 id="modal-libur-title" className="text-base sm:text-lg font-bold tracking-tight truncate">
                 Kalender Akademik & Hari Libur Sekolah
               </h2>
               <p className="text-xs text-purple-200 truncate">
@@ -393,6 +431,84 @@ export default function ModalKalenderLibur({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Contextual Status Today Banner */}
+        {statusToday && (
+          <div className="mx-4 sm:mx-6 mt-3.5 p-3.5 rounded-2xl border bg-slate-50/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  statusToday.is_libur
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {statusToday.is_libur ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Flag className="w-5 h-5" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-800">
+                    Status Operasional Hari Ini ({statusToday.nama_hari || "Hari Ini"}):
+                  </span>
+                  <span
+                    className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                      statusToday.is_libur
+                        ? "bg-rose-100 text-rose-800 border border-rose-200"
+                        : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    }`}
+                  >
+                    {statusToday.is_libur ? "Sekolah Libur" : "Sekolah Aktif"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 truncate mt-0.5">
+                  {statusToday.holiday_event?.nama ||
+                    statusToday.message ||
+                    (statusToday.is_libur
+                      ? "Presensi ditutup otomatis sesuai kalender"
+                      : "Presensi dan KBM tatap muka berlangsung normal")}
+                </p>
+              </div>
+            </div>
+
+            <div className="shrink-0 flex items-center gap-2">
+              {statusToday.is_libur ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOverrideAction("masuk_khusus");
+                    setOverrideNama("Wajib Masuk Khusus Hari Ini");
+                    setOverrideKet("");
+                    setShowOverrideModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Buka presensi dan wajibkan siswa masuk hari ini"
+                >
+                  <Flag className="w-3.5 h-3.5" />
+                  <span>Buka Presensi Hari Ini</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOverrideAction("libur");
+                    setOverrideNama("Diliburkan Khusus Hari Ini");
+                    setOverrideKet("");
+                    setShowOverrideModal(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Liburkan sekolah secara mendadak hari ini"
+                >
+                  <Sun className="w-3.5 h-3.5" />
+                  <span>Liburkan Hari Ini</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Floating Notification */}
         {notification && (
@@ -470,24 +586,6 @@ export default function ModalKalenderLibur({
             </button>
           </div>
 
-          {activeTab === "daftar" && (
-            <div className="flex items-center gap-2 pb-2">
-              <select
-                value={selectedTahun}
-                onChange={(e) => setSelectedTahun(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold bg-white text-slate-700 focus:ring-2 focus:ring-purple-400 focus:outline-hidden"
-              >
-                {[0, 1, -1].map((offset) => {
-                  const y = new Date().getFullYear() + offset;
-                  return (
-                    <option key={y} value={String(y)}>
-                      Tahun {y}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
           <button
             type="button"
             onClick={() => {
@@ -519,160 +617,36 @@ export default function ModalKalenderLibur({
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           {activeTab === "daftar" && (
-            <>
-              {/* Search Bar */}
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Cari nama hari libur, kategori, atau nomor edaran..."
-                  className="w-full pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs sm:text-sm bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-purple-400 focus:outline-hidden transition-all"
-                />
-              </div>
-
-              {loading ? (
-                <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center space-y-2">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
-                  <p className="text-xs font-semibold text-slate-500">
-                    Memuat kalender libur sekolah...
-                  </p>
-                </div>
-              ) : filteredList.length === 0 ? (
-                <div className="py-12 px-4 text-center bg-slate-50/70 border-2 border-dashed border-slate-200 rounded-3xl space-y-3.5">
-                  <div className="w-12 h-12 mx-auto rounded-2xl bg-purple-100 flex items-center justify-center text-purple-600 shadow-xs">
-                    <CalendarClock className="w-6 h-6" />
+            <div className="relative">
+              {loading && (
+                <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-2xs flex items-center justify-center rounded-2xl min-h-[300px]">
+                  <div className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl shadow-md border border-slate-200 text-xs font-semibold text-slate-700">
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                    <span>Memperbarui kalender...</span>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-sm font-bold text-slate-800">
-                      Belum Ada Agenda Libur Terjadwal untuk Tahun{" "}
-                      {selectedTahun}
-                    </div>
-                    <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                      Gunakan fitur di bawah untuk mengimpor jadwal libur
-                      semester atau unggah spreadsheet kalender sekolah.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {filteredList.map((item) => {
-                    const katObj = KATEGORI_OPTIONS.find(
-                      (k) => k.value === item.kategori,
-                    );
-                    const isMasukKhusus = item.tipe_hari === "masuk_khusus";
-                    const isBuiltin = Boolean(item.is_builtin);
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-4 rounded-2xl border transition-all hover:shadow-md space-y-3 relative ${
-                          isMasukKhusus
-                            ? "bg-blue-50/40 border-blue-200/80"
-                            : isBuiltin
-                              ? "bg-emerald-50/20 border-emerald-200/60"
-                              : "bg-white border-slate-200/80"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border mb-1.5 ${
-                                isBuiltin
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                  : isMasukKhusus
-                                    ? "bg-blue-100 text-blue-800 border-blue-200"
-                                    : katObj?.badgeColor ||
-                                      "bg-slate-100 text-slate-700 border-slate-200"
-                              }`}
-                            >
-                              {isBuiltin
-                                ? "Nasional"
-                                : isMasukKhusus
-                                  ? "Wajib Masuk Khusus"
-                                  : katObj?.label || item.kategori}
-                            </span>
-                            <h3 className="font-bold text-sm text-slate-900 leading-snug break-words">
-                              {item.nama}
-                            </h3>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(item)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                              title={
-                                isBuiltin
-                                  ? "Ubah status atau sesuaikan tanggal libur ini"
-                                  : "Edit / Geser Tanggal"
-                              }
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            {isBuiltin ? (
-                              <span
-                                className="p-1.5 rounded-lg text-slate-300 cursor-not-allowed inline-flex items-center"
-                                title="Hari libur resmi SKB 3 Menteri otomatis. Gunakan tombol Edit jika sekolah masuk pada hari ini."
-                              >
-                                <Lock className="w-3.5 h-3.5" />
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setDeletingItem(item)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                                title="Hapus Agenda"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Rentang Tanggal */}
-                        <div className="bg-slate-50/80 rounded-xl p-2.5 text-xs text-slate-600 flex items-center justify-between border border-slate-100">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-slate-800">
-                              {item.tanggal_mulai === item.tanggal_selesai
-                                ? item.tanggal_mulai
-                                : `${item.tanggal_mulai} s/d ${item.tanggal_selesai}`}
-                            </span>
-                          </div>
-                          <span className="text-[11px] font-medium text-slate-400">
-                            {item.tipe_hari === "masuk_khusus"
-                              ? "Presensi Buka"
-                              : "Presensi Tutup"}
-                          </span>
-                        </div>
-
-                        {item.keterangan && (
-                          <p className="text-[11px] text-slate-500 italic bg-white p-2 rounded-lg border border-slate-100 break-words">
-                            "{item.keterangan}"
-                          </p>
-                        )}
-
-                        {/* Tombol Preview Surat Edaran jika ada lampiran */}
-                        {item.lampiran_surat && (
-                          <div className="pt-0.5">
-                            <button
-                              type="button"
-                              onClick={() => setPreviewSuratModal(item)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
-                            >
-                              <FileText className="w-3.5 h-3.5 text-purple-600" />
-                              <span>Lihat Surat Edaran Resmi</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
               )}
-            </>
+              <HolidayCalendarView
+                events={liburList}
+                selectedYear={selectedTahun}
+                onSelectYear={(year) => setSelectedTahun(year)}
+                selectedMonth={calendarMonth}
+                onSelectMonth={(m) => setCalendarMonth(m)}
+                isAdmin={true}
+                onAddNewHoliday={(prefilledDate) => {
+                  if (prefilledDate) {
+                    setFormTglMulai(prefilledDate);
+                    setFormTglSelesai(prefilledDate);
+                  } else {
+                    resetForm();
+                  }
+                  setActiveTab("tambah");
+                }}
+                onEditEvent={(item) => handleOpenEdit(item)}
+                onDeleteEvent={(item) => setDeletingItem(item)}
+                onPreviewSurat={(item) => setPreviewSuratModal(item)}
+              />
+            </div>
           )}
 
           {/* TAB 2: Impor File Excel / CSV Kaldik */}
@@ -680,7 +654,16 @@ export default function ModalKalenderLibur({
             <div className="max-w-2xl mx-auto space-y-4">
               {/* Upload Drop Zone Form */}
               <form onSubmit={handleUploadFile} className="space-y-4">
-                <div className="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/30 rounded-3xl p-6 sm:p-8 text-center transition-all">
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-3xl p-6 sm:p-8 text-center transition-all ${
+                    isDragging
+                      ? "border-indigo-500 bg-indigo-100/50 scale-[1.01]"
+                      : "border-indigo-200 hover:border-indigo-400 bg-indigo-50/30"
+                  }`}
+                >
                   <input
                     type="file"
                     id="excelFileInput"
@@ -724,7 +707,9 @@ export default function ModalKalenderLibur({
                       </div>
                       <div>
                         <p className="text-sm font-bold text-slate-800">
-                          Klik untuk Memilih File Excel atau CSV
+                          {isDragging
+                            ? "Lepaskan File Di Sini"
+                            : "Klik atau Tarik File Excel / CSV ke Sini"}
                         </p>
                         <p className="text-xs text-slate-400 mt-0.5">
                           Mendukung format .xlsx, .csv, atau .xls
@@ -736,6 +721,25 @@ export default function ModalKalenderLibur({
                     </label>
                   )}
                 </div>
+
+                {/* Tombol Submit Impor Jadwal */}
+                <button
+                  type="submit"
+                  disabled={!importFileObj || importLoading}
+                  className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl text-xs sm:text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {importLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Mengimpor Data Kalender...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-4 h-4" />
+                      <span>Mulai Impor Jadwal Libur</span>
+                    </>
+                  )}
+                </button>
 
                 {/* Import Result Stats if any */}
                 {importStats && (
@@ -879,7 +883,9 @@ export default function ModalKalenderLibur({
                     </label>
                     <CustomDropdown
                       value={formTipeHari}
-                      onChange={(val: string) => setFormTipeHari(val)}
+                      onChange={(val: string) =>
+                        setFormTipeHari(val as "libur" | "masuk_khusus")
+                      }
                       options={DAMPAK_PRESENSI_OPTIONS}
                       placeholder="Pilih dampak presensi..."
                     />
@@ -1026,8 +1032,8 @@ export default function ModalKalenderLibur({
                 )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              {/* Action Buttons (Sticky di bagian bawah form) */}
+              <div className="sticky bottom-0 bg-white/95 backdrop-blur-xs py-3 px-1 border-t border-slate-100 flex items-center justify-end gap-3 z-10">
                 <button
                   type="button"
                   onClick={() => {
@@ -1043,6 +1049,9 @@ export default function ModalKalenderLibur({
                   disabled={submitting || uploadingSurat}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs sm:text-sm font-bold shadow-md shadow-purple-600/20 transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
                 >
+                  {submitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
                   <span>
                     {editingId
                       ? "Simpan Perubahan Jadwal"
@@ -1053,48 +1062,55 @@ export default function ModalKalenderLibur({
             </form>
           )}
         </div>
-      </div>
+      </Sheet>
 
       {/* Modal Konfirmasi Hapus */}
-      {deletingItem && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
-              <Trash2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-base text-slate-900">
-                Hapus Agenda Libur?
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Apakah Anda yakin ingin menghapus{" "}
-                <strong>"{deletingItem.nama}"</strong> dari kalender sekolah?
-              </p>
-            </div>
-            <div className="flex items-center justify-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingItem(null)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex-1"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex-1"
-              >
-                Ya, Hapus
-              </button>
-            </div>
+      <Sheet
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        labelledBy="delete-holiday-title"
+        size="sm"
+      >
+        <div className="p-6 text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100">
+            <Trash2 className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 id="delete-holiday-title" className="font-bold text-base text-slate-900">
+              Hapus Agenda Libur?
+            </h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Apakah Anda yakin ingin menghapus{" "}
+              <strong>"{deletingItem?.nama}"</strong> dari kalender sekolah?
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setDeletingItem(null)}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer flex-1"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-all cursor-pointer flex-1"
+            >
+              Ya, Hapus
+            </button>
           </div>
         </div>
-      )}
+      </Sheet>
 
       {/* Modal Quick Override Today */}
-      {showOverrideModal && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl border border-slate-100 animate-in zoom-in-95">
+      <Sheet
+        isOpen={showOverrideModal}
+        onClose={() => setShowOverrideModal(false)}
+        labelledBy="override-title"
+        size="md"
+      >
+        <div className="p-5 sm:p-6 space-y-4">
             <div className="flex items-center gap-3">
               <div
                 className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
@@ -1174,8 +1190,7 @@ export default function ModalKalenderLibur({
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Sheet>
 
       {/* Modal Preview Surat Edaran Resmi */}
       <ModalPreviewSuratEdaran
@@ -1183,6 +1198,6 @@ export default function ModalKalenderLibur({
         onClose={() => setPreviewSuratModal(null)}
         suratData={previewSuratModal}
       />
-    </div>
+    </>
   );
 }

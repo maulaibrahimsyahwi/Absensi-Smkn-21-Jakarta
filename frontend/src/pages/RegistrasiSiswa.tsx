@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useDeferredValue, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { createPortal } from "react-dom";
 import {
   ArrowLeft,
   Camera,
@@ -18,6 +17,8 @@ import ResetSiswaModals from "../components/registrasi/ResetSiswaModals";
 import ModalImportDapodik from "../components/registrasi/ModalImportDapodik";
 import KenaikanKelasModal from "../components/registrasi/KenaikanKelasModal";
 import MedicalExemptionModal from "../components/registrasi/MedicalExemptionModal";
+import SegmentedControl from "../components/ui/SegmentedControl";
+import ConfirmSheet from "../components/ui/ConfirmSheet";
 import ToastNotification, { ToastNotificationProps } from "../components/common/ToastNotification";
 import { useRealtimeSubscription } from "../services/realtimeService";
 import { downloadDapodikTemplate } from "../utils/dapodikUtils";
@@ -48,12 +49,19 @@ export default function RegistrasiSiswa() {
   const [showCancelReRecordModal, setShowCancelReRecordModal] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const deferredSearch = useDeferredValue(searchTerm);
   const [jurusanFilter] = useState<string>("ALL");
   const [kelasFilter, setKelasFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL"); // "ALL" | "Aktif" | "Alumni"
+  const [view, setView] = useState<"daftar" | "tambah">("daftar");
 
   // Multi-select & Bulk Action state
   const [selectedIds, setSelectedIds] = useState<(number | string)[]>([]);
+
+  // Bersihkan seleksi siswa saat filter berubah agar tidak ada siswa tersembunyi yang terhapus/terluluskan secara tidak sengaja
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [statusFilter, kelasFilter, searchTerm]);
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [luluskanModalData, setLuluskanModalData] = useState<{
     isOpen: boolean;
@@ -70,7 +78,7 @@ export default function RegistrasiSiswa() {
   // Form state
   const [nis, setNis] = useState<string>("");
   const [nama, setNama] = useState<string>("");
-  const [kelas, setKelas] = useState<string>("X PPLG 1");
+  const [kelas, setKelas] = useState<string>("");
   const [jenisKelamin, setJenisKelamin] = useState<string>("Laki-laki");
   const [samples, setSamples] = useState<string[]>([]); // Array of base64 images (1 to 3)
   const [currentSlot, setCurrentSlot] = useState<number>(0); // 0, 1, or 2
@@ -191,7 +199,7 @@ export default function RegistrasiSiswa() {
       });
       return;
     }
-    if (!/^[a-zA-Z\s\.\',\-]+$/.test(cleanNama)) {
+    if (!/^[\p{L}\s\.'’‘,\-]+$/u.test(cleanNama)) {
       setNotification({
         type: "error",
         message:
@@ -627,10 +635,12 @@ export default function RegistrasiSiswa() {
   ).length;
 
   const filteredSiswa = siswaList.filter((s) => {
+    const q = deferredSearch.toLowerCase().trim();
     const matchSearch =
-      s.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.nis?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.kelas?.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      s.nama?.toLowerCase().includes(q) ||
+      s.nis?.toLowerCase().includes(q) ||
+      s.kelas?.toLowerCase().includes(q);
     const matchJurusan =
       jurusanFilter === "ALL" ||
       (s.kelas && s.kelas.toUpperCase().includes(jurusanFilter));
@@ -643,18 +653,18 @@ export default function RegistrasiSiswa() {
   const uniqueKelas = Array.from(new Set(siswaList.map((s) => s.kelas))).filter(
     Boolean,
   ) as string[];
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allFilteredIds = filteredSiswa.map((s) => s.id);
   const isAllSelected =
     filteredSiswa.length > 0 &&
-    allFilteredIds.every((id) => selectedIds.includes(id));
+    allFilteredIds.every((id) => selectedSet.has(id));
   const isSomeSelected =
-    filteredSiswa.some((s) => selectedIds.includes(s.id)) && !isAllSelected;
+    filteredSiswa.some((s) => selectedSet.has(s.id)) && !isAllSelected;
 
   const toggleSelectAll = () => {
     if (isAllSelected) {
-      setSelectedIds((prev) =>
-        prev.filter((id) => !allFilteredIds.includes(id as number)),
-      );
+      const filterSet = new Set<number | string>(allFilteredIds);
+      setSelectedIds((prev) => prev.filter((id) => !filterSet.has(id)));
     } else {
       setSelectedIds((prev) =>
         Array.from(new Set([...prev, ...allFilteredIds])),
@@ -663,9 +673,15 @@ export default function RegistrasiSiswa() {
   };
 
   const toggleSelectSiswa = (id: number | string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return Array.from(next);
+    });
   };
 
   return (
@@ -720,10 +736,28 @@ export default function RegistrasiSiswa() {
         </div>
       </div>
 
+      {/* Mobile Tab Switcher */}
+      <div className="mb-4 lg:hidden">
+        <SegmentedControl
+          value={view}
+          onChange={(val) => setView(val as "daftar" | "tambah")}
+          options={[
+            {
+              value: "daftar",
+              label: `Daftar Siswa (${filteredSiswa.length})`,
+            },
+            {
+              value: "tambah",
+              label: reRecordingSiswa ? "Rekam Ulang" : "Tambah Siswa",
+            },
+          ]}
+        />
+      </div>
+
       {/* Main Grid: Form Left, Student Table Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-3">
         {/* Kolom Kiri: Form & Kamera Perekam */}
-        <div className="lg:col-span-5">
+        <div className={`${view === "tambah" ? "block" : "hidden"} lg:col-span-5 lg:block`}>
           <FormTambahSiswa
             nis={nis}
             setNis={setNis}
@@ -748,55 +782,60 @@ export default function RegistrasiSiswa() {
               setNama("");
               setJenisKelamin("Laki-laki");
               setSamples([]);
+              setView("daftar");
             }}
             siswaList={siswaList}
           />
         </div>
 
         {/* Kolom Kanan: Tabel Siswa & Aksi */}
-        <TabelDaftarSiswa
-          siswaList={siswaList}
-          filteredSiswa={filteredSiswa}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          kelasFilter={kelasFilter}
-          setKelasFilter={setKelasFilter}
-          uniqueKelas={uniqueKelas}
-          selectedIds={selectedIds}
-          isAllSelected={isAllSelected}
-          isSomeSelected={isSomeSelected}
-          toggleSelectAll={toggleSelectAll}
-          toggleSelectSiswa={toggleSelectSiswa}
-          totalAktif={totalAktif}
-          totalAlumni={totalAlumni}
-          totalKelasXIIAktif={totalKelasXIIAktif}
-          onLuluskanTingkatXII={handleLuluskanTingkatXII}
-          onKenaikanKelasMassal={() => setIsKenaikanModalOpen(true)}
-          onMedicalExemption={(s) => setMedicalExemptionSiswa(s)}
-          onLuluskanSelected={handleLuluskanSelected}
-          onLuluskanSingle={handleLuluskanSingle}
-          onAktifkanSingle={handleAktifkanSingle}
-          onReRecord={(s) => {
-            setReRecordingSiswa(s);
-            setNis(s.nis);
-            setNama(s.nama);
-            setKelas(s.kelas);
-            setJenisKelamin(s.jenis_kelamin || "Laki-laki");
-            setSamples([]);
-            setCurrentSlot(0);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          }}
-          onEdit={(s) => setEditingSiswa(s)}
-          onDelete={(s) => setDeletingSiswa(s)}
-          onResetPassword={(s) => setResettingPasswordSiswa(s)}
-          onResetFace={(s) => setResettingFaceSiswa(s)}
-          onResetSignature={(s) => setResettingSignatureSiswa(s)}
-          onReset2fa={(s) => setResetting2faSiswa(s)}
-          onBulkDelete={() => setBulkDeleting(true)}
-          loading={loadingList}
-        />
+        <div className={`${view === "daftar" ? "block" : "hidden"} lg:col-span-7 lg:block`}>
+          <TabelDaftarSiswa
+            siswaList={siswaList}
+            filteredSiswa={filteredSiswa}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
+            kelasFilter={kelasFilter}
+            setKelasFilter={setKelasFilter}
+            uniqueKelas={uniqueKelas}
+            selectedIds={selectedIds}
+            isAllSelected={isAllSelected}
+            isSomeSelected={isSomeSelected}
+            toggleSelectAll={toggleSelectAll}
+            toggleSelectSiswa={toggleSelectSiswa}
+            totalAktif={totalAktif}
+            totalAlumni={totalAlumni}
+            totalKelasXIIAktif={totalKelasXIIAktif}
+            onLuluskanTingkatXII={handleLuluskanTingkatXII}
+            onKenaikanKelasMassal={() => setIsKenaikanModalOpen(true)}
+            onMedicalExemption={(s) => setMedicalExemptionSiswa(s)}
+            onLuluskanSelected={handleLuluskanSelected}
+            onLuluskanSingle={handleLuluskanSingle}
+            onAktifkanSingle={handleAktifkanSingle}
+            onReRecord={(s) => {
+              setReRecordingSiswa(s);
+              setNis(s.nis);
+              setNama(s.nama);
+              setKelas(s.kelas);
+              setJenisKelamin(s.jenis_kelamin || "Laki-laki");
+              setSamples([]);
+              setCurrentSlot(0);
+              setView("tambah");
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            onEdit={(s) => setEditingSiswa(s)}
+            onDelete={(s) => setDeletingSiswa(s)}
+            onResetPassword={(s) => setResettingPasswordSiswa(s)}
+            onResetFace={(s) => setResettingFaceSiswa(s)}
+            onResetSignature={(s) => setResettingSignatureSiswa(s)}
+            onReset2fa={(s) => setResetting2faSiswa(s)}
+            onBulkDelete={() => setBulkDeleting(true)}
+            onClearSelection={() => setSelectedIds([])}
+            loading={loadingList}
+          />
+        </div>
       </div>
 
       {/* Modal Luluskan Siswa (Tingkat XII / Terpilih / Satuan) */}
@@ -813,6 +852,7 @@ export default function RegistrasiSiswa() {
         type={luluskanModalData.type}
         targetSiswa={luluskanModalData.targetSiswa}
         selectedCount={selectedIds.length}
+        totalKelasXII={totalKelasXIIAktif}
         loading={actionLoading}
       />
 
@@ -855,56 +895,33 @@ export default function RegistrasiSiswa() {
       />
 
       {/* Modal Konfirmasi Batal Rekam Ulang Wajah */}
-      {showCancelReRecordModal &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm sm:max-w-md overflow-hidden p-6 space-y-4 animate-in zoom-in-95 duration-150">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mx-auto">
-                <Camera className="w-6 h-6" />
-              </div>
-              <div className="text-center">
-                <h4 className="text-base font-bold text-slate-900">
-                  Batalkan Rekam Ulang Wajah?
-                </h4>
-                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                  Anda sedang dalam proses merekam ulang wajah untuk siswa{" "}
-                  <strong className="text-slate-800">
-                    {reRecordingSiswa?.nama}
-                  </strong>{" "}
-                  ({reRecordingSiswa?.kelas}). Apakah Anda ingin tetap
-                  melanjutkan rekam foto wajah, atau batalkan tanpa mengubah
-                  foto wajah siswa?
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCancelReRecordModal(false)}
-                  className="w-full py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors border border-slate-200 cursor-pointer"
-                >
-                  Lanjutkan Rekam
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCancelReRecordModal(false);
-                    setReRecordingSiswa(null);
-                    setNis("");
-                    setNama("");
-                    setJenisKelamin("Laki-laki");
-                    setSamples([]);
-                    navigate("/portal-admin");
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md cursor-pointer transition-colors"
-                >
-                  Batalkan & Keluar
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+      <ConfirmSheet
+        isOpen={showCancelReRecordModal}
+        onClose={() => setShowCancelReRecordModal(false)}
+        onConfirm={() => {
+          setShowCancelReRecordModal(false);
+          setReRecordingSiswa(null);
+          setNis("");
+          setNama("");
+          setJenisKelamin("Laki-laki");
+          setSamples([]);
+          setView("daftar");
+          navigate("/portal-admin");
+        }}
+        title="Batalkan Rekam Ulang Wajah?"
+        confirmLabel="Batalkan & Keluar"
+        cancelLabel="Lanjutkan Rekam"
+        danger={true}
+      >
+        <p className="text-slate-700 text-sm leading-relaxed">
+          Anda sedang dalam proses merekam ulang wajah untuk siswa{" "}
+          <strong className="text-slate-900 font-semibold">
+            {reRecordingSiswa?.nama}
+          </strong>{" "}
+          ({reRecordingSiswa?.kelas}). Apakah Anda ingin tetap melanjutkan rekam foto
+          wajah, atau batalkan tanpa mengubah foto wajah siswa?
+        </p>
+      </ConfirmSheet>
 
       {/* Modal Import Data Siswa Dapodik */}
       <ModalImportDapodik
@@ -924,6 +941,7 @@ export default function RegistrasiSiswa() {
           fetchSiswa(true);
           setNotification({ type: "success", message: msg });
         }}
+        siswaList={siswaList}
       />
 
       {/* Modal Dispensasi Medis Biometrik Wajah */}

@@ -1,13 +1,8 @@
-import React, { useState, useMemo } from "react";
-import {
-  Inbox,
-  Clock,
-  BookOpen,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
+import React, { useMemo } from "react";
+import { Inbox, Clock, BookOpen } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
+import { useTableSort } from "../../../hooks/useTableSort";
+import SortableTh from "../../ui/SortableTh";
 
 export interface PerpustakaanItem {
   id?: number;
@@ -21,6 +16,8 @@ export interface PerpustakaanItem {
 interface PerpustakaanTabProps {
   filteredPerpus?: PerpustakaanItem[];
   paginatedPerpus?: PerpustakaanItem[];
+  startIndex?: number;
+  endIndex?: number;
   periodeMode?: "bulan" | "tahun" | string;
   namaBulanTerpilih?: string;
   selectedTahun?: number;
@@ -29,44 +26,34 @@ interface PerpustakaanTabProps {
 export default function PerpustakaanTab({
   filteredPerpus = [],
   paginatedPerpus = [],
+  startIndex,
+  endIndex,
   periodeMode,
   namaBulanTerpilih,
   selectedTahun,
 }: PerpustakaanTabProps) {
-  const [sortKey, setSortKey] = useState<string>("waktu");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection(key === "waktu" ? "desc" : "asc");
-    }
-  };
+  const { sorted, sortKey, sortDir, onSort } = useTableSort(
+    filteredPerpus,
+    "waktu",
+    "desc",
+    ["waktu"],
+  );
 
   const displayList = useMemo(() => {
-    const list = [...paginatedPerpus];
-    return list.sort((a, b) => {
-      const valA = (a as Record<string, unknown>)[sortKey] ?? "";
-      const valB = (b as Record<string, unknown>)[sortKey] ?? "";
-      if (typeof valA === "number" && typeof valB === "number") {
-        return sortDirection === "asc" ? valA - valB : valB - valA;
-      }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirection === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
-    });
-  }, [paginatedPerpus, sortKey, sortDirection]);
+    if (endIndex !== undefined) {
+      return sorted.slice(startIndex ?? 0, endIndex);
+    }
+    return paginatedPerpus.length > 0 ? paginatedPerpus : sorted;
+  }, [sorted, startIndex, endIndex, paginatedPerpus]);
+
+  const sortProps = { sortKey, sortDir, onSort };
 
   return (
     <div>
-      {/* 1. Mobile Cards View (< md) */}
-      <div className="md:hidden divide-y divide-slate-100">
+      {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+      <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 md:p-3 lg:hidden">
         {filteredPerpus.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 p-4">
+          <div className="col-span-2 py-12 text-center text-slate-400 p-4">
             <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
             <p className="font-semibold text-slate-600 text-sm">
               Tidak Ada Data Kunjungan Perpustakaan
@@ -88,7 +75,7 @@ export default function PerpustakaanTab({
             return (
               <div
                 key={item.id || index}
-                className="p-4 hover:bg-slate-50/60 transition-colors"
+                className="p-4 hover:bg-slate-50/60 transition-colors bg-white md:rounded-2xl md:border md:border-slate-200"
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
@@ -106,10 +93,19 @@ export default function PerpustakaanTab({
                       </span>
                     </div>
                   </div>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/80 shrink-0">
-                    <BookOpen className="w-3 h-3 text-emerald-600" />
-                    <span>{item.keperluan}</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-indigo-200 bg-indigo-50 text-indigo-700 shrink-0">
+                    <BookOpen className="w-3 h-3 text-indigo-600" />
+                    <span>Perpus</span>
                   </span>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-200/60 text-xs mb-2">
+                  <span className="text-slate-400 text-[11px] block mb-0.5">
+                    Keperluan
+                  </span>
+                  <p className="font-semibold text-slate-800">
+                    {item.keperluan}
+                  </p>
                 </div>
 
                 <div className="flex items-center text-slate-400 text-xs gap-1.5 pt-1.5 border-t border-slate-100">
@@ -124,83 +120,23 @@ export default function PerpustakaanTab({
         )}
       </div>
 
-      {/* 2. Desktop Table View (>= md) */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[580px]">
-          <thead>
-            <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th
-                onClick={() => handleSort("waktu")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Waktu Kunjungan"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Waktu Kunjungan</span>
-                  {sortKey === "waktu" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("nama")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Nama Siswa"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Nama Siswa</span>
-                  {sortKey === "nama" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("kelas")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Kelas"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Kelas</span>
-                  {sortKey === "kelas" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("keperluan")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Keperluan Kunjungan"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Keperluan Kunjungan</span>
-                  {sortKey === "keperluan" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-emerald-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
+      {/* 2. Desktop Table View (>= lg) */}
+      <div className="hidden max-h-[calc(100dvh-18rem)] overflow-auto lg:block">
+        <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[640px]">
+          <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226,232,240)]">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <SortableTh
+                label="Waktu Kunjungan"
+                field="waktu"
+                {...sortProps}
+              />
+              <SortableTh label="Nama Siswa" field="nama" {...sortProps} />
+              <SortableTh label="Kelas" field="kelas" {...sortProps} />
+              <SortableTh
+                label="Keperluan Kunjungan"
+                field="keperluan"
+                {...sortProps}
+              />
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -224,12 +160,16 @@ export default function PerpustakaanTab({
               </tr>
             ) : (
               displayList.map((item, index) => {
+                const jurInfo = getJurusanInfo(item.kelas) || {
+                  badge: "bg-slate-100 text-slate-700 border-slate-200",
+                  kode: item.kelas,
+                };
                 return (
                   <tr
                     key={item.id || index}
                     className="hover:bg-slate-50/70 transition-colors"
                   >
-                    <td className="py-4 px-6 text-slate-600 font-medium">
+                    <td className="py-4 px-6 text-slate-600 font-medium font-mono text-xs whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
                         <span>{item.waktu}</span>
@@ -243,12 +183,15 @@ export default function PerpustakaanTab({
                         <span className="font-semibold text-slate-800 text-xs">
                           {item.kelas}
                         </span>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
+                        >
+                          {jurInfo.kode}
+                        </span>
                       </div>
                     </td>
-                    <td className="py-4 px-6">
-                      <span className="font-semibold text-slate-900">
-                        {item.keperluan}
-                      </span>
+                    <td className="py-4 px-6 font-semibold text-slate-900">
+                      {item.keperluan}
                     </td>
                   </tr>
                 );

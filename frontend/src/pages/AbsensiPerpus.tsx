@@ -28,6 +28,15 @@ import useGeofence from "../hooks/useGeofence";
 import { liburService } from "../services/liburService";
 import ModalPreviewSuratEdaran from "../components/libur/ModalPreviewSuratEdaran";
 import type { HolidayStatusToday } from "../types/libur";
+import Sheet, {
+  SheetHeader,
+  SheetBody,
+  SheetFooter,
+} from "../components/ui/Sheet";
+import Button from "../components/ui/Button";
+import useWakeLock from "../hooks/useWakeLock";
+import { getDeviceId } from "../utils/deviceFingerprint";
+import { enqueueOfflineAttendance } from "../services/offlineQueue";
 
 interface KeperluanOption {
   id: string;
@@ -70,7 +79,7 @@ const KEPERLUAN_OPTIONS: KeperluanOption[] = [
 ];
 
 export default function AbsensiPerpus() {
-  const { isSiswa, isPiket, isAdmin } = useAuth();
+  const { user, isSiswa, isPiket, isAdmin } = useAuth();
   const backTarget = isPiket
     ? "/portal-piket"
     : isAdmin
@@ -80,16 +89,24 @@ export default function AbsensiPerpus() {
         : "/";
   const webcamRef = useRef<Webcam | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [result, setResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [showPopup, setShowPopup] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [keperluan, setKeperluan] = useState("Membaca/Belajar");
   const [customKeperluan, setCustomKeperluan] = useState("");
   const [currentTime, setCurrentTime] = useState("");
   const [countdown, setCountdown] = useState(3); // 3 detik
-  const [holidayStatus, setHolidayStatus] = useState<HolidayStatusToday | null>(null);
+  const [holidayStatus, setHolidayStatus] = useState<HolidayStatusToday | null>(
+    null,
+  );
   const [showSuratPreview, setShowSuratPreview] = useState(false);
 
+  const [camError, setCamError] = useState<string | null>(null);
+
+  useWakeLock();
   const { playSound } = useAudioFeedback();
 
   // Pengecekan Hari Libur & Status Operasional Sekolah
@@ -103,26 +120,6 @@ export default function AbsensiPerpus() {
       } catch (_e) {}
     };
     fetchHoliday();
-  }, []);
-
-  // WakeLock: Mencegah layar redup (auto-dim) atau sleep saat bersiap absen
-  useEffect(() => {
-    let wakeLock: any = null;
-    const requestWakeLock = async () => {
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLock = await (navigator as any).wakeLock.request("screen");
-        }
-      } catch (_err) {
-        // Abaikan jika ditolak peramban
-      }
-    };
-    requestWakeLock();
-    return () => {
-      if (wakeLock) {
-        wakeLock.release().catch(() => {});
-      }
-    };
   }, []);
 
   // GPS Geofence Hook (SMKN 21)
@@ -158,14 +155,35 @@ export default function AbsensiPerpus() {
   const isPerpusClosed = isHoliday || (isRawWeekend && !isSpecialSchoolDay);
 
   // Liveness Detection Adaptif & Anti-DDoS Polling (~600ms sequential loop via useFaceScanner hook)
-  const { isFaceDetected, eyeState, isLiveVerified, resetLiveness } =
-    useLivenessDetector({
-      webcamRef,
-      isActive:
-        !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
-      onLiveVerified: () => setCountdown(3),
-      pollIntervalMs: 600,
-    });
+  const verifiedTokenRef = useRef<string | null>(null);
+  const {
+    isFaceDetected,
+    eyeState,
+    isLiveVerified,
+    livenessToken,
+    resetLiveness,
+  } = useLivenessDetector({
+    webcamRef,
+    isActive:
+      !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
+    onLiveVerified: (token) => {
+      if (token) verifiedTokenRef.current = token;
+      setCountdown(3);
+    },
+    pollIntervalMs: 600,
+  });
+
+  // Auto-close popup setelah 30 detik tidak ada aktivitas agar kiosk tidak terblokir
+  useEffect(() => {
+    if (!showPopup) return;
+    const timer = setTimeout(() => {
+      setShowPopup(false);
+      setCapturedImage(null);
+      setCountdown(3);
+      resetLiveness();
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [showPopup, resetLiveness]);
 
   const captureFace = useCallback(() => {
     if (isPerpusClosed) return;
@@ -185,6 +203,9 @@ export default function AbsensiPerpus() {
     }
   }, [webcamRef, isGpsValid, isPerpusClosed]);
 
+  const captureFaceRef = useRef<() => void>(() => {});
+  captureFaceRef.current = captureFace;
+
   // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI & GPS VALID (3 Detik)
   useEffect(() => {
     if (
@@ -200,7 +221,7 @@ export default function AbsensiPerpus() {
     }
 
     if (countdown <= 0) {
-      captureFace();
+      captureFaceRef.current();
       return;
     }
 
@@ -217,7 +238,6 @@ export default function AbsensiPerpus() {
     showPopup,
     result,
     isGpsValid,
-    captureFace,
   ]);
 
   const submitKunjungan = async (e?: React.FormEvent) => {
@@ -242,6 +262,9 @@ export default function AbsensiPerpus() {
         distance: geoState.distanceMeters,
         simulated: geoState.simulated,
         is_mock: geoState.isMock || false,
+        liveness_token: verifiedTokenRef.current || livenessToken,
+        device_id: getDeviceId(),
+        client_timestamp: Date.now(),
       });
       playSound("success");
       setResult({ success: true, message: response.data.message });
@@ -254,6 +277,38 @@ export default function AbsensiPerpus() {
       }, 4000);
     } catch (err: any) {
       playSound("error");
+      const isNetworkOffline =
+        !navigator.onLine || err.code === "ERR_NETWORK" || !err.response;
+      if (isNetworkOffline && capturedImage) {
+        const saved = await enqueueOfflineAttendance({
+          mode: isSiswa ? "mandiri" : "kiosk",
+          image: capturedImage,
+          latitude: geoState.latitude,
+          longitude: geoState.longitude,
+          accuracy: geoState.accuracy,
+          expected_siswa_id: isSiswa ? user?.id ?? null : null,
+          device_id: getDeviceId(),
+        });
+        if (!saved) {
+          setResult({
+            success: false,
+            message:
+              "Penyimpanan perangkat penuh atau tidak tersedia. Presensi belum tersimpan, hubungi staf perpustakaan.",
+          });
+          return;
+        }
+        setResult({
+          success: true,
+          message:
+            "Jaringan Terputus: Bukti foto kunjungan perpustakaan tersimpan di Buffer Darurat. Akan otomatis disinkronkan saat online.",
+        });
+        setTimeout(() => {
+          setResult(null);
+          setCountdown(3);
+          resetLiveness();
+        }, 3500);
+        return;
+      }
       setResult({
         success: false,
         message:
@@ -359,32 +414,72 @@ export default function AbsensiPerpus() {
   }
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none">
-      {/* 1. Kamera Fullscreen Memenuhi Layar */}
-      <Webcam
-        audio={false}
-        ref={webcamRef}
-        screenshotFormat="image/jpeg"
-        videoConstraints={{
-          facingMode: "user",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        }}
-        className="w-full h-full object-cover"
-      />
+    <div className="fixed inset-0 h-dvh w-full bg-black overflow-hidden select-none">
+      {camError ? (
+        <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center p-6 text-center z-30">
+          <div className="w-16 h-16 rounded-3xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mb-4">
+            <Camera className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-bold text-white mb-2">
+            Kamera Tidak Dapat Diakses
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
+            {camError}. Pastikan izin kamera telah diberikan pada browser atau
+            coba muat ulang halaman.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg transition cursor-pointer"
+            >
+              Muat Ulang Halaman
+            </button>
+            <Link
+              to={backTarget}
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 font-bold text-xs transition"
+            >
+              Kembali
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* 1. Kamera Fullscreen Memenuhi Layar */}
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/jpeg"
+            onUserMediaError={(err) =>
+              setCamError(
+                typeof err === "string"
+                  ? err
+                  : (err as any)?.message ||
+                      "Akses kamera ditolak atau perangkat kamera tidak ditemukan.",
+              )
+            }
+            videoConstraints={{
+              facingMode: "user",
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            }}
+            className="w-full h-full object-cover"
+          />
 
-      {/* 2. Garis Laser Pemindai Animasi */}
-      <div className="scanner-line"></div>
+          {/* 2. Garis Laser Pemindai Animasi */}
+          <div className="scanner-line"></div>
 
-      {/* 3. Presisi Siluet Kontur Wajah Manusia Emerald */}
-      <FaceSilhouetteGuide
-        isDetected={isFaceDetected}
-        theme="emerald"
-        countdown={countdown}
-        loading={loading}
-        isLiveVerified={isLiveVerified}
-        eyeState={eyeState}
-      />
+          {/* 3. Presisi Siluet Kontur Wajah Manusia Emerald */}
+          <FaceSilhouetteGuide
+            isDetected={isFaceDetected}
+            theme="emerald"
+            countdown={countdown}
+            loading={loading}
+            isLiveVerified={isLiveVerified}
+            eyeState={eyeState}
+          />
+        </>
+      )}
 
       {/* 4. Top Floating Bar */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
@@ -596,8 +691,8 @@ export default function AbsensiPerpus() {
         </div>
       )}
 
-      {/* 8. Floating Bottom Button: Pindai Langsung */}
-      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center z-20 pointer-events-auto px-4">
+      {/* 8. Floating Bottom Button: Pindai Langsung & Stepper */}
+      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex flex-col items-center gap-2.5 z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
         <button
           onClick={() => {
             if (!isLiveVerified) return;
@@ -622,157 +717,123 @@ export default function AbsensiPerpus() {
         </button>
       </div>
 
-      {/* 8. Interactive Modal: Pilih / Tulis Keperluan Kunjungan */}
-      {showPopup && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl border border-slate-200 w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="bg-slate-50 border-b border-slate-200/80 px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                    Keperluan Kunjungan
-                  </h2>
-                  <p className="text-[11px] sm:text-xs text-slate-500">
-                    Pilih atau tuliskan tujuan Anda
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPopup(false);
-                  setCountdown(3);
-                  resetLiveness();
-                }}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <form
-              onSubmit={submitKunjungan}
-              className="p-4 sm:p-6 overflow-y-auto flex-1"
-            >
-              {/* Snapshot Thumbnail */}
-              {capturedImage && (
-                <div className="mb-4 flex items-center gap-3 p-2.5 bg-slate-50 rounded-2xl border border-slate-200">
-                  <img
-                    src={capturedImage}
-                    alt="Wajah Terpindai"
-                    className="w-12 h-12 rounded-xl object-cover border border-slate-300"
-                  />
-                  <div>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                      <Camera className="w-3 h-3" /> Foto Terambil
-                    </span>
-                    <p className="text-xs text-slate-600 mt-1">
-                      Pilih atau ketik keperluan di bawah untuk verifikasi.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Option Selector Cards */}
-              <div className="space-y-2 mb-4">
-                {KEPERLUAN_OPTIONS.map((item) => {
-                  const Icon = item.icon;
-                  const isSelected = keperluan === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setKeperluan(item.id)}
-                      className={`w-full p-2.5 rounded-xl border text-left transition-all duration-150 flex items-center gap-3 cursor-pointer ${
+      {/* 9. Sheet: Pilih / Tulis Keperluan Kunjungan */}
+      <Sheet
+        isOpen={showPopup}
+        onClose={() => {
+          setShowPopup(false);
+          setCapturedImage(null);
+          setCountdown(3);
+          resetLiveness();
+        }}
+        size="sm"
+      >
+        <SheetHeader
+          title="Keperluan Kunjungan"
+          subtitle="Pilih atau tuliskan tujuan Anda (Auto-close 30 detik)"
+          icon={<BookOpen className="w-5 h-5 text-emerald-600" />}
+          onClose={() => {
+            setShowPopup(false);
+            setCapturedImage(null);
+            setCountdown(3);
+            resetLiveness();
+          }}
+        />
+        <form onSubmit={submitKunjungan}>
+          <SheetBody className="space-y-3">
+            {/* Option Selector Cards */}
+            <div className="space-y-2">
+              {KEPERLUAN_OPTIONS.map((item) => {
+                const Icon = item.icon;
+                const isSelected = keperluan === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setKeperluan(item.id)}
+                    className={`w-full p-2.5 rounded-xl border text-left transition-all duration-150 flex items-center gap-3 cursor-pointer ${
+                      isSelected
+                        ? "border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white"
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
                         isSelected
-                          ? "border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-100 text-slate-600"
                       }`}
                     >
-                      <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                          isSelected
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p
-                            className={`text-xs sm:text-sm font-semibold ${
-                              isSelected ? "text-emerald-950" : "text-slate-800"
-                            }`}
-                          >
-                            {item.label}
-                          </p>
-                          {isSelected && (
-                            <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-500 truncate">
-                          {item.desc}
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p
+                          className={`text-xs sm:text-sm font-semibold ${
+                            isSelected ? "text-emerald-950" : "text-slate-800"
+                          }`}
+                        >
+                          {item.label}
                         </p>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      <p className="text-[11px] text-slate-500 truncate">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-              {/* Kolom Tulis Keperluan Khusus / Lainnya */}
-              {keperluan === "Lainnya" && (
-                <div className="mb-4 animate-in fade-in duration-150">
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Tuliskan Keperluan Anda
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    placeholder="Contoh: Mengambil sertifikat, konsultasi skripsi..."
-                    value={customKeperluan}
-                    onChange={(e) => setCustomKeperluan(e.target.value)}
-                    className="w-full px-3 py-2 text-xs sm:text-sm border border-emerald-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-emerald-50/30 text-slate-800 placeholder:text-slate-400"
-                  />
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-3 border-t border-slate-100 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPopup(false);
-                    setCountdown(3);
-                    resetLiveness();
-                  }}
-                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-semibold rounded-xl text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    (keperluan === "Lainnya" && !customKeperluan.trim())
-                  }
-                  className="flex-1 py-2.5 px-4 text-xs sm:text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : null}
-                  <span>Konfirmasi & Simpan</span>
-                </button>
+            {/* Kolom Tulis Keperluan Khusus / Lainnya */}
+            {keperluan === "Lainnya" && (
+              <div className="animate-in fade-in duration-150 pt-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Tuliskan Keperluan Anda
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Contoh: Mengambil sertifikat, konsultasi..."
+                  value={customKeperluan}
+                  onChange={(e) => setCustomKeperluan(e.target.value)}
+                  className="w-full px-3 py-2 text-xs sm:text-sm border border-emerald-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 bg-emerald-50/30 text-slate-800 placeholder:text-slate-400"
+                />
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            )}
+          </SheetBody>
+          <SheetFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setShowPopup(false);
+                setCapturedImage(null);
+                setCountdown(3);
+                resetLiveness();
+              }}
+              className="w-full sm:w-auto"
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={
+                loading || (keperluan === "Lainnya" && !customKeperluan.trim())
+              }
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700"
+            >
+              {loading && <Loader2 className="w-4 h-4 animate-spin mr-1.5" />}
+              <span>Konfirmasi & Simpan</span>
+            </Button>
+          </SheetFooter>
+        </form>
+      </Sheet>
     </div>
   );
 }

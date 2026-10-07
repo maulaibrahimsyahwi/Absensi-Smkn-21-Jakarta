@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-} from "lucide-react";
+import React, { useState, useRef, useMemo, useId } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import Sheet, { SheetHeader, SheetBody } from "./ui/Sheet";
+import FloatingPanel from "./ui/FloatingPanel";
+import { todayWib } from "../utils/date";
 
 export const NAMA_BULAN = [
   "Januari",
@@ -20,7 +20,15 @@ export const NAMA_BULAN = [
   "Desember",
 ];
 
-export const NAMA_HARI_SINGKAT = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
+export const NAMA_HARI_SINGKAT = [
+  "Sen",
+  "Sel",
+  "Rab",
+  "Kam",
+  "Jum",
+  "Sab",
+  "Min",
+];
 
 export const NAMA_HARI_LENGKAP = [
   "Minggu",
@@ -35,7 +43,10 @@ export const NAMA_HARI_LENGKAP = [
 /**
  * Format string "YYYY-MM-DD" menjadi tampilan tanggal bahasa Indonesia
  */
-export function formatTanggalIndo(ymdStr?: string | null, includeDayName = true): string {
+export function formatTanggalIndo(
+  ymdStr?: string | null,
+  includeDayName = true,
+): string {
   if (!ymdStr) return "";
   try {
     const [year, month, day] = ymdStr.split("-").map(Number);
@@ -76,8 +87,12 @@ export default function CustomDatePicker({
   align = "left",
   size = "md",
 }: CustomDatePickerProps) {
+  const isMobile = useMediaQuery("(max-width: 639px)");
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  const todayStr = todayWib();
 
   // Parse tanggal saat ini untuk inisialisasi view kalender
   const initialDate = useMemo(() => {
@@ -90,130 +105,36 @@ export default function CustomDatePicker({
 
   const [viewYear, setViewYear] = useState<number>(initialDate.getFullYear());
   const [viewMonth, setViewMonth] = useState<number>(initialDate.getMonth()); // 0 - 11
-  const [showMonthYearPicker, setShowMonthYearPicker] = useState<boolean>(false);
-  const [openUpward, setOpenUpward] = useState<boolean>(false);
-  const [horizontalPlacement, setHorizontalPlacement] = useState<"left" | "right">(align);
+  const [showMonthYearPicker, setShowMonthYearPicker] =
+    useState<boolean>(false);
 
-  // Auto detect placement
-  useEffect(() => {
-    if (isOpen && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      setOpenUpward(spaceBelow < 380 && rect.top > spaceBelow);
-
-      if (align === "right" && rect.right < 340) {
-        setHorizontalPlacement("left");
-      } else if (align === "left" && rect.left + 340 > window.innerWidth) {
-        setHorizontalPlacement("right");
-      } else {
-        setHorizontalPlacement(align);
-      }
-    }
-  }, [isOpen, align]);
-
-  // Sinkronkan view kalender saat nilai value berubah
-  useEffect(() => {
-    if (value) {
-      const [y, m] = value.split("-").map(Number);
-      if (y && m) {
-        setViewYear(y);
-        setViewMonth(m - 1);
-      }
-    }
-  }, [value]);
-
-  // Tutup dropdown saat klik di luar
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-        setShowMonthYearPicker(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isOpen]);
-
-  // Tutup dengan tombol Escape
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && isOpen) {
-        setIsOpen(false);
-        setShowMonthYearPicker(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isOpen]);
-
-  const formatYMD = (y: number, m: number, d: number): string => {
-    return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const close = () => {
+    setIsOpen(false);
+    setShowMonthYearPicker(false);
   };
 
-  const todayYMD = useMemo(() => {
-    const t = new Date();
-    return formatYMD(t.getFullYear(), t.getMonth(), t.getDate());
-  }, []);
+  const formatYMD = (
+    year: number,
+    monthZeroIdx: number,
+    day: number,
+  ): string => {
+    const mm = String(monthZeroIdx + 1).padStart(2, "0");
+    const dd = String(day).padStart(2, "0");
+    return `${year}-${mm}-${dd}`;
+  };
 
-  const calendarDays = useMemo(() => {
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Minggu, 1 = Senin
-    const mondayOffset = (firstDayOfWeek + 6) % 7; // 0 = Senin, ..., 6 = Minggu
-
-    const prevMonthDaysCount = new Date(viewYear, viewMonth, 0).getDate();
-    const days: Array<{ day: number; month: number; year: number; ymd: string; isCurrentMonth: boolean }> = [];
-
-    // Hari dari bulan sebelumnya (overflow kiri)
-    for (let i = mondayOffset - 1; i >= 0; i--) {
-      const d = prevMonthDaysCount - i;
-      const prevMonth = viewMonth === 0 ? 11 : viewMonth - 1;
-      const prevYear = viewMonth === 0 ? viewYear - 1 : viewYear;
-      const ymd = formatYMD(prevYear, prevMonth, d);
-      days.push({
-        day: d,
-        month: prevMonth,
-        year: prevYear,
-        ymd,
-        isCurrentMonth: false,
-      });
+  const isDateDisabled = (ymd: string): boolean => {
+    if (minDate && ymd < minDate) return true;
+    if (maxDate && ymd > maxDate) return true;
+    if (disableWeekends) {
+      const [y, m, d] = ymd.split("-").map(Number);
+      const dayOfWeek = new Date(y, m - 1, d).getDay(); // 0: Min, 6: Sab
+      if (dayOfWeek === 0 || dayOfWeek === 6) return true;
     }
+    return false;
+  };
 
-    // Hari dari bulan ini
-    for (let d = 1; d <= daysInMonth; d++) {
-      const ymd = formatYMD(viewYear, viewMonth, d);
-      days.push({
-        day: d,
-        month: viewMonth,
-        year: viewYear,
-        ymd,
-        isCurrentMonth: true,
-      });
-    }
-
-    // Hari dari bulan berikutnya (overflow kanan untuk melengkapi baris)
-    const totalSlots = Math.ceil(days.length / 7) * 7;
-    const remainingSlots = totalSlots - days.length;
-    for (let d = 1; d <= remainingSlots; d++) {
-      const nextMonth = viewMonth === 11 ? 0 : viewMonth + 1;
-      const nextYear = viewMonth === 11 ? viewYear + 1 : viewYear;
-      const ymd = formatYMD(nextYear, nextMonth, d);
-      days.push({
-        day: d,
-        month: nextMonth,
-        year: nextYear,
-        ymd,
-        isCurrentMonth: false,
-      });
-    }
-
-    return days;
-  }, [viewYear, viewMonth]);
-
+  // Navigasi bulan
   const handlePrevMonth = () => {
     if (viewMonth === 0) {
       setViewMonth(11);
@@ -232,22 +153,10 @@ export default function CustomDatePicker({
     }
   };
 
-  const isDateDisabled = (ymd: string): boolean => {
-    if (minDate && ymd < minDate) return true;
-    if (maxDate && ymd > maxDate) return true;
-    if (disableWeekends) {
-      const [y, m, d] = ymd.split("-").map(Number);
-      const dayOfWeek = new Date(y, m - 1, d).getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) return true;
-    }
-    return false;
-  };
-
   const handleSelectDate = (ymd: string) => {
     if (isDateDisabled(ymd)) return;
     onChange(ymd);
-    setIsOpen(false);
-    setShowMonthYearPicker(false);
+    close();
   };
 
   const handleQuickSelect = (daysOffset: number) => {
@@ -260,8 +169,7 @@ export default function CustomDatePicker({
     );
     if (!isDateDisabled(ymd)) {
       onChange(ymd);
-      setIsOpen(false);
-      setShowMonthYearPicker(false);
+      close();
     }
   };
 
@@ -274,6 +182,65 @@ export default function CustomDatePicker({
     return list;
   }, []);
 
+  // Grid Hari
+  const calendarDays = useMemo(() => {
+    const firstDayOfMonth = new Date(viewYear, viewMonth, 1);
+    let startDayOfWeek = firstDayOfMonth.getDay() - 1; // 0 = Senin, 6 = Minggu
+    if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+    const daysInCurrentMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+
+    const days: Array<{
+      day: number;
+      ymd: string;
+      isCurrentMonth: boolean;
+      isPrevMonth: boolean;
+      isNextMonth: boolean;
+    }> = [];
+
+    // Hari bulan sebelumnya
+    for (let i = startDayOfWeek - 1; i >= 0; i--) {
+      const d = daysInPrevMonth - i;
+      const prevM = viewMonth === 0 ? 11 : viewMonth - 1;
+      const prevY = viewMonth === 0 ? viewYear - 1 : viewYear;
+      days.push({
+        day: d,
+        ymd: formatYMD(prevY, prevM, d),
+        isCurrentMonth: false,
+        isPrevMonth: true,
+        isNextMonth: false,
+      });
+    }
+
+    // Hari bulan ini
+    for (let d = 1; d <= daysInCurrentMonth; d++) {
+      days.push({
+        day: d,
+        ymd: formatYMD(viewYear, viewMonth, d),
+        isCurrentMonth: true,
+        isPrevMonth: false,
+        isNextMonth: false,
+      });
+    }
+
+    // Hari bulan berikutnya hingga kelipatan 7
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let d = 1; d <= remaining; d++) {
+      const nextM = viewMonth === 11 ? 0 : viewMonth + 1;
+      const nextY = viewMonth === 11 ? viewYear + 1 : viewYear;
+      days.push({
+        day: d,
+        ymd: formatYMD(nextY, nextM, d),
+        isCurrentMonth: false,
+        isPrevMonth: false,
+        isNextMonth: true,
+      });
+    }
+
+    return days;
+  }, [viewYear, viewMonth]);
+
   const sizeClasses =
     {
       sm: "px-3 py-1.5 text-xs rounded-xl",
@@ -281,10 +248,162 @@ export default function CustomDatePicker({
       lg: "px-4 py-3 text-sm font-semibold rounded-xl",
     }[size] || "px-3.5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl";
 
+  const calendarBody = (
+    <div className="space-y-3.5">
+      {/* Header Kalender: Bulan, Tahun & Navigasi */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <button
+          type="button"
+          onClick={() => setShowMonthYearPicker((prev) => !prev)}
+          className="flex min-h-10 items-center gap-1.5 px-3 py-1 rounded-xl text-xs sm:text-sm font-bold text-slate-800 hover:text-blue-600 hover:bg-slate-100 transition-colors cursor-pointer"
+        >
+          <span>
+            {NAMA_BULAN[viewMonth]} {viewYear}
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform ${
+              showMonthYearPicker ? "rotate-180 text-blue-600" : ""
+            }`}
+          />
+        </button>
+
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handlePrevMonth}
+            className="grid h-11 w-11 sm:h-9 sm:w-9 place-items-center rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Bulan Sebelumnya"
+            aria-label="Bulan Sebelumnya"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextMonth}
+            className="grid h-11 w-11 sm:h-9 sm:w-9 place-items-center rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+            title="Bulan Berikutnya"
+            aria-label="Bulan Berikutnya"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Month & Year Picker Overlay */}
+      {showMonthYearPicker ? (
+        <div className="space-y-3 py-1 animate-in fade-in duration-100">
+          <div>
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+              Bulan
+            </span>
+            <div className="grid grid-cols-3 gap-1.5">
+              {NAMA_BULAN.map((bulanName, idx) => {
+                const isCurrent = viewMonth === idx;
+                return (
+                  <button
+                    key={bulanName}
+                    type="button"
+                    onClick={() => {
+                      setViewMonth(idx);
+                      setShowMonthYearPicker(false);
+                    }}
+                    className={`min-h-10 py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer truncate ${
+                      isCurrent
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    {bulanName.slice(0, 3)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+              Tahun
+            </span>
+            <div className="grid grid-cols-4 gap-1.5">
+              {availableYears.map((yr) => {
+                const isCurrent = viewYear === yr;
+                return (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => {
+                      setViewYear(yr);
+                      setShowMonthYearPicker(false);
+                    }}
+                    className={`min-h-10 py-1.5 px-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isCurrent
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    {yr}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Header Nama Hari */}
+          <div className="grid grid-cols-7 gap-1 text-center font-bold text-[11px] text-slate-400 uppercase tracking-wider">
+            {NAMA_HARI_SINGKAT.map((h, i) => (
+              <div
+                key={h}
+                className={i === 5 || i === 6 ? "text-rose-400" : ""}
+              >
+                {h}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid Hari Kalender */}
+          <div className="grid grid-cols-7 gap-1">
+            {calendarDays.map((item) => {
+              const isSelected = item.ymd === value;
+              const isToday = item.ymd === todayStr;
+              const isDisabled = isDateDisabled(item.ymd);
+
+              return (
+                <button
+                  key={item.ymd}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => handleSelectDate(item.ymd)}
+                  aria-label={formatTanggalIndo(item.ymd)}
+                  aria-pressed={isSelected}
+                  aria-current={isToday ? "date" : undefined}
+                  className={`press grid h-11 sm:h-9 place-items-center rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-600 text-white font-bold shadow-xs shadow-blue-500/30 scale-100 z-10"
+                      : isToday
+                        ? "border border-blue-500/80 text-blue-700 font-bold bg-blue-50/40"
+                        : !item.isCurrentMonth
+                          ? "text-slate-300 hover:text-slate-600"
+                          : "text-slate-700 hover:bg-slate-100"
+                  } ${isDisabled ? "text-slate-300 opacity-40 cursor-not-allowed hover:bg-transparent" : ""}`}
+                >
+                  <span>{item.day}</span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div
       ref={containerRef}
-      className={`relative ${className.includes("w-full") ? "w-full" : "inline-block"} text-left ${className}`}
+      className={`relative ${
+        className.includes("w-full") ? "w-full" : "inline-block"
+      } text-left ${className}`}
     >
       {/* Trigger Button Kalender */}
       <button
@@ -323,224 +442,29 @@ export default function CustomDatePicker({
         </div>
 
         <ChevronDown
-          className={`w-4 h-4 text-slate-400 transition-transform duration-200 flex-shrink-0 ${
+          className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${
             isOpen ? "rotate-180 text-blue-600" : ""
           }`}
         />
       </button>
 
-      {/* Mobile Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-xs z-50 sm:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-
-      {/* Popover Kalender Modern */}
-      {isOpen && (
-        <div
-          className={`max-sm:fixed max-sm:inset-x-4 max-sm:top-1/2 max-sm:-translate-y-1/2 max-sm:w-auto max-sm:max-w-xs max-sm:mx-auto sm:absolute ${
-            horizontalPlacement === "right" ? "sm:right-0" : "sm:left-0"
-          } ${openUpward ? "sm:bottom-full sm:mb-2" : "sm:top-full sm:mt-2"} sm:w-[330px] bg-white rounded-2xl border border-slate-200/90 shadow-2xl shadow-slate-900/15 z-50 p-3.5 sm:p-4 animate-in fade-in zoom-in-95 duration-150`}
+      {/* Render Mobile: Bottom Sheet */}
+      {isMobile ? (
+        <Sheet isOpen={isOpen} onClose={close} size="sm" labelledBy={titleId}>
+          <SheetHeader id={titleId} title="Pilih tanggal" onClose={close} />
+          <SheetBody>{calendarBody}</SheetBody>
+        </Sheet>
+      ) : (
+        /* Render Desktop/Tablet: FloatingPanel */
+        <FloatingPanel
+          anchorRef={containerRef}
+          open={isOpen}
+          onClose={close}
+          width={330}
+          align={align}
         >
-          {/* Header Kalender: Bulan, Tahun & Navigasi */}
-          <div className="flex items-center justify-between mb-3.5 pb-3 border-b border-slate-100">
-            <button
-              type="button"
-              onClick={() => setShowMonthYearPicker((prev) => !prev)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-slate-800 hover:text-blue-600 hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              <span>
-                {NAMA_BULAN[viewMonth]} {viewYear}
-              </span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                  showMonthYearPicker ? "rotate-180 text-blue-600" : ""
-                }`}
-              />
-            </button>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handlePrevMonth}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Bulan Sebelumnya"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleNextMonth}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
-                title="Bulan Berikutnya"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Month & Year Picker Overlay */}
-          {showMonthYearPicker ? (
-            <div className="space-y-3 py-1 animate-in fade-in duration-100">
-              <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                  Pilih Bulan
-                </span>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {NAMA_BULAN.map((bulanName, idx) => {
-                    const isCurrent = viewMonth === idx;
-                    return (
-                      <button
-                        key={bulanName}
-                        type="button"
-                        onClick={() => {
-                          setViewMonth(idx);
-                          setShowMonthYearPicker(false);
-                        }}
-                        className={`py-1.5 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer truncate ${
-                          isCurrent
-                            ? "bg-blue-600 text-white shadow-xs"
-                            : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                        }`}
-                      >
-                        {bulanName.slice(0, 3)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-100">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                  Pilih Tahun
-                </span>
-                <div className="grid grid-cols-4 gap-1.5">
-                  {availableYears.map((yr) => {
-                    const isCurrent = viewYear === yr;
-                    return (
-                      <button
-                        key={yr}
-                        type="button"
-                        onClick={() => {
-                          setViewYear(yr);
-                          setShowMonthYearPicker(false);
-                        }}
-                        className={`py-1.5 px-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isCurrent
-                            ? "bg-blue-600 text-white shadow-xs"
-                            : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900"
-                        }`}
-                      >
-                        {yr}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Header Nama Hari */}
-              <div className="grid grid-cols-7 gap-1 mb-1.5 text-center">
-                {NAMA_HARI_SINGKAT.map((h, i) => {
-                  const isWeekend = i === 5 || i === 6;
-                  return (
-                    <div
-                      key={h}
-                      className={`text-[11px] font-bold py-1 ${
-                        isWeekend
-                          ? disableWeekends
-                            ? "text-rose-400 font-bold"
-                            : i === 6
-                              ? "text-rose-500"
-                              : "text-slate-500"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      {h}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Grid Tanggal Kalender */}
-              <div className="grid grid-cols-7 gap-1">
-                {calendarDays.map((item, index) => {
-                  const isSelected = item.ymd === value;
-                  const isToday = item.ymd === todayYMD;
-                  const disabledDay = isDateDisabled(item.ymd);
-
-                  return (
-                    <button
-                      key={index}
-                      type="button"
-                      disabled={disabledDay}
-                      onClick={() => handleSelectDate(item.ymd)}
-                      title={
-                        disabledDay &&
-                        disableWeekends &&
-                        (index % 7 === 5 || index % 7 === 6)
-                          ? "Sabtu & Minggu libur sekolah"
-                          : ""
-                      }
-                      className={`h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all relative cursor-pointer ${
-                        disabledDay
-                          ? "text-slate-300 bg-slate-50/50 cursor-not-allowed opacity-35 line-through"
-                          : isSelected
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-md shadow-blue-500/25 scale-105 z-10"
-                            : isToday
-                              ? "border border-blue-500 text-blue-600 font-bold bg-blue-50/50 hover:bg-blue-100/60"
-                              : item.isCurrentMonth
-                                ? "text-slate-800 hover:bg-slate-100"
-                                : "text-slate-400 hover:bg-slate-50"
-                      }`}
-                    >
-                      <span>{item.day}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Shortcut Cepat Bawah ("Hari Ini", "Besok") */}
-              <div className="mt-3.5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    disabled={isDateDisabled(todayYMD)}
-                    onClick={() => handleQuickSelect(0)}
-                    className="px-2.5 py-1 rounded-lg font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Hari Ini
-                  </button>
-                  <button
-                    type="button"
-                    disabled={(() => {
-                      const t = new Date();
-                      t.setDate(t.getDate() + 1);
-                      return isDateDisabled(
-                        formatYMD(t.getFullYear(), t.getMonth(), t.getDate()),
-                      );
-                    })()}
-                    onClick={() => handleQuickSelect(1)}
-                    className="px-2.5 py-1 rounded-lg font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                  >
-                    Besok
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="text-slate-400 hover:text-slate-600 font-medium px-2 py-1 cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+          <div className="p-4">{calendarBody}</div>
+        </FloatingPanel>
       )}
     </div>
   );

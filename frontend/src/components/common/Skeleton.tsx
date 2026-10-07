@@ -1,16 +1,45 @@
 import React from "react";
+import { useLocation } from "react-router-dom";
+
+export interface SkeletonRegionProps {
+  children: React.ReactNode;
+  className?: string;
+  label?: string;
+}
+
+/**
+ * SkeletonRegion: Pembungkus yang dapat diakses oleh Screen Reader (A11y),
+ * menandai area yang sedang dalam status loading.
+ */
+export function SkeletonRegion({
+  children,
+  className = "",
+  label = "Memuat data...",
+}: SkeletonRegionProps) {
+  return (
+    <div
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+      className={`w-full ${className}`}
+    >
+      <span className="sr-only">{label}</span>
+      {children}
+    </div>
+  );
+}
 
 export interface SkeletonProps {
   className?: string;
 }
 
 /**
- * Komponen Skeleton dasar dengan animasi denyut shimmer modern.
+ * Komponen Skeleton dasar dengan animasi shimmer modern dari file CSS (.skeleton).
  */
 export function Skeleton({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse bg-slate-200/80 rounded-xl ${className}`}
+      className={`skeleton rounded-xl ${className}`}
       aria-hidden="true"
     />
   );
@@ -45,7 +74,7 @@ export function SkeletonCard({ className = "" }: SkeletonCardProps) {
     <div
       className={`bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs flex items-center gap-4 ${className}`}
     >
-      <Skeleton className="w-12 h-12 rounded-2xl flex-shrink-0" />
+      <Skeleton className="w-12 h-12 rounded-2xl shrink-0" />
       <div className="flex-1 space-y-2">
         <SkeletonLine width="w-24" height="h-3" />
         <SkeletonLine width="w-32" height="h-6" />
@@ -70,7 +99,7 @@ export function SkeletonTable({ rows = 5, cols = 5, className = "" }: SkeletonTa
         {Array.from({ length: cols }).map((_, i) => (
           <Skeleton
             key={`th-${i}`}
-            className="h-3.5 flex-1 rounded-md bg-slate-300/70"
+            className="h-3.5 flex-1 rounded-md"
           />
         ))}
       </div>
@@ -81,8 +110,8 @@ export function SkeletonTable({ rows = 5, cols = 5, className = "" }: SkeletonTa
               <Skeleton
                 key={`td-${rIdx}-${cIdx}`}
                 className={`h-4 rounded-md ${
-                  cIdx === 0 ? "w-24 flex-shrink-0" : "flex-1"
-                } ${rIdx % 2 === 0 ? "bg-slate-200/70" : "bg-slate-150"}`}
+                  cIdx === 0 ? "w-24 shrink-0" : "flex-1"
+                }`}
               />
             ))}
           </div>
@@ -210,18 +239,18 @@ export function RegistrasiSkeleton() {
 export function PortalSkeleton() {
   return (
     <div className="w-full max-w-6xl mx-auto px-3.5 sm:px-6 lg:px-8 py-6 space-y-6">
-      <div className="relative overflow-hidden rounded-3xl bg-slate-200/90 p-6 sm:p-8 animate-pulse border border-slate-200 flex flex-col justify-between min-h-[160px]">
+      <div className="relative overflow-hidden rounded-3xl bg-white p-6 sm:p-8 border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[160px]">
         <div className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-2">
-          <Skeleton className="w-20 h-9 rounded-2xl bg-slate-300" />
-          <Skeleton className="w-9 h-9 rounded-2xl bg-slate-300" />
+          <Skeleton className="w-20 h-9 rounded-2xl" />
+          <Skeleton className="w-9 h-9 rounded-2xl" />
         </div>
 
         <div className="flex items-center gap-4 pt-8 sm:pt-2">
-          <Skeleton className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-300 flex-shrink-0" />
+          <Skeleton className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl shrink-0" />
           <div className="space-y-2">
-            <Skeleton className="w-24 h-4 rounded-full bg-slate-300" />
-            <Skeleton className="w-48 sm:w-64 h-7 rounded-xl bg-slate-300" />
-            <Skeleton className="w-36 h-3.5 rounded-md bg-slate-300" />
+            <Skeleton className="w-24 h-4 rounded-full" />
+            <Skeleton className="w-48 sm:w-64 h-7 rounded-xl" />
+            <Skeleton className="w-36 h-3.5 rounded-md" />
           </div>
         </div>
       </div>
@@ -253,19 +282,19 @@ export function PortalSkeleton() {
 export function PageSkeleton() {
   return (
     <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-      <div className="bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 rounded-3xl p-6 sm:p-8 animate-pulse border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="space-y-3 max-w-md w-full">
-          <Skeleton className="w-24 h-4 rounded-full bg-slate-300" />
-          <Skeleton className="w-48 sm:w-64 h-7 rounded-xl bg-slate-300" />
-          <Skeleton className="w-full h-3.5 rounded-md bg-slate-300/80" />
+          <Skeleton className="w-24 h-4 rounded-full" />
+          <Skeleton className="w-48 sm:w-64 h-7 rounded-xl" />
+          <Skeleton className="w-full h-3.5 rounded-md" />
         </div>
         <div className="flex gap-2">
-          <Skeleton className="w-24 h-9 rounded-xl bg-slate-300" />
-          <Skeleton className="w-9 h-9 rounded-xl bg-slate-300" />
+          <Skeleton className="w-24 h-9 rounded-xl" />
+          <Skeleton className="w-9 h-9 rounded-xl" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -414,28 +443,27 @@ export function IzinSkeleton() {
  * dengan rute URL tujuan, mengeliminasi layout jump & bouncing saat navigasi lazy-loading.
  */
 export function RouteAwareSkeleton() {
-  if (typeof window === "undefined") return <PageSkeleton />;
-  const pathname = window.location.pathname;
+  const location = useLocation();
+  const pathname = location.pathname;
 
+  let skeletonContent: React.ReactNode;
   if (pathname.startsWith("/dashboard")) {
-    return <DashboardSkeleton />;
+    skeletonContent = <DashboardSkeleton />;
+  } else if (pathname.startsWith("/registrasi")) {
+    skeletonContent = <RegistrasiSkeleton />;
+  } else if (pathname.startsWith("/piket")) {
+    skeletonContent = <PiketSkeleton />;
+  } else if (pathname.startsWith("/pelanggaran")) {
+    skeletonContent = <PelanggaranSkeleton />;
+  } else if (pathname.startsWith("/izin")) {
+    skeletonContent = <IzinSkeleton />;
+  } else if (pathname.startsWith("/portal")) {
+    skeletonContent = <PortalSkeleton />;
+  } else {
+    skeletonContent = <PageSkeleton />;
   }
-  if (pathname.startsWith("/registrasi")) {
-    return <RegistrasiSkeleton />;
-  }
-  if (pathname.startsWith("/piket")) {
-    return <PiketSkeleton />;
-  }
-  if (pathname.startsWith("/pelanggaran")) {
-    return <PelanggaranSkeleton />;
-  }
-  if (pathname.startsWith("/izin")) {
-    return <IzinSkeleton />;
-  }
-  if (pathname.startsWith("/portal")) {
-    return <PortalSkeleton />;
-  }
-  return <PageSkeleton />;
+
+  return <SkeletonRegion>{skeletonContent}</SkeletonRegion>;
 }
 
 export default RouteAwareSkeleton;

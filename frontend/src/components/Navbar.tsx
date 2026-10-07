@@ -1,233 +1,44 @@
-import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import {
-  BarChart3,
-  Home,
-  UserPlus,
-  FileText,
-  ClipboardCheck,
-  LogOut,
-  LogIn,
-  GraduationCap,
-  ShieldAlert,
-  Camera,
-} from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { KeyRound, User as UserIcon, LogOut, LogIn } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import ProfileModal from "./ProfileModal";
 import logoSMKN21 from "../assets/Logo SMKN21.png";
-
-interface NavItem {
-  to: string;
-  label: string;
-  shortLabel: string;
-  desc: string;
-  icon: React.ReactNode;
-  active: boolean;
-  color: string;
-}
+import { getNavEntries } from "../utils/navConfig";
+import FloatingPanel from "./ui/FloatingPanel";
+import LogoutConfirm from "./common/LogoutConfirm";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 export default function Navbar(): React.JSX.Element {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { user, isAuthenticated, isAdmin, isPiket, isSiswa, logout } =
-    useAuth();
+  const { user, role, isAuthenticated, isAdmin, isPiket, isSiswa } = useAuth();
 
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [profileInitialTab] = useState<"profil" | "keamanan">("profil");
+  const [profileTab, setProfileTab] = useState<"profil" | "keamanan">("profil");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const avatarRef = useRef<HTMLButtonElement>(null);
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  const isDashboard = location.pathname === "/dashboard";
-  const isRegistrasi = location.pathname === "/registrasi";
-  const isIzin = location.pathname === "/izin";
-  const isPiketPath = location.pathname === "/piket";
-  const isHarian = location.pathname === "/harian";
-  const isPortalSiswa = location.pathname === "/portal-siswa";
-  const isPelanggaran = location.pathname === "/pelanggaran";
-
-  // Konfigurasi Nav Items Dinamis Berdasarkan Role
-  let navItems: NavItem[] = [];
-
-  if (!isAuthenticated) {
-    // Pengunjung / Tamu yang Belum Login: TIDAK menampilkan modul operasional sekolah
-    navItems = [];
-  } else if (isSiswa) {
-    const isAlumni = user?.status === "Alumni";
-    if (isAlumni) {
-      // Siswa yang sudah berstatus Alumni / Lulus
-      navItems = [
-        {
-          to: "/portal-siswa",
-          label: "Portal Alumni",
-          shortLabel: "Beranda Alumni",
-          desc: "Rekap kelulusan & riwayat pribadi",
-          icon: <GraduationCap className="w-4 h-4" />,
-          active: isPortalSiswa,
-          color: "amber",
-        },
-      ];
-    } else if (!user?.terdaftar) {
-      // Siswa SMKN 21 Aktif tetapi belum merekam biometrik wajah (fitur operasional dikunci)
-      navItems = [
-        {
-          to: "/portal-siswa",
-          label:
-            user?.jenis_kelamin === "Perempuan"
-              ? "Portal Siswi"
-              : "Portal Siswa",
-          shortLabel: "Beranda",
-          desc: "Rekap & status biometrik wajah",
-          icon: <GraduationCap className="w-4 h-4" />,
-          active: isPortalSiswa,
-          color: "blue",
-        },
-      ];
-    } else {
-      // Siswa SMKN 21 Aktif yang sudah terdaftar biometrik (Akses Penuh)
-      navItems = [
-        {
-          to: "/portal-siswa",
-          label:
-            user?.jenis_kelamin === "Perempuan"
-              ? "Portal Siswi"
-              : "Portal Siswa",
-          shortLabel: "Beranda",
-          desc: "Rekap, tanda tangan & riwayat pribadi",
-          icon: <GraduationCap className="w-4 h-4" />,
-          active: isPortalSiswa,
-          color: "blue",
-        },
-        {
-          to: "/harian",
-          label: "Presensi Mandiri",
-          shortLabel: "Absen",
-          desc: "Scan wajah & GPS sekolah",
-          icon: <Camera className="w-4 h-4" />,
-          active: isHarian,
-          color: "emerald",
-        },
-        {
-          to: "/izin",
-          label: "Pengajuan Izin",
-          shortLabel: "Surat Izin",
-          desc: "Kirim surat izin sakit / keperluan",
-          icon: <FileText className="w-4 h-4" />,
-          active: isIzin,
-          color: "rose",
-        },
-        {
-          to: "/pelanggaran",
-          label: "Catat Pelanggaran",
-          shortLabel: "Pelanggaran",
-          desc: "Buku saku catatan pelanggaran",
-          icon: <ShieldAlert className="w-4 h-4" />,
-          active: isPelanggaran,
-          color: "rose",
-        },
-      ];
-    }
-  } else if (isPiket) {
-    // Guru Piket
-    navItems = [
-      {
-        to: "/piket",
-        label: "Meja Guru Piket",
-        shortLabel: "Meja Piket",
-        desc: "Penerbitan surat izin masuk & keluar",
-        icon: <ClipboardCheck className="w-4 h-4" />,
-        active: isPiketPath,
-        color: "blue",
-      },
-      {
-        to: "/pelanggaran",
-        label: "Catat Pelanggaran",
-        shortLabel: "Pelanggaran",
-        desc: "Catat pelanggaran siswa yang ditegur",
-        icon: <ShieldAlert className="w-4 h-4" />,
-        active: isPelanggaran,
-        color: "rose",
-      },
-      {
-        to: "/dashboard",
-        label: "Dashboard Piket",
-        shortLabel: "Dashboard",
-        desc: "Verifikasi izin & rekapitulasi piket",
-        icon: <BarChart3 className="w-4 h-4" />,
-        active: isDashboard,
-        color: "blue",
-      },
-      {
-        to: "/harian",
-        label: "Absensi Siswa",
-        shortLabel: "Absensi Siswa",
-        desc: "Scan siswa yang lupa bawa HP",
-        icon: <Camera className="w-4 h-4" />,
-        active: isHarian,
-        color: "emerald",
-      },
-    ];
-  } else {
-    // Admin Sekolah (Akses Penuh)
-    navItems = [
-      {
-        to: "/portal-admin",
-        label: "Beranda Admin",
-        shortLabel: "Beranda",
-        desc: "Ringkasan statistik & pusat manajemen",
-        icon: <Home className="w-4 h-4" />,
-        active: location.pathname === "/portal-admin",
-        color: "purple",
-      },
-      {
-        to: "/piket",
-        label: "Meja Guru Piket",
-        shortLabel: "Meja Piket",
-        desc: "Penerbitan surat izin masuk & keluar",
-        icon: <ClipboardCheck className="w-4 h-4" />,
-        active: isPiketPath,
-        color: "blue",
-      },
-      {
-        to: "/pelanggaran",
-        label: "Catat Pelanggaran",
-        shortLabel: "Pelanggaran",
-        desc: "Buku catatan pelanggaran siswa",
-        icon: <ShieldAlert className="w-4 h-4" />,
-        active: isPelanggaran,
-        color: "rose",
-      },
-      {
-        to: "/izin",
-        label: "Surat Izin / Sakit",
-        shortLabel: "Surat Izin",
-        desc: "Portal mandiri pengajuan izin siswa",
-        icon: <FileText className="w-4 h-4" />,
-        active: isIzin,
-        color: "rose",
-      },
-      {
-        to: "/registrasi",
-        label: "Data & Wajah Siswa",
-        shortLabel: "Data Siswa",
-        desc: "Registrasi biometrik & manajemen siswa",
-        icon: <UserPlus className="w-4 h-4" />,
-        active: isRegistrasi,
-        color: "indigo",
-      },
-      {
-        to: "/dashboard",
-        label: "Dashboard Rekap",
-        shortLabel: "Dashboard",
-        desc: "Rekapitulasi presensi & operasional siswa",
-        icon: <BarChart3 className="w-4 h-4" />,
-        active: isDashboard,
-        color: "blue",
-      },
-    ];
-  }
-
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
+  const openProfile = (tab: "profil" | "keamanan" = "profil") => {
+    setProfileTab(tab);
+    setMenuOpen(false);
+    setShowProfileModal(true);
   };
+
+  const roleLabel = isAdmin
+    ? "Administrator"
+    : isPiket
+      ? "Guru Piket"
+      : `${user?.kelas ?? "Siswa"}`;
+
+  // Navigasi Terpadu Berdasarkan Role & Status Pengguna
+  const navEntries = isAuthenticated ? getNavEntries({ user, role }) : [];
+  const navItems = navEntries.map((item) => ({
+    ...item,
+    icon: item.icon({ className: "w-4 h-4" }),
+    active: location.pathname === item.to,
+  }));
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
@@ -260,47 +71,137 @@ export default function Navbar(): React.JSX.Element {
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden sm:block truncate">
               {isAuthenticated
-                ? `${user?.nama || user?.username}${user?.kelas ? ` • ${user.kelas}` : ""}`
+                ? `${user?.kelas ? `${user.kelas}` : ""}`
                 : "Sistem Presensi SMKN 21 Jakarta"}
             </p>
           </div>
         </Link>
 
-        {/* Right Actions: Profile Button & Logout */}
+        {/* Desktop Nav Items (Laptop/Desktop >= 1024px) */}
+        {navItems.length > 0 && (
+          <nav
+            aria-label="Navigasi utama"
+            className="hidden lg:flex flex-1 items-center justify-center gap-1 min-w-0 mx-4"
+          >
+            {navItems.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                title={item.desc}
+                aria-current={item.active ? "page" : undefined}
+                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                  item.active
+                    ? "bg-blue-50 text-blue-700 shadow-2xs"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                {item.icon}
+                <span className="truncate">{item.shortLabel}</span>
+              </Link>
+            ))}
+          </nav>
+        )}
+
+        {/* Right Actions: Profile Button & Desktop Dropdown */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* Logout Button */}
+            <div className="relative flex items-center gap-1.5 sm:gap-2">
+              {/* Profile / Avatar Button */}
               <button
+                ref={avatarRef}
                 type="button"
-                onClick={handleLogout}
-                title="Keluar dari akun"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/60 rounded-xl transition-all cursor-pointer shadow-2xs"
+                onClick={() =>
+                  isDesktop ? setMenuOpen((o) => !o) : openProfile()
+                }
+                aria-label="Akun saya"
+                aria-haspopup={isDesktop ? "menu" : "dialog"}
+                aria-expanded={isDesktop ? menuOpen : undefined}
+                className="press flex items-center gap-2 rounded-full border border-slate-200/90 bg-white py-1 pl-1 pr-1 hover:bg-slate-50 transition cursor-pointer shadow-2xs"
               >
-                <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">Keluar</span>
+                {user?.foto_profil ? (
+                  <img
+                    src={user.foto_profil}
+                    alt="Foto Profil"
+                    className="h-7 w-7 rounded-full object-cover border border-slate-200"
+                  />
+                ) : (
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                    {(user?.nama || user?.username || "?")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+                )}
+                <span className="hidden max-w-[120px] truncate text-xs font-bold text-slate-700 lg:inline">
+                  {(user?.nama || user?.username || "").split(" ")[0]}
+                </span>
               </button>
+
+              {/* Desktop Avatar Dropdown */}
+              <FloatingPanel
+                anchorRef={avatarRef}
+                open={menuOpen && isDesktop}
+                onClose={() => setMenuOpen(false)}
+                align="right"
+                width={250}
+              >
+                <div className="border-b border-slate-100 px-4 py-2">
+                  <p className="truncate text-sm font-bold text-slate-900">
+                    {user?.nama || user?.username}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">{roleLabel}</p>
+                </div>
+                <div role="menu" className="p-1.5">
+                  <button
+                    role="menuitem"
+                    type="button"
+                    onClick={() => openProfile("profil")}
+                    className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                  >
+                    <UserIcon className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                    <span>Profil </span>
+                  </button>
+                  <button
+                    role="menuitem"
+                    type="button"
+                    onClick={() => openProfile("keamanan")}
+                    className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors"
+                  >
+                    <KeyRound className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                    <span>Kata sandi</span>
+                  </button>
+                </div>
+                <div className="border-t border-slate-100 p-1">
+                  <button
+                    role="menuitem"
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setConfirmLogout(true);
+                    }}
+                    className="flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 flex-shrink-0" />
+                    <span>Keluar</span>
+                  </button>
+                </div>
+              </FloatingPanel>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <Link
-                to="/login"
-                title="Masuk ke Akun"
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all shadow-xs shadow-blue-500/20"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Login</span>
-              </Link>
-            </div>
+            ""
           )}
         </div>
       </div>
+
+      <LogoutConfirm
+        isOpen={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+      />
 
       {/* Profile & Settings Modal */}
       <ProfileModal
         isOpen={showProfileModal}
         onClose={() => setShowProfileModal(false)}
-        initialTab={profileInitialTab}
+        initialTab={profileTab}
       />
     </header>
   );

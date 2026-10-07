@@ -20,7 +20,10 @@ import {
   Ticket,
   BookOpen,
   UserCheck,
+  X,
 } from "lucide-react";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import Sheet from "./ui/Sheet";
 
 export interface NotificationItemData {
   id: string | number;
@@ -83,7 +86,10 @@ function formatWaktu(waktuStr?: string): string {
 /**
  * Mengambil styling warna kartu, ikon, dan badge berdasarkan kategori notifikasi
  */
-function getCategoryStyles(notif: NotificationItemData, unread: boolean): CategoryStyles {
+function getCategoryStyles(
+  notif: NotificationItemData,
+  unread: boolean,
+): CategoryStyles {
   const cat =
     notif.category ||
     (notif.status_pengajuan === "Disetujui"
@@ -197,7 +203,11 @@ function SwipeableNotificationItem({
 }: SwipeableNotificationItemProps): React.JSX.Element {
   const [offsetX, setOffsetX] = useState(0);
   const [isRemoving, setIsRemoving] = useState(false);
-  const touchStartRef = useRef<{ x: number; y: number; locked: "horizontal" | "vertical" | null }>({
+  const touchStartRef = useRef<{
+    x: number;
+    y: number;
+    locked: "horizontal" | "vertical" | null;
+  }>({
     x: 0,
     y: 0,
     locked: null,
@@ -236,7 +246,6 @@ function SwipeableNotificationItem({
     }
 
     if (touchStartRef.current.locked === "horizontal") {
-      if (e.cancelable) e.preventDefault();
       // Batasi jarak geser maksimum 110px
       const clampedX = Math.max(-110, Math.min(110, diffX));
       setOffsetX(clampedX);
@@ -317,7 +326,7 @@ function SwipeableNotificationItem({
             onMarkAsRead(notif.id);
           }
         }}
-        className={`relative p-3.5 transition-colors border-l-4 select-none cursor-pointer ${styles.cardBg}`}
+        className={`relative p-3.5 transition-colors border-l-4 select-none cursor-pointer touch-pan-y ${styles.cardBg}`}
       >
         <div className="flex items-start gap-2.5">
           {/* Icon Status */}
@@ -494,6 +503,7 @@ export default function NotificationDropdown({
   onActionClick,
 }: NotificationDropdownProps): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 640px)");
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isPiket = role === "piket" || role === "admin";
 
@@ -606,30 +616,30 @@ export default function NotificationDropdown({
     }
   };
 
-  // Close on outside click
+  // Close on outside click (hanya desktop popover, karena di mobile dikontrol backdrop Sheet)
   useEffect(() => {
+    if (!isOpen || !isDesktop) return;
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isOpen]);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, isDesktop]);
 
-  // Close on Escape
+  // Close on Escape (desktop popover; mobile Sheet menangani Escape mandiri)
   useEffect(() => {
+    if (!isOpen || !isDesktop) return;
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") setIsOpen(false);
     }
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      return () => document.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isOpen]);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, isDesktop]);
 
   // Styling tombol pemicu lonceng berdasarkan varian
   const buttonClasses =
@@ -644,6 +654,137 @@ export default function NotificationDropdown({
             ? "bg-blue-50 text-blue-600 border-blue-300 shadow-xs"
             : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200"
         }`;
+
+  const renderNotificationContent = () => (
+    <>
+      {/* Header Dropdown */}
+      <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-slate-200/80">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-2xs shrink-0">
+              <Bell className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h4
+                id="notif-header-title"
+                className="text-xs sm:text-sm font-bold text-slate-800 leading-tight truncate"
+              >
+                {role === "admin"
+                  ? "Pusat Notifikasi Administrator"
+                  : role === "piket"
+                    ? "Pusat Notifikasi Guru Piket"
+                    : "Pusat Notifikasi Siswa"}
+              </h4>
+              <p className="text-[11px] text-slate-500 truncate">
+                {isPiket
+                  ? "Izin siswa menunggu, keterlambatan & dispensasi"
+                  : "Pemberitahuan resmi sekolah & kehadiran"}
+              </p>
+            </div>
+          </div>
+
+          {/* Aksi Massal Header */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllAsRead}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
+                title="Tandai semua sebagai sudah dibaca"
+              >
+                <span>Baca Semua</span>
+              </button>
+            )}
+
+            {visibleList.length > 0 && (
+              <button
+                type="button"
+                onClick={handleDeleteAllNotif}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer flex-shrink-0"
+                title="Hapus semua notifikasi dari daftar"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span className="hidden sm:inline">Hapus</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Tab Filter: Semua vs Belum Dibaca */}
+        <div className="flex items-center gap-2 pt-3">
+          <button
+            type="button"
+            onClick={() => setActiveTab("semua")}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              activeTab === "semua"
+                ? "bg-white text-blue-700 shadow-xs border border-slate-200"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Semua{" "}
+            {visibleList.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 text-[10px] font-bold">
+                {visibleList.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("unread")}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "unread"
+                ? "bg-white text-blue-700 shadow-xs border border-slate-200"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <span>Belum Dibaca</span>
+            {unreadCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Daftar Notifikasi */}
+      <div className="flex-1 overflow-y-auto divide-y divide-slate-100 custom-scrollbar max-h-[60vh] sm:max-h-96">
+        {displayedList.length === 0 ? (
+          <div className="p-8 text-center text-slate-400">
+            <FileText className="w-9 h-9 mx-auto mb-2 text-slate-300 stroke-1" />
+            <p className="text-xs font-semibold text-slate-600">
+              {activeTab === "unread"
+                ? "Semua Notifikasi Telah Dibaca"
+                : isPiket
+                  ? "Belum Ada Aktivitas Piket"
+                  : "Tidak Ada Notifikasi"}
+            </p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {activeTab === "unread"
+                ? "Bagus! Tidak ada pemberitahuan baru yang memerlukan perhatian Anda."
+                : isPiket
+                  ? "Izin yang menunggu verifikasi atau keterlambatan siswa hari ini akan tampil di sini."
+                  : "Semua pemberitahuan sekolah dan aktivitas telah dibersihkan."}
+            </p>
+          </div>
+        ) : (
+          displayedList.map((notif) => (
+            <SwipeableNotificationItem
+              key={notif.id}
+              notif={notif}
+              unread={isItemUnread(notif)}
+              isPiket={isPiket}
+              onMarkAsRead={handleMarkAsRead}
+              onDelete={handleDeleteNotif}
+              onActionClick={onActionClick}
+              onNavigate={onNavigate}
+              setIsOpen={setIsOpen}
+            />
+          ))
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div ref={dropdownRef} className="relative inline-block text-left z-50">
@@ -670,146 +811,27 @@ export default function NotificationDropdown({
         )}
       </button>
 
-      {/* Mobile Backdrop */}
-      {isOpen && (
+      {/* Popover di Desktop (sm+) */}
+      {isOpen && isDesktop && (
         <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-xs z-50 sm:hidden"
-          onClick={() => setIsOpen(false)}
-        />
+          className={`absolute ${
+            align === "right" ? "right-0" : "left-0"
+          } top-full mt-2 w-96 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 z-[60] text-slate-900`}
+        >
+          {renderNotificationContent()}
+        </div>
       )}
 
-      {/* Popover Dropdown Notifikasi */}
-      {isOpen && (
-        <div
-          className={`max-sm:fixed max-sm:inset-x-3.5 max-sm:top-16 max-sm:w-auto max-sm:max-w-none sm:absolute ${
-            align === "right" ? "sm:right-0" : "sm:left-0"
-          } sm:top-full sm:mt-2 sm:w-96 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 z-[60] text-slate-900`}
+      {/* Bottom Sheet di Mobile (< sm) */}
+      {isOpen && !isDesktop && (
+        <Sheet
+          isOpen={isOpen}
+          onClose={() => setIsOpen(false)}
+          labelledBy="notif-header-title"
+          size="md"
         >
-          {/* Header Dropdown */}
-          <div className="p-3.5 sm:p-4 bg-gradient-to-r from-slate-50 to-blue-50/40 border-b border-slate-200/80">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-blue-600 text-white shadow-2xs">
-                  <Bell className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-tight">
-                    {role === "admin"
-                      ? "Pusat Notifikasi Administrator"
-                      : role === "piket"
-                        ? "Pusat Notifikasi Guru Piket"
-                        : "Pusat Notifikasi Siswa"}
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    {isPiket
-                      ? "Izin siswa menunggu, keterlambatan & dispensasi"
-                      : "Pemberitahuan resmi sekolah & kehadiran"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Aksi Massal Header */}
-              <div className="flex items-center gap-1.5">
-                {unreadCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleMarkAllAsRead}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
-                    title="Tandai semua sebagai sudah dibaca"
-                  >
-                    <Check className="w-3.5 h-3.5 md:hidden" />
-                    <span>Baca Semua</span>
-                  </button>
-                )}
-
-                {visibleList.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleDeleteAllNotif}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors cursor-pointer flex-shrink-0"
-                    title="Hapus semua notifikasi dari daftar"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span className="hidden sm:inline">Hapus</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Tab Filter: Semua vs Belum Dibaca */}
-            <div className="flex items-center gap-2 pt-3">
-              <button
-                type="button"
-                onClick={() => setActiveTab("semua")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "semua"
-                    ? "bg-white text-blue-700 shadow-xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Semua{" "}
-                {unreadCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
-                    {visibleList.length}
-                  </span>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("unread")}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  activeTab === "unread"
-                    ? "bg-white text-blue-700 shadow-xs border border-slate-200"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                <span>Belum Dibaca</span>
-                {unreadCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Daftar Notifikasi */}
-          <div className="max-h-80 sm:max-h-96 overflow-y-auto divide-y divide-slate-100 custom-scrollbar">
-            {displayedList.length === 0 ? (
-              <div className="p-8 text-center text-slate-400">
-                <FileText className="w-9 h-9 mx-auto mb-2 text-slate-300 stroke-1" />
-                <p className="text-xs font-semibold text-slate-600">
-                  {activeTab === "unread"
-                    ? "Semua Notifikasi Telah Dibaca"
-                    : isPiket
-                      ? "Belum Ada Aktivitas Piket"
-                      : "Tidak Ada Notifikasi"}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {activeTab === "unread"
-                    ? "Bagus! Tidak ada pemberitahuan baru yang memerlukan perhatian Anda."
-                    : isPiket
-                      ? "Izin yang menunggu verifikasi atau keterlambatan siswa hari ini akan tampil di sini."
-                      : "Semua pemberitahuan sekolah dan aktivitas telah dibersihkan."}
-                </p>
-              </div>
-            ) : (
-              displayedList.map((notif) => (
-                <SwipeableNotificationItem
-                  key={notif.id}
-                  notif={notif}
-                  unread={isItemUnread(notif)}
-                  isPiket={isPiket}
-                  onMarkAsRead={handleMarkAsRead}
-                  onDelete={handleDeleteNotif}
-                  onActionClick={onActionClick}
-                  onNavigate={onNavigate}
-                  setIsOpen={setIsOpen}
-                />
-              ))
-            )}
-          </div>
-        </div>
+          {renderNotificationContent()}
+        </Sheet>
       )}
     </div>
   );

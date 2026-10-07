@@ -1,6 +1,8 @@
-import React, { useState, useMemo } from "react";
-import { Inbox, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import React, { useMemo } from "react";
+import { Inbox } from "lucide-react";
 import { getJurusanInfo } from "../../../constants/schoolData";
+import { useTableSort } from "../../../hooks/useTableSort";
+import SortableTh from "../../ui/SortableTh";
 
 export interface RekapSiswaItem {
   siswa_id: number;
@@ -19,46 +21,85 @@ export interface RekapSiswaItem {
 interface RekapSiswaTabProps {
   filteredSiswa?: RekapSiswaItem[];
   paginatedSiswa?: RekapSiswaItem[];
+  startIndex?: number;
+  endIndex?: number;
+}
+
+function AttendanceBar({
+  tepat,
+  telat,
+  sakit,
+  izin,
+}: {
+  tepat: number;
+  telat: number;
+  sakit: number;
+  izin: number;
+}) {
+  const total = tepat + telat + sakit + izin;
+  const seg = [
+    { v: tepat, c: "bg-emerald-500", l: "Tepat waktu" },
+    { v: telat, c: "bg-amber-400", l: "Terlambat" },
+    { v: sakit, c: "bg-rose-400", l: "Sakit" },
+    { v: izin, c: "bg-blue-400", l: "Izin" },
+  ];
+
+  return (
+    <div
+      role="img"
+      aria-label={seg.map((s) => `${s.l} ${s.v}`).join(", ")}
+      className="flex h-2 overflow-hidden rounded-full bg-slate-100"
+    >
+      {total > 0 &&
+        seg.map(
+          (s) =>
+            s.v > 0 && (
+              <span
+                key={s.l}
+                className={s.c}
+                style={{ width: `${(s.v / total) * 100}%` }}
+              />
+            ),
+        )}
+    </div>
+  );
 }
 
 export default function RekapSiswaTab({
   filteredSiswa = [],
   paginatedSiswa = [],
+  startIndex,
+  endIndex,
 }: RekapSiswaTabProps) {
-  const [sortKey, setSortKey] = useState<string>("nama");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection(key === "nama" || key === "kelas" ? "asc" : "desc");
-    }
-  };
+  const { sorted, sortKey, sortDir, onSort } = useTableSort(
+    filteredSiswa,
+    "nama",
+    "asc",
+    [
+      "tepat_waktu",
+      "terlambat",
+      "sakit",
+      "izin",
+      "total_hadir",
+      "kunjungan_perpus",
+    ],
+  );
 
   const displayList = useMemo(() => {
-    const list = [...paginatedSiswa];
-    return list.sort((a, b) => {
-      const valA = (a as Record<string, unknown>)[sortKey] ?? 0;
-      const valB = (b as Record<string, unknown>)[sortKey] ?? 0;
-      if (typeof valA === "number" && typeof valB === "number") {
-        return sortDirection === "asc" ? valA - valB : valB - valA;
-      }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirection === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
-    });
-  }, [paginatedSiswa, sortKey, sortDirection]);
+    if (endIndex !== undefined) {
+      return sorted.slice(startIndex ?? 0, endIndex);
+    }
+    return paginatedSiswa.length > 0 ? paginatedSiswa : sorted;
+  }, [sorted, startIndex, endIndex, paginatedSiswa]);
+
+  const sortProps = { sortKey, sortDir, onSort };
 
   return (
     <div>
-      {/* 1. Mobile Cards View (< md) */}
-      <div className="md:hidden divide-y divide-slate-100">
+      {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+      <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 md:p-3 lg:hidden">
         {filteredSiswa.length === 0 ? (
-          <div className="py-12 text-center text-slate-400 p-4">
+          <div className="col-span-2 py-12 text-center text-slate-400 p-4">
             <Inbox className="w-10 h-10 text-slate-300 mx-auto mb-2 stroke-1" />
             <p className="font-semibold text-slate-600 text-sm">
               Tidak Ada Data Siswa
@@ -75,13 +116,14 @@ export default function RekapSiswaTab({
               badge: "bg-slate-100 text-slate-700 border-slate-200",
               kode: item.kelas,
             };
+
             return (
               <div
                 key={item.siswa_id}
-                className="p-4 hover:bg-slate-50/60 transition-colors"
+                className="p-4 hover:bg-slate-50/60 transition-colors bg-white md:rounded-2xl md:border md:border-slate-200 space-y-3"
               >
                 {/* Header Kartu: Nama & Status */}
-                <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-bold text-slate-900 text-sm truncate">
                       {item.nama}
@@ -107,11 +149,19 @@ export default function RekapSiswaTab({
                       Aktif
                     </span>
                   ) : (
-                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 shrink-0">
-                      Nir-Hadir
+                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200 shrink-0">
+                      Belum ada presensi
                     </span>
                   )}
                 </div>
+
+                {/* Batang Proporsi Kehadiran */}
+                <AttendanceBar
+                  tepat={item.tepat_waktu}
+                  telat={item.terlambat}
+                  sakit={item.sakit || 0}
+                  izin={item.izin || 0}
+                />
 
                 {/* 6 Kotak Metrik Akumulasi Kehadiran */}
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 pt-2 border-t border-slate-100 text-center">
@@ -170,172 +220,51 @@ export default function RekapSiswaTab({
         )}
       </div>
 
-      {/* 2. Desktop Table View (>= md) */}
-      <div className="hidden md:block overflow-x-auto">
+      {/* 2. Desktop Table View (>= lg) */}
+      <div className="hidden max-h-[calc(100dvh-18rem)] overflow-auto lg:block">
         <table className="w-full text-left border-collapse text-xs sm:text-sm min-w-[760px]">
-          <thead>
-            <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider text-[11px]">
-              <th
-                onClick={() => handleSort("nama")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Nama Siswa"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Siswa</span>
-                  {sortKey === "nama" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("kelas")}
-                className="py-3.5 px-6 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Kelas"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span>Kelas</span>
-                  {sortKey === "kelas" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("tepat_waktu")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Tepat Waktu"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Tepat Waktu</span>
-                  {sortKey === "tepat_waktu" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("terlambat")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Terlambat"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Terlambat</span>
-                  {sortKey === "terlambat" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("sakit")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Sakit"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Sakit</span>
-                  {sortKey === "sakit" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("izin")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Izin"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Izin</span>
-                  {sortKey === "izin" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("total_hadir")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Total Hadir"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Total Hadir</span>
-                  {sortKey === "total_hadir" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("kunjungan_perpus")}
-                className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Kunjungan Perpus"
-              >
-                <div className="flex items-center justify-center gap-1.5">
-                  <span>Kunjungan Perpus</span>
-                  {sortKey === "kunjungan_perpus" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
-              </th>
-              <th
-                onClick={() => handleSort("total_hadir")}
-                className="py-3.5 px-6 text-right cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                title="Urutkan Status Aktivitas"
-              >
-                <div className="flex items-center justify-end gap-1.5">
-                  <span>Status Aktivitas</span>
-                  {sortKey === "total_hadir" ? (
-                    sortDirection === "asc" ? (
-                      <ArrowUp className="w-3 h-3 text-blue-600" />
-                    ) : (
-                      <ArrowDown className="w-3 h-3 text-blue-600" />
-                    )
-                  ) : (
-                    <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                  )}
-                </div>
+          <thead className="sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226,232,240)]">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <SortableTh label="Siswa" field="nama" {...sortProps} />
+              <SortableTh label="Kelas" field="kelas" {...sortProps} />
+              <SortableTh
+                label="Tepat Waktu"
+                field="tepat_waktu"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Terlambat"
+                field="terlambat"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Sakit"
+                field="sakit"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Izin"
+                field="izin"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Total Hadir"
+                field="total_hadir"
+                align="center"
+                {...sortProps}
+              />
+              <SortableTh
+                label="Kunjungan Perpus"
+                field="kunjungan_perpus"
+                align="center"
+                {...sortProps}
+              />
+              <th className="py-3.5 px-6 text-right font-bold uppercase tracking-wider text-[11px] text-slate-500">
+                Status
               </th>
             </tr>
           </thead>
@@ -358,64 +287,66 @@ export default function RekapSiswaTab({
             ) : (
               displayList.map((item) => {
                 const isAktif = item.total_hadir > 0;
+                const jurInfo = getJurusanInfo(item.kelas) || {
+                  badge: "bg-slate-100 text-slate-700 border-slate-200",
+                  kode: item.kelas,
+                };
                 return (
                   <tr
                     key={item.siswa_id}
                     className="hover:bg-slate-50/70 transition-colors"
                   >
                     <td className="py-3.5 px-6">
-                      <div>
-                        <p className="font-bold text-slate-900">{item.nama}</p>
-                        <p className="text-[11px] text-slate-400 font-mono">
-                          NIS {item.nis}
-                        </p>
-                      </div>
+                      <p className="font-bold text-slate-900">{item.nama}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">
+                        NIS {item.nis}
+                      </p>
                     </td>
                     <td className="py-3.5 px-6">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-slate-800 text-xs">
+                        <span className="font-semibold text-slate-800">
                           {item.kelas}
+                        </span>
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${jurInfo.badge}`}
+                        >
+                          {jurInfo.kode}
                         </span>
                       </div>
                     </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-emerald-700">
+                      {item.tepat_waktu}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-amber-700">
+                      {item.terlambat}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-rose-700">
+                      {item.sakit || 0}
+                    </td>
+                    <td className="py-3.5 px-4 text-center font-bold text-blue-700">
+                      {item.izin || 0}
+                    </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-emerald-700 text-sm">
-                        {item.tepat_waktu}
+                      <span className="font-bold text-slate-900">
+                        {item.total_hadir}
+                      </span>
+                      <span className="text-[11px] text-slate-400 ml-1">
+                        Hari
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-amber-700 text-sm">
-                        {item.terlambat}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-rose-600 text-sm">
-                        {item.sakit || 0}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-amber-600 text-sm">
-                        {item.izin || 0}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-slate-900 text-sm">
-                        {item.total_hadir} Hari
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="font-extrabold text-indigo-900 text-sm">
-                        <span>{item.kunjungan_perpus}</span>
+                      <span className="font-bold text-indigo-700">
+                        {item.kunjungan_perpus}
                       </span>
                     </td>
                     <td className="py-3.5 px-6 text-right">
                       {isAktif ? (
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                          Aktif Presensi
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Aktif
                         </span>
                       ) : (
-                        <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                          Nir-Kehadiran
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                          Belum ada presensi
                         </span>
                       )}
                     </td>

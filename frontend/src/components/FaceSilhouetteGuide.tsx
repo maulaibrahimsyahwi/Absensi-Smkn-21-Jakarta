@@ -7,6 +7,7 @@ export interface FaceSilhouetteGuideProps {
   loading?: boolean;
   isLiveVerified?: boolean;
   eyeState?: "UNKNOWN" | "OPEN" | "CLOSED" | string;
+  progress?: number;
 }
 
 export default function FaceSilhouetteGuide({
@@ -16,6 +17,7 @@ export default function FaceSilhouetteGuide({
   loading = false,
   isLiveVerified = false,
   eyeState = "UNKNOWN",
+  progress,
 }: FaceSilhouetteGuideProps) {
   const isBlue = theme === "blue";
   const activeColor = isLiveVerified
@@ -32,13 +34,26 @@ export default function FaceSilhouetteGuide({
       ? "rgba(59, 130, 246, 0.65)"
       : "rgba(16, 185, 129, 0.65)";
 
+  // Kalkulasi progress lingkaran countdown (radius = 44)
+  const radius = 44;
+  const circumference = 2 * Math.PI * radius;
+  const computedProgress =
+    progress !== undefined
+      ? progress
+      : countdown !== null
+        ? Math.max(0, Math.min(1, (4 - countdown) / 3))
+        : 0;
+  const strokeDashoffset = circumference * (1 - computedProgress);
+
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 select-none px-4">
       <div className="relative flex flex-col items-center justify-center">
         {/* SVG Siluet Wajah Proporsional, Luas & Pas untuk HP serta Tablet */}
         <svg
           viewBox="0 0 380 500"
-          className={`w-[88vw] max-w-[340px] xs:max-w-[360px] sm:max-w-[440px] md:max-w-[490px] lg:max-w-[530px] h-auto max-h-[68vh] sm:max-h-[74vh] transition-all duration-300 ${
+          role="img"
+          aria-label="Siluet panduan posisi wajah"
+          className={`w-[88vw] max-w-[340px] sm:max-w-[440px] md:max-w-[490px] lg:max-w-[530px] h-auto max-h-[68dvh] sm:max-h-[74dvh] transition-all duration-300 ${
             isDetected ? "scale-100 opacity-100" : "scale-[0.98] opacity-85"
           }`}
           style={{
@@ -65,23 +80,58 @@ export default function FaceSilhouetteGuide({
           />
         </svg>
 
-        {/* Floating Countdown Badge: Muncul di Tengah Wajah saat Kedipan Terverifikasi */}
+        {/* Floating Countdown Badge with SVG Progress Ring */}
         {isDetected && isLiveVerified && countdown !== null && !loading && (
-          <div className="absolute top-[38%] flex flex-col items-center gap-1.5 animate-in zoom-in-95 duration-200 pointer-events-none">
-            <div
-              className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center font-black text-4xl sm:text-5xl text-white shadow-2xl backdrop-blur-md border ${
-                isBlue
-                  ? "bg-blue-600/90 border-blue-300 shadow-blue-500/60"
-                  : "bg-emerald-600/90 border-emerald-300 shadow-emerald-500/60"
-              } animate-pulse`}
-            >
-              {countdown}
+          <div className="absolute top-[38%] flex flex-col items-center justify-center animate-in zoom-in-95 duration-200 pointer-events-none">
+            <div className="relative flex items-center justify-center">
+              {/* SVG Circular Progress Ring */}
+              <svg
+                className="w-24 h-24 sm:w-28 sm:h-28 -rotate-90 transform"
+                viewBox="0 0 100 100"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={radius}
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.2)"
+                  strokeWidth="6"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r={radius}
+                  fill="none"
+                  stroke={isBlue ? "#60a5fa" : "#34d399"}
+                  strokeWidth="6"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="round"
+                  className="transition-all duration-300 ease-out"
+                />
+              </svg>
+
+              {/* Countdown Number Inside Ring */}
+              <div
+                className={`absolute inset-2.5 sm:inset-3 rounded-full flex items-center justify-center font-black text-3xl sm:text-4xl text-white shadow-2xl backdrop-blur-md border ${
+                  isBlue
+                    ? "bg-blue-600/90 border-blue-300/80 shadow-blue-500/60"
+                    : "bg-emerald-600/90 border-emerald-300/80 shadow-emerald-500/60"
+                }`}
+              >
+                {countdown}
+              </div>
             </div>
           </div>
         )}
 
-        {/* Floating Prompt di Atas Siluet Wajah */}
-        <div className="absolute -top-10 sm:-top-12 inset-x-0 text-center pointer-events-none px-4 z-20">
+        {/* Floating Prompt di Atas Siluet Wajah dengan A11y Live Region */}
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute -top-10 sm:-top-12 inset-x-0 text-center pointer-events-none px-4 z-20"
+        >
           {isDetected ? (
             isLiveVerified ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/90 border-emerald-400 text-emerald-200 animate-in fade-in zoom-in-95">
@@ -93,7 +143,7 @@ export default function FaceSilhouetteGuide({
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-blue-950/90 border-blue-400 text-blue-200">
-                <span className="truncate">Silakan Berkedip </span>
+                <span className="truncate">Silakan Berkedip</span>
               </span>
             )
           ) : (

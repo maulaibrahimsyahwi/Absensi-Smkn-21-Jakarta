@@ -22,7 +22,9 @@ import {
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
 import ProfileModal from "../components/ProfileModal";
-import ToastNotification, { ToastNotificationProps } from "../components/common/ToastNotification";
+import ToastNotification, {
+  ToastNotificationProps,
+} from "../components/common/ToastNotification";
 import NotificationDropdown from "../components/NotificationDropdown";
 import ModalPengaturanPJJ from "../components/pjj/ModalPengaturanPJJ";
 import ModalKalenderLibur from "../components/libur/ModalKalenderLibur";
@@ -87,10 +89,13 @@ export default function PortalAdmin() {
   const [pjjActiveInfo, setPjjActiveInfo] = useState<any>(null);
   const [isLiburModalOpen, setIsLiburModalOpen] = useState<boolean>(false);
   const [liburModalTab, setLiburModalTab] = useState<string>("daftar");
-  const [liburStatusToday, setLiburStatusToday] = useState<HolidayStatusResponse | null>(null);
-  const [isTahunAjaranModalOpen, setIsTahunAjaranModalOpen] = useState<boolean>(false);
+  const [liburStatusToday, setLiburStatusToday] =
+    useState<HolidayStatusResponse | null>(null);
+  const [isTahunAjaranModalOpen, setIsTahunAjaranModalOpen] =
+    useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
-  const [notification, setNotification] = useState<ToastNotificationProps["notification"]>(null);
+  const [notification, setNotification] =
+    useState<ToastNotificationProps["notification"]>(null);
 
   // Live Clock (WIB)
   const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
@@ -269,25 +274,7 @@ export default function PortalAdmin() {
           </div>
 
           {/* Tombol Profil (Desktop) & Notifikasi Admin */}
-          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-            <button
-              type="button"
-              onClick={() => openProfile("profil")}
-              title="Profil Pengguna & Pengaturan Akun"
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-            >
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Profil"}
-                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-                />
-              ) : (
-                <User className="w-4 h-4 text-purple-200 shrink-0" />
-              )}
-              <span>Profil</span>
-            </button>
-
+          <div className="flex items-center self-end sm:self-center shrink-0">
             <NotificationDropdown
               notifications={pengajuanList}
               variant="header"
@@ -316,182 +303,222 @@ export default function PortalAdmin() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           {/* Total Siswa Aktif */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-purple-50/70 border border-purple-200/60">
-            <p className="text-xs font-bold text-purple-800 uppercase tracking-wider mb-1">
-              Siswa Aktif
-            </p>
+          <Link
+            to="/registrasi"
+            className="p-4 sm:p-5 rounded-2xl bg-purple-50/70 hover:bg-purple-100/70 border border-purple-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-purple-800 uppercase tracking-wider">
+                Siswa Aktif
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-purple-700">
                 {loading ? "-" : summaryData.siswa_aktif}
               </p>
+              <span className="text-xs font-semibold text-purple-600">
+                Siswa
+              </span>
             </div>
-          </div>
+          </Link>
 
           {/* Absensi Wajah */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 border border-emerald-200/60">
-            <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider mb-1">
-              Absensi Wajah
-            </p>
+          <Link
+            to="/registrasi"
+            className="p-4 sm:p-5 rounded-2xl bg-emerald-50/70 hover:bg-emerald-100/70 border border-emerald-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                Biometrik Wajah
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-emerald-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-emerald-700">
                 {loading ? "-" : `${summaryData.persentase_biometrik}%`}
               </p>
+              <span className="text-xs font-semibold text-emerald-600">
+                {summaryData.siswa_biometrik} siswa
+              </span>
             </div>
-          </div>
+          </Link>
 
           {/* Kehadiran Hari Ini */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-blue-50/70 border border-blue-200/60">
-            <p className="text-xs font-bold text-blue-800 uppercase tracking-wider mb-1">
-              Kehadiran Hari Ini
-            </p>
+          <Link
+            to="/dashboard?tab=rekap_siswa"
+            className="p-4 sm:p-5 rounded-2xl bg-blue-50/70 hover:bg-blue-100/70 border border-blue-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-blue-800 uppercase tracking-wider">
+                Kehadiran Hari Ini
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-blue-700">
                 {loading ? "-" : `${summaryData.persentase_kehadiran}%`}
               </p>
             </div>
-          </div>
+          </Link>
 
           {/* Pengajuan Izin Menunggu */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 border border-amber-200/60">
-            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">
-              Izin Menunggu
-            </p>
+          <Link
+            to="/dashboard?tab=verifikasi_izin"
+            className="p-4 sm:p-5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/70 border border-amber-200/60 transition-colors group cursor-pointer"
+          >
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                Izin Menunggu
+              </p>
+              <ChevronRight className="w-3.5 h-3.5 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+            </div>
             <div className="flex items-baseline gap-2">
               <p className="text-2xl sm:text-3xl font-black text-amber-700">
                 {loading ? "-" : summaryData.izin_menunggu}
               </p>
             </div>
-          </div>
+          </Link>
         </div>
       </div>
 
-      {/* Menu Aksi Cepat Administrasi (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
-      <div className="hidden md:block space-y-3">
+      {/* Menu Layanan & Manajemen Administrasi */}
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
             <span>Pusat Manajemen & Layanan Administrasi</span>
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
           {/* Card 1: Data & Biometrik Siswa */}
           <Link
             to="/registrasi"
-            className="group bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <UserPlus className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <UserPlus className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">Data & Wajah Siswa</h3>
-                <p className="text-[11px] text-purple-100">
-                  Registrasi & biometrik siswa
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Data Siswa
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-purple-100 truncate">
+                  Registrasi & wajah
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
 
           {/* Card 2: Dashboard Rekap */}
           <Link
             to="/dashboard"
-            className="group bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <BarChart3 className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">Dashboard Rekapitulasi</h3>
-                <p className="text-[11px] text-blue-100">
-                  Verifikasi izin & ekspor laporan
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Rekap Presensi
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-blue-100 truncate">
+                  Laporan & verifikasi
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
 
           {/* Card 3: Meja Guru Piket */}
           <Link
             to="/piket"
-            className="group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <ClipboardCheck className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <ClipboardCheck className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">Meja Guru Piket</h3>
-                <p className="text-[11px] text-emerald-100">
-                  Terbitkan izin masuk/keluar
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Meja Guru Piket
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-emerald-100 truncate">
+                  Izin masuk & keluar
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
 
           {/* Card 4: Catat Pelanggaran Siswa */}
           <Link
             to="/pelanggaran"
-            className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <ShieldAlert className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">
-                  Buku Catatan Pelanggaran
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Buku Pelanggaran
                 </h3>
-                <p className="text-[11px] text-rose-100">
-                  Buku saku kedisiplinan & poin
+                <p className="text-[10px] sm:text-[11px] text-rose-100 truncate">
+                  Tata tertib & sanksi
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
 
           {/* Card 5: Kiosk Scan Wajah Mandiri */}
           <Link
             to="/harian"
-            className="group bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <Camera className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <Camera className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">Presensi Siswa Harian</h3>
-                <p className="text-[11px] text-indigo-100">
-                  Scan wajah mandiri & Lokasi
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Presensi Harian
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-indigo-100 truncate">
+                  Kiosk scan wajah
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
 
           {/* Card 6: Absensi Perpustakaan */}
           <Link
             to="/perpus"
-            className="group bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+            className="group bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white p-3.5 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs">
-                <BookOpen className="w-6 h-6" />
+            <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+              <div className="p-2 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-              <div>
-                <h3 className="font-bold text-base">Presensi Perpustakaan</h3>
-                <p className="text-[11px] text-amber-100">
-                  Kunjungan & peminjaman buku
+              <div className="min-w-0">
+                <h3 className="font-bold text-xs sm:text-base truncate">
+                  Perpustakaan
+                </h3>
+                <p className="text-[10px] sm:text-[11px] text-amber-100 truncate">
+                  Kunjungan & peminjaman
                 </p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform shrink-0 hidden sm:block" />
           </Link>
         </div>
 
-        {/* Panel Kontrol Operasional Khusus: Kalender Libur & Mode Daring */}
+        {/* Panel Kontrol Khusus Sekolah: Kalender Libur, PJJ, Akademik, Backup */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           {/* Card: Pengaturan Kalender & Hari Libur Sekolah */}
           <button
@@ -500,30 +527,28 @@ export default function PortalAdmin() {
               setLiburModalTab("daftar");
               setIsLiburModalOpen(true);
             }}
-            className="group bg-gradient-to-r from-rose-600 via-rose-700 to-pink-700 hover:from-rose-700 hover:to-pink-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+            className="group bg-gradient-to-r from-rose-600 via-rose-700 to-pink-700 hover:from-rose-700 hover:to-pink-800 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
-                <CalendarDays className="w-6 h-6" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <CalendarDays className="w-5 h-5 sm:w-6 sm:h-6" />
                 {liburStatusToday?.is_holiday && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-300 rounded-full border-2 border-rose-700 animate-ping"></span>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-300 rounded-full border border-rose-700 animate-ping"></span>
                 )}
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-base truncate">
+                <h3 className="font-bold text-sm sm:text-base truncate">
                   Kalender & Libur Sekolah
                 </h3>
                 <p className="text-[11px] text-rose-100 mt-0.5 truncate">
                   {liburStatusToday?.is_holiday
                     ? `${liburStatusToday.holiday_event?.nama || "Libur Sekolah"}`
-                    : liburStatusToday?.is_special_school_day
-                      ? `Masuk Khusus: ${liburStatusToday.holiday_event?.nama || "Kegiatan"}`
-                      : "Libur semester, libur nasional, dan hari khusus sekolah"}
+                    : "Kalender SKB & hari libur sekolah"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-rose-200 group-hover:text-white transition-colors shrink-0 ml-2">
-              <span className="hidden sm:inline">Kelola Libur</span>
+              <span className="hidden sm:inline">Kelola</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -532,28 +557,28 @@ export default function PortalAdmin() {
           <button
             type="button"
             onClick={() => setIsPjjModalOpen(true)}
-            className="group bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+            className="group bg-gradient-to-r from-violet-600 to-purple-700 hover:from-violet-700 hover:to-purple-800 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
-                <Laptop className="w-6 h-6" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <Laptop className="w-5 h-5 sm:w-6 sm:h-6" />
                 {pjjActiveInfo?.is_active_today && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-violet-700 animate-ping"></span>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border border-violet-700 animate-ping"></span>
                 )}
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-base truncate">
-                  Pengaturan Mode Daring
+                <h3 className="font-bold text-sm sm:text-base truncate">
+                  Mode Daring (PJJ)
                 </h3>
                 <p className="text-[11px] text-violet-100 mt-0.5 truncate">
                   {pjjActiveInfo?.is_active_today
-                    ? `${pjjActiveInfo.keterangan || "Mode Daring"} • ${pjjActiveInfo.tipe_lingkup === "semua" ? "Semua Kelas" : pjjActiveInfo.tipe_lingkup === "tingkat" ? `Tingkat ${pjjActiveInfo.tingkat_aktif?.join(", ")}` : `${pjjActiveInfo.kelas_aktif?.length || 0} Kelas Terpilih`}`
-                    : "Atur jadwal dan kelas yang melaksanakan Pembelajaran Jarak Jauh"}
+                    ? "Mode Daring Sedang Aktif"
+                    : "Atur jadwal & kelas pembelajaran jarak jauh"}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
-              <span className="hidden sm:inline">Kelola Daring</span>
+              <span className="hidden sm:inline">Kelola</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -562,23 +587,23 @@ export default function PortalAdmin() {
           <button
             type="button"
             onClick={() => setIsTahunAjaranModalOpen(true)}
-            className="group bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+            className="group bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
-                <GraduationCap className="w-6 h-6" />
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-base truncate">
+                <h3 className="font-bold text-sm sm:text-base truncate">
                   Tahun Ajaran & Semester
                 </h3>
                 <p className="text-[11px] text-blue-100 mt-0.5 truncate">
-                  Partisi semester ganjil/genap & jam masuk gerbang
+                  Semester & toleransi jam masuk
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-blue-200 group-hover:text-white transition-colors shrink-0 ml-2">
-              <span className="hidden sm:inline">Kelola Akademik</span>
+              <span className="hidden sm:inline">Kelola</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
@@ -587,24 +612,24 @@ export default function PortalAdmin() {
           <button
             type="button"
             onClick={() => setIsBackupModalOpen(true)}
-            className="group bg-gradient-to-r from-purple-700 to-fuchsia-800 hover:from-purple-800 hover:to-fuchsia-900 text-white p-5 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between text-left cursor-pointer"
+            className="group bg-gradient-to-r from-purple-700 to-fuchsia-800 hover:from-purple-800 hover:to-fuchsia-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
           >
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
-                <Database className="w-6 h-6" />
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-purple-800 animate-ping"></span>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs relative shrink-0">
+                <Database className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full border border-purple-800 animate-ping"></span>
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-base truncate">
-                  Disaster Recovery & Backup
+                <h3 className="font-bold text-sm sm:text-base truncate">
+                  Cadangan Basis Data
                 </h3>
                 <p className="text-[11px] text-purple-100 mt-0.5 truncate">
-                  Backup otomatis harian (retensi 30 hari) & unduh off-site
+                  Backup otomatis & unduh berkas
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 text-xs font-bold text-purple-200 group-hover:text-white transition-colors shrink-0 ml-2">
-              <span className="hidden sm:inline">Kelola Backup</span>
+              <span className="hidden sm:inline">Kelola</span>
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>

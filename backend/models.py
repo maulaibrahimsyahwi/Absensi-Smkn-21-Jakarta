@@ -11,14 +11,14 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False, index=True)
-    password = db.Column(db.String(100), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
     nama = db.Column(db.String(100), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="piket")  # "admin" atau "piket"
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG signature
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil
-    two_factor_secret = db.Column(db.String(64), nullable=True)
+    two_factor_secret = db.Column(db.String(128), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
-    active_session_token = db.Column(db.String(64), nullable=True)  # Single Active Session Token
+    active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
     created_at = db.Column(db.DateTime, default=datetime.now)
 
     def to_dict(self):
@@ -46,13 +46,13 @@ class Siswa(db.Model):
     jenis_kelamin = db.Column(db.String(20), default="Laki-laki", nullable=False)  # "Laki-laki" (Siswa) atau "Perempuan" (Siswi)
     status = db.Column(db.String(20), default="Aktif", nullable=False, index=True)  # "Aktif" atau "Alumni"
     tanggal_lulus = db.Column(db.DateTime, nullable=True)  # Waktu siswa diluluskan menjadi Alumni
-    password = db.Column(db.String(100), nullable=True)  # Password login siswa (default: NIS)
+    password = db.Column(db.String(255), nullable=True)  # Password login siswa (default: NIS)
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG digital signature siswa
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil siswa
     face_encoding = db.Column(db.Text, nullable=True)  # Stored as JSON string (single encoding or list of encodings)
-    two_factor_secret = db.Column(db.String(64), nullable=True)
+    two_factor_secret = db.Column(db.String(128), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
-    active_session_token = db.Column(db.String(64), nullable=True)  # Single Active Session Token
+    active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force password change
     nisn = db.Column(db.String(20), nullable=True, index=True)  # Nomor Induk Siswa Nasional (Dapodik)
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)  # Soft Delete untuk integritas arsip
@@ -75,7 +75,7 @@ class Siswa(db.Model):
         delta = datetime.now() - self.tanggal_lulus
         return delta.days >= 365
 
-    def to_dict(self):
+    def to_dict(self, include_signature=False):
         sample_count = 0
         if self.face_encoding:
             try:
@@ -97,7 +97,8 @@ class Siswa(db.Model):
             "status": self.status or "Aktif",
             "tanggal_lulus": self.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if self.tanggal_lulus else None,
             "is_alumni_expired": self.is_alumni_expired(),
-            "tanda_tangan": self.tanda_tangan,
+            "tanda_tangan": self.tanda_tangan if include_signature else None,
+            "has_signature": bool(self.tanda_tangan),
             "foto_profil": self.foto_profil,
             "terdaftar": bool(self.face_encoding),
             "sample_count": sample_count,

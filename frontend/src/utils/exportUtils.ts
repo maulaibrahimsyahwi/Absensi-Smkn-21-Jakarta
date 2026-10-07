@@ -1,6 +1,6 @@
-import * as XLSX from "xlsx";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { nowWib } from "./date";
+import { SCHOOL_PROFILE } from "../constants/schoolProfile";
+import { getStatusPembinaan } from "../data/pelanggaranData";
 
 export interface PeriodeInfo {
   periodeMode?: string;
@@ -21,14 +21,52 @@ export interface ExportDatasets {
 }
 
 /**
- * Utilitas ekspor data rekapitulasi ke format spreadsheet (XLSX, XLS, atau CSV).
+ * Sanitizer pencegah CSV Formula Injection (Excel command execution)
  */
-export function exportSpreadsheet(
+export const csvSafe = (val: unknown): string | number => {
+  if (typeof val === "number") return val;
+  if (val === null || val === undefined) return "";
+  const str = String(val);
+  if (/^([=+@\t\r]|-.)/.test(str)) {
+    return `'${str}`;
+  }
+  return str;
+};
+
+/**
+ * Helper penomoran halaman akurat setelah seluruh halaman tabel digambar oleh jsPDF
+ */
+const addPageNumbers = (
+  doc: any,
+  label = "Sistem Absensi SMKN 21 Jakarta",
+): void => {
+  const totalPages = doc.internal.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(120);
+    doc.text(
+      `${label} - Halaman ${i} dari ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 8,
+      { align: "center" },
+    );
+  }
+};
+
+/**
+ * Utilitas ekspor data rekapitulasi ke format spreadsheet (XLSX, XLS, atau CSV).
+ * Menggunakan dynamic import XLSX untuk menghemat ukuran bundle awal.
+ */
+export async function exportSpreadsheet(
   format = "xlsx",
   activeTab: string,
   datasets: ExportDatasets,
   periodeInfo: PeriodeInfo,
-): void {
+): Promise<void> {
   const {
     filteredSiswa = [],
     filteredHarian = [],
@@ -191,18 +229,25 @@ export function exportSpreadsheet(
       "NIS",
       "Nama Siswa",
       "Kelas",
+      "Kategori",
       "Jenis Pelanggaran",
       "Poin",
       "Guru Penegur",
       "Keterangan",
     ];
-    const dataList = datasets.filteredPelanggaran || datasets.records || [];
+    const rawList = datasets.filteredPelanggaran || datasets.records || [];
+    const dataList = rawList.filter(
+      (item) =>
+        item.status_verifikasi !== "Menunggu Konfirmasi" &&
+        item.status !== "Menunggu Konfirmasi",
+    );
     rows = dataList.map((item, index) => [
       index + 1,
       item.tanggal_waktu_formatted || item.tanggal_waktu,
       item.nis,
       item.nama_siswa || item.nama,
       item.kelas,
+      item.kategori || "Pelanggaran",
       item.jenis_pelanggaran,
       item.poin,
       item.nama_penanggung_jawab || "-",
@@ -229,7 +274,12 @@ export function exportSpreadsheet(
   }
 
   try {
-    const worksheetData = [headers, ...rows];
+    const XLSX = await import("xlsx");
+    const sanitizedRows =
+      format === "csv"
+        ? rows.map((r) => r.map((c) => csvSafe(c)))
+        : rows;
+    const worksheetData = [headers, ...sanitizedRows];
     const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
 
     // Auto-width kolom agar tampilan di Microsoft Excel rapi
@@ -254,12 +304,13 @@ export function exportSpreadsheet(
 
 /**
  * Utilitas ekspor data rekapitulasi ke format PDF resmi bertema SMKN 21 Jakarta.
+ * Menggunakan dynamic import jsPDF dan jspdf-autotable.
  */
-export function exportPdf(
+export async function exportPdf(
   activeTab: string,
   datasets: ExportDatasets,
   periodeInfo: PeriodeInfo,
-): void {
+): Promise<void> {
   const {
     filteredSiswa = [],
     filteredHarian = [],
@@ -415,12 +466,18 @@ export function exportPdf(
       "NIS",
       "Nama Siswa",
       "Kelas",
+      "Kategori",
       "Jenis Pelanggaran",
       "Poin",
       "Guru Penegur",
       "Keterangan",
     ];
-    const dataList = datasets.filteredPelanggaran || datasets.records || [];
+    const rawList = datasets.filteredPelanggaran || datasets.records || [];
+    const dataList = rawList.filter(
+      (item) =>
+        item.status_verifikasi !== "Menunggu Konfirmasi" &&
+        item.status !== "Menunggu Konfirmasi",
+    );
     rows = dataList.map((item, index) => [
       index + 1,
       item.tanggal_waktu_formatted ||
@@ -428,6 +485,7 @@ export function exportPdf(
       item.nis,
       item.nama_siswa || item.nama,
       item.kelas,
+      item.kategori || "Pelanggaran",
       item.jenis_pelanggaran,
       `${item.poin} Poin`,
       item.nama_penanggung_jawab || "-",
@@ -455,6 +513,9 @@ export function exportPdf(
   }
 
   try {
+    const { default: jsPDF } = await import("jspdf");
+    const { default: autoTable } = await import("jspdf-autotable");
+
     const doc = new jsPDF({
       orientation,
       unit: "mm",
@@ -467,19 +528,19 @@ export function exportPdf(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10.5);
     doc.text(
-      "PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA",
+      SCHOOL_PROFILE.provinsi,
       pageWidth / 2,
       12,
       { align: "center" },
     );
     doc.setFontSize(9.5);
-    doc.text("DINAS PENDIDIKAN", pageWidth / 2, 16.5, { align: "center" });
+    doc.text(SCHOOL_PROFILE.dinas, pageWidth / 2, 16.5, { align: "center" });
     doc.setFontSize(13);
-    doc.text("SMK NEGERI 21 JAKARTA", pageWidth / 2, 22.5, { align: "center" });
+    doc.text(SCHOOL_PROFILE.namaResmiKop, pageWidth / 2, 22.5, { align: "center" });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.text(
-      "Jl. Siaga 1 Kemayoran Gempol Jakarta Pusat 10630 | Telp: (021) 4209587",
+      SCHOOL_PROFILE.alamatKop,
       pageWidth / 2,
       27,
       { align: "center" },
@@ -501,16 +562,7 @@ export function exportPdf(
     doc.setFontSize(8.5);
     doc.text(`Periode Rekapitulasi: ${periodeLabel}`, 14, 44);
 
-    const now = new Date();
-    const dateFormatted = `${now.getDate().toString().padStart(2, "0")}/${(
-      now.getMonth() + 1
-    )
-      .toString()
-      .padStart(2, "0")}/${now.getFullYear()} ${now
-      .getHours()
-      .toString()
-      .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} WIB`;
-    doc.text(`Dicetak: ${dateFormatted}`, pageWidth - 14, 44, {
+    doc.text(`Dicetak: ${nowWib()}`, pageWidth - 14, 44, {
       align: "right",
     });
 
@@ -538,19 +590,10 @@ export function exportPdf(
         fillColor: [248, 250, 252],
       },
       margin: { left: 14, right: 14, bottom: 18 },
-      didDrawPage: (data) => {
-        // Footer Halaman
-        const pageCount = (doc.internal as any).getNumberOfPages();
-        doc.setFontSize(7.5);
-        doc.setTextColor(120);
-        doc.text(
-          `Sistem Absensi SMKN 21 Jakarta - Halaman ${data.pageNumber} dari ${pageCount}`,
-          pageWidth / 2,
-          doc.internal.pageSize.getHeight() - 8,
-          { align: "center" },
-        );
-      },
     });
+
+    // Nomor halaman akurat setelah seluruh halaman dibuat
+    addPageNumbers(doc, "Sistem Absensi SMKN 21 Jakarta");
 
     doc.save(filename);
   } catch (err) {
@@ -572,14 +615,15 @@ export interface PelanggaranDirectOptions {
 
 /**
  * Ekspor langsung untuk Buku Catatan Pelanggaran (Riwayat Transaksi & Rekap Poin Siswa).
+ * Menggunakan dynamic import jsPDF & XLSX.
  */
-export function exportPelanggaranDirect({
+export async function exportPelanggaranDirect({
   format = "pdf",
   subTab = "riwayat",
   records = [],
   rekapData = null,
   periodeLabel = "Semua Periode",
-}: PelanggaranDirectOptions): void {
+}: PelanggaranDirectOptions): Promise<void> {
   const isRekapPoin = subTab === "rekap_poin";
   const title = isRekapPoin
     ? "REKAPITULASI AKUMULASI POIN KEDISIPLINAN SISWA SMKN 21"
@@ -603,23 +647,15 @@ export function exportPelanggaranDirect({
     ];
     const list = rekapData?.daftar_siswa || rekapData?.rekap_siswa || [];
     rows = list.map((item, index) => {
-      let statusLabel = "Baik / Aman (0-15 Poin)";
-      if (item.total_poin >= 100)
-        statusLabel = "Sanksi Keras / Panggilan Orang Tua (100+ Poin)";
-      else if (item.total_poin >= 50)
-        statusLabel = "Peringatan Keras / SP-2 (50-99 Poin)";
-      else if (item.total_poin >= 26)
-        statusLabel = "Peringatan Tertulis / SP-1 (26-49 Poin)";
-      else if (item.total_poin >= 16)
-        statusLabel = "Bimbingan Wali Kelas (16-25 Poin)";
+      const poin = item.poin_bersih ?? item.total_poin ?? 0;
       return [
         index + 1,
         item.nis || "-",
         item.nama_siswa || item.nama,
         item.kelas || "-",
         item.jumlah_pelanggaran || 0,
-        `${item.total_poin} Poin`,
-        statusLabel,
+        `${poin} Poin`,
+        getStatusPembinaan(poin).status,
       ];
     });
   } else {
@@ -629,17 +665,24 @@ export function exportPelanggaranDirect({
       "NIS",
       "Nama Siswa",
       "Kelas",
+      "Kategori",
       "Jenis Pelanggaran",
       "Poin",
       "Guru Penegur",
       "Keterangan",
     ];
-    rows = records.map((item, index) => [
+    const validRecords = records.filter(
+      (item) =>
+        item.status_verifikasi !== "Menunggu Konfirmasi" &&
+        item.status !== "Menunggu Konfirmasi",
+    );
+    rows = validRecords.map((item, index) => [
       index + 1,
       item.tanggal_waktu_formatted || item.tanggal_waktu || "-",
       item.nis || "-",
       item.nama_siswa || item.nama || "-",
       item.kelas || "-",
+      item.kategori || "Pelanggaran",
       item.jenis_pelanggaran || "-",
       `${item.poin} Poin`,
       item.nama_penanggung_jawab || "-",
@@ -649,6 +692,9 @@ export function exportPelanggaranDirect({
 
   if (format === "pdf") {
     try {
+      const { default: jsPDF } = await import("jspdf");
+      const { default: autoTable } = await import("jspdf-autotable");
+
       const doc = new jsPDF({
         orientation: "landscape",
         unit: "mm",
@@ -660,21 +706,21 @@ export function exportPelanggaranDirect({
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10.5);
       doc.text(
-        "PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA",
+        SCHOOL_PROFILE.provinsi,
         pageWidth / 2,
         12,
         { align: "center" },
       );
       doc.setFontSize(9.5);
-      doc.text("DINAS PENDIDIKAN", pageWidth / 2, 16.5, { align: "center" });
+      doc.text(SCHOOL_PROFILE.dinas, pageWidth / 2, 16.5, { align: "center" });
       doc.setFontSize(13);
-      doc.text("SMK NEGERI 21 JAKARTA", pageWidth / 2, 22.5, {
+      doc.text(SCHOOL_PROFILE.namaResmiKop, pageWidth / 2, 22.5, {
         align: "center",
       });
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.text(
-        "Jl. Siaga 1 Kemayoran Gempol Jakarta Pusat 10630 | Telp: (021) 4209587",
+        SCHOOL_PROFILE.alamatKop,
         pageWidth / 2,
         27,
         { align: "center" },
@@ -693,16 +739,7 @@ export function exportPelanggaranDirect({
       doc.setFontSize(8.5);
       doc.text(`Periode / Kategori: ${periodeLabel}`, 14, 44);
 
-      const now = new Date();
-      const dateFormatted = `${now.getDate().toString().padStart(2, "0")}/${(
-        now.getMonth() + 1
-      )
-        .toString()
-        .padStart(2, "0")}/${now.getFullYear()} ${now
-        .getHours()
-        .toString()
-        .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")} WIB`;
-      doc.text(`Dicetak: ${dateFormatted}`, pageWidth - 14, 44, {
+      doc.text(`Dicetak: ${nowWib()}`, pageWidth - 14, 44, {
         align: "right",
       });
 
@@ -729,18 +766,9 @@ export function exportPelanggaranDirect({
           fillColor: [255, 241, 242],
         },
         margin: { left: 14, right: 14, bottom: 18 },
-        didDrawPage: (data) => {
-          const pageCount = (doc.internal as any).getNumberOfPages();
-          doc.setFontSize(7.5);
-          doc.setTextColor(120);
-          doc.text(
-            `Sistem Absensi SMKN 21 Jakarta - Halaman ${data.pageNumber} dari ${pageCount}`,
-            pageWidth / 2,
-            doc.internal.pageSize.getHeight() - 8,
-            { align: "center" },
-          );
-        },
       });
+
+      addPageNumbers(doc, "Sistem Absensi SMKN 21 Jakarta");
 
       doc.save(`${filename}.pdf`);
     } catch (err) {
@@ -748,7 +776,12 @@ export function exportPelanggaranDirect({
     }
   } else {
     try {
-      const worksheetData = [headers, ...rows];
+      const XLSX = await import("xlsx");
+      const sanitizedRows =
+        format === "csv"
+          ? rows.map((r) => r.map((c) => csvSafe(c)))
+          : rows;
+      const worksheetData = [headers, ...sanitizedRows];
       const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
       const colWidths = headers.map((h, colIdx) => {
         const maxLen = Math.max(

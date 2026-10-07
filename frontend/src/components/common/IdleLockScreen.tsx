@@ -1,255 +1,307 @@
-import React, { useState, useEffect, useRef, useCallback, FormEvent } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  FormEvent,
+} from "react";
+import { createPortal } from "react-dom";
+import { useLocation } from "react-router-dom";
 import {
-  Lock,
-  Unlock,
-  KeyRound,
-  LogOut,
   AlertCircle,
-  Loader2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  LogOut,
+  Unlock,
   User,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../services/api";
+import Button from "../ui/Button";
+import { FULLSCREEN_ROUTES } from "../../utils/navVisibility";
 
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 Menit Inactivity
-const STORAGE_LOCK_KEY = "smkn21_piket_idle_locked";
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const WARN_BEFORE_MS = 60 * 1000;
+const LOCK_KEY = "smkn21_piket_idle_locked";
+const ACTIVITY = [
+  "pointerdown",
+  "pointermove",
+  "keydown",
+  "wheel",
+  "scroll",
+  "touchstart",
+] as const;
 
 export default function IdleLockScreen() {
   const { user, logout, isPiket, isAdmin } = useAuth();
-  const [isLocked, setIsLocked] = useState<boolean>(() => {
+  const { pathname } = useLocation();
+  const isEligible = Boolean(user && (isPiket || isAdmin));
+  const isKiosk = FULLSCREEN_ROUTES.includes(pathname);
+
+  const [isLocked, setIsLocked] = useState(() => {
     try {
-      return sessionStorage.getItem(STORAGE_LOCK_KEY) === "true";
+      return sessionStorage.getItem(LOCK_KEY) === "true";
     } catch {
       return false;
     }
   });
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [password, setPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const lastActivity = useRef(Date.now());
 
-  const [password, setPassword] = useState<string>("");
-  const [loadingUnlock, setLoadingUnlock] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>("");
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Lock hanya aktif jika user login dengan role 'piket' atau 'admin'
-  const isEligible = Boolean(user && (isPiket || isAdmin));
-
-  const lockScreen = useCallback(() => {
-    if (!isEligible) return;
+  const lock = useCallback(() => {
     setIsLocked(true);
+    setSecondsLeft(null);
     try {
-      sessionStorage.setItem(STORAGE_LOCK_KEY, "true");
-    } catch (_e) {
-      // ignore storage error
+      sessionStorage.setItem(LOCK_KEY, "true");
+    } catch {
+      /* abaikan */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isEligible) return;
+    setIsLocked(false);
+    try {
+      sessionStorage.removeItem(LOCK_KEY);
+    } catch {
+      /* abaikan */
     }
   }, [isEligible]);
 
-  const resetTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-    if (isEligible && !isLocked) {
-      timerRef.current = setTimeout(lockScreen, IDLE_TIMEOUT_MS);
-    }
-  }, [isEligible, isLocked, lockScreen]);
-
+  // Pantau aktivitas dengan timestamp; kiosk (/harian, /perpus) tidak dihitung idle
   useEffect(() => {
-    if (!isEligible) {
-      setIsLocked(false);
-      try {
-        sessionStorage.removeItem(STORAGE_LOCK_KEY);
-      } catch (_e) {
-        // ignore
+    if (!isEligible || isLocked) return;
+    lastActivity.current = Date.now();
+    const touch = () => {
+      lastActivity.current = Date.now();
+      setSecondsLeft(null);
+    };
+    const check = () => {
+      if (isKiosk) {
+        lastActivity.current = Date.now();
+        return;
       }
-      return;
-    }
-
-    const events = [
-      "mousedown",
-      "mousemove",
-      "keydown",
-      "scroll",
-      "touchstart",
-      "click",
-    ];
-
-    const handleUserActivity = () => {
-      if (!isLocked) {
-        resetTimer();
+      const remaining = IDLE_TIMEOUT_MS - (Date.now() - lastActivity.current);
+      if (remaining <= 0) {
+        lock();
+      } else {
+        setSecondsLeft(
+          remaining <= WARN_BEFORE_MS ? Math.ceil(remaining / 1000) : null,
+        );
       }
     };
-
-    events.forEach((evt) => {
-      window.addEventListener(evt, handleUserActivity, { passive: true });
-    });
-
-    resetTimer();
-
+    // capture: scroll di dalam container (tabel, modal) tetap tertangkap
+    ACTIVITY.forEach((e) =>
+      window.addEventListener(e, touch, { passive: true, capture: true }),
+    );
+    document.addEventListener("visibilitychange", check);
+    const id = setInterval(check, 1000);
     return () => {
-      events.forEach((evt) => {
-        window.removeEventListener(evt, handleUserActivity);
-      });
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
+      ACTIVITY.forEach((e) =>
+        window.removeEventListener(e, touch, { capture: true }),
+      );
+      document.removeEventListener("visibilitychange", check);
+      clearInterval(id);
     };
-  }, [isEligible, isLocked, resetTimer]);
+  }, [isEligible, isLocked, isKiosk, lock]);
 
-  if (!isEligible || !isLocked) return null;
+  // Blokir interaksi dan fokus ke halaman di belakang overlay
+  useEffect(() => {
+    if (!isLocked) return;
+    const root = document.getElementById("root");
+    root?.setAttribute("inert", "");
+    return () => root?.removeAttribute("inert");
+  }, [isLocked]);
 
   const handleUnlock = async (e: FormEvent) => {
     e.preventDefault();
-    setErrorMsg("");
-
+    if (!user) return;
     if (!password) {
       setErrorMsg("Masukkan kata sandi akun Anda.");
       return;
     }
-
-    if (!user) return;
-
-    setLoadingUnlock(true);
+    setLoading(true);
+    setErrorMsg("");
     try {
       const res = await api.post("/auth/login", {
         username: user.username,
-        password: password,
+        password,
       });
-
       if (res.data?.success) {
         setIsLocked(false);
         setPassword("");
+        lastActivity.current = Date.now();
         try {
-          sessionStorage.removeItem(STORAGE_LOCK_KEY);
-        } catch (_e) {
-          // ignore
+          sessionStorage.removeItem(LOCK_KEY);
+        } catch {
+          /* abaikan */
         }
-        resetTimer();
       } else {
-        setErrorMsg(
-          res.data?.message || "Kata sandi salah. Silakan coba lagi.",
-        );
+        setErrorMsg(res.data?.message || "Kata sandi salah.");
+        setPassword("");
       }
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string } } };
-      setErrorMsg(
-        axiosErr.response?.data?.message ||
-          "Kata sandi yang Anda masukkan salah. Silakan coba lagi.",
-      );
+      const msg = (err as { response?: { data?: { message?: string } } })
+        .response?.data?.message;
+      setErrorMsg(msg || "Kata sandi salah. Silakan coba lagi.");
+      setPassword("");
     } finally {
-      setLoadingUnlock(false);
+      setLoading(false);
     }
   };
 
   const handleSwitchUser = () => {
     try {
-      sessionStorage.removeItem(STORAGE_LOCK_KEY);
-    } catch (_e) {
-      // ignore
+      sessionStorage.removeItem(LOCK_KEY);
+    } catch {
+      /* abaikan */
     }
     logout();
     window.location.href = "/login";
   };
 
+  if (!isEligible) return null;
+
   return (
-    <div className="fixed inset-0 z-[9999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-300">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 text-center relative overflow-hidden">
-        {/* Dekorasi Aksen Keamanan */}
-        <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-700 via-indigo-600 to-amber-500" />
-
-        {/* Icon & Title */}
-        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-blue-50 border border-blue-200/80 text-blue-700 flex items-center justify-center mx-auto mb-4 shadow-inner">
-          <Lock className="w-8 h-8 sm:w-10 sm:h-10 text-blue-700" />
-        </div>
-
-        <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-          Layar Meja Piket Terkunci
-        </h2>
-        <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto leading-relaxed">
-          Sistem otomatis mengunci layar karena tidak ada aktivitas selama 15
-          menit untuk mencegah akses tanpa izin.
-        </p>
-
-        {/* Info Petugas */}
-        <div className="my-5 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-left">
-          <div className="w-10 h-10 rounded-xl bg-blue-700 text-white font-bold flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
-            {user?.foto_profil ? (
-              <img
-                src={user.foto_profil as string}
-                alt={user?.nama || "User"}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <User className="w-5 h-5 text-blue-200" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-              {user?.nama || user?.username}
-            </p>
-            <p className="text-[11px] text-slate-500 truncate">
-              @{user?.username} &bull;{" "}
-              <span className="capitalize font-semibold text-blue-700">
-                {user?.role === "piket" ? "Guru Piket" : "Administrator"}
-              </span>
-            </p>
-          </div>
-        </div>
-
-        {/* Form Unlock */}
-        <form onSubmit={handleUnlock} className="space-y-3.5 text-left">
-          {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              Kata Sandi untuk Membuka Kunci
-            </label>
-            <div className="relative">
-              <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoFocus
-                placeholder="Masukkan kata sandi..."
-                className="w-full text-xs sm:text-sm pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-blue-600"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loadingUnlock}
-            className="w-full py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs sm:text-sm shadow-md shadow-blue-700/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+    <>
+      {secondsLeft !== null &&
+        !isLocked &&
+        createPortal(
+          <div
+            role="status"
+            aria-live="polite"
+            className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto flex max-w-sm items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-xl animate-in slide-in-from-bottom duration-300 lg:bottom-6"
           >
-            {loadingUnlock ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Memverifikasi...</span>
-              </>
-            ) : (
-              <>
-                <Unlock className="w-4 h-4" />
-                <span>Buka Kunci Layar</span>
-              </>
-            )}
-          </button>
-        </form>
+            <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+            <p className="text-xs">
+              Layar terkunci dalam{" "}
+              <strong className="tabular-nums font-bold text-amber-300">
+                {secondsLeft}
+              </strong>{" "}
+              detik. Gerakkan kursor atau ketuk layar untuk tetap aktif.
+            </p>
+          </div>,
+          document.body,
+        )}
 
-        {/* Switch User / Logout */}
-        <div className="mt-4 pt-3.5 border-t border-slate-100 flex items-center justify-center">
-          <button
-            type="button"
-            onClick={handleSwitchUser}
-            className="text-xs font-semibold text-slate-500 hover:text-rose-600 flex items-center gap-1.5 transition-colors cursor-pointer"
+      {isLocked &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lock-title"
+            className="fixed inset-0 z-[9999] flex items-end justify-center overflow-y-auto bg-slate-950/90 backdrop-blur-md animate-in fade-in duration-300 sm:items-center sm:p-4 select-none"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Ganti Akun / Keluar</span>
-          </button>
-        </div>
-      </div>
-    </div>
+            <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-2xl animate-in slide-in-from-bottom duration-300 sm:rounded-3xl sm:p-8">
+              <h2
+                id="lock-title"
+                className="text-lg font-extrabold tracking-tight text-slate-900"
+              >
+                Layar terkunci
+              </h2>
+              <p className="mx-auto mt-1 max-w-xs text-xs leading-relaxed text-slate-500">
+                Tidak ada aktivitas selama {IDLE_TIMEOUT_MS / 60000} menit.
+                Masukkan kata sandi untuk melanjutkan
+              </p>
+
+              <div className="my-5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left">
+                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-blue-700 text-white font-bold">
+                  {user?.foto_profil ? (
+                    <img
+                      src={user.foto_profil as string}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-5 w-5 text-blue-200" />
+                  )}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-slate-900">
+                    {user?.nama || user?.username}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {user?.role === "piket" ? "Guru Piket" : "Administrator"}
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleUnlock} className="space-y-3 text-left">
+                {errorMsg && (
+                  <div
+                    key={errorMsg}
+                    role="alert"
+                    className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700"
+                  >
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                    <span>{errorMsg}</span>
+                  </div>
+                )}
+                <div>
+                  <label
+                    htmlFor="unlock-pw"
+                    className="mb-1 block text-xs font-bold text-slate-700"
+                  >
+                    Kata sandi
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="unlock-pw"
+                      autoFocus
+                      type={showPw ? "text" : "password"}
+                      autoComplete="current-password"
+                      enterKeyHint="go"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-11 text-sm focus:border-blue-600 focus:outline-hidden focus:ring-2 focus:ring-blue-600/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPw((v) => !v)}
+                      aria-label={
+                        showPw
+                          ? "Sembunyikan kata sandi"
+                          : "Tampilkan kata sandi"
+                      }
+                      className="absolute inset-y-0 right-0 grid w-11 place-items-center text-slate-400 hover:text-slate-700 cursor-pointer"
+                    >
+                      {showPw ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={loading}
+                  icon={<Unlock className="h-4 w-4" />}
+                  className="w-full"
+                >
+                  Buka kunci
+                </Button>
+              </form>
+
+              <button
+                type="button"
+                onClick={handleSwitchUser}
+                className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-rose-600 cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Ganti akun atau keluar
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

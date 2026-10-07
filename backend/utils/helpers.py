@@ -384,7 +384,8 @@ def get_flattened_known_faces():
 
     siswa_list = Siswa.query.filter(
         Siswa.face_encoding != None,
-        (Siswa.status == 'Aktif') | (Siswa.status == None)
+        (Siswa.status == 'Aktif') | (Siswa.status == None),
+        (Siswa.is_deleted == False) | (Siswa.is_deleted == None)
     ).all()
     encodings = []
     siswa_ids = []

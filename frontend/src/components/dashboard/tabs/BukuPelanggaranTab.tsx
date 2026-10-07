@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   ShieldAlert,
@@ -7,16 +7,10 @@ import {
   PlusCircle,
   Trash2,
   Eye,
-  Loader2,
   GraduationCap,
   X,
   Printer,
   FileText,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Download,
-  FileSpreadsheet,
 } from "lucide-react";
 import api from "../../../services/api";
 import { DAFTAR_KELAS_SMKN21 } from "../../../constants/schoolData";
@@ -31,6 +25,12 @@ import ToastNotification from "../../common/ToastNotification";
 import { Skeleton } from "../../common/Skeleton";
 import { useAuth } from "../../../context/AuthContext";
 import { useRealtimeSubscription } from "../../../services/realtimeService";
+import Sheet, { SheetHeader, SheetBody, SheetFooter } from "../../ui/Sheet";
+import SegmentedControl from "../../ui/SegmentedControl";
+import ExportMenu, { EXPORT_FORMATS, ExportOption } from "../../ui/ExportMenu";
+import { KpiCard } from "../DashboardKpiCards";
+import SortableTh from "../../ui/SortableTh";
+import Button from "../../ui/Button";
 
 export interface PelanggaranRecord {
   id: number;
@@ -77,6 +77,12 @@ interface BukuPelanggaranTabProps {
   namaBulanTerpilih?: string;
 }
 
+const EXPORT_LIST: readonly ExportOption<"pdf" | "xlsx" | "csv">[] = [
+  EXPORT_FORMATS.pdf,
+  EXPORT_FORMATS.xlsx,
+  EXPORT_FORMATS.csv,
+];
+
 export default function BukuPelanggaranTab({
   selectedBulan,
   selectedTahun,
@@ -90,24 +96,6 @@ export default function BukuPelanggaranTab({
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<PelanggaranRecord[]>([]);
   const [rekapData, setRekapData] = useState<RekapPelanggaranData | null>(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  const exportDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        exportDropdownRef.current &&
-        !exportDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsExportOpen(false);
-      }
-    }
-    if (isExportOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isExportOpen]);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -122,7 +110,7 @@ export default function BukuPelanggaranTab({
       setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      setSortDirection("asc");
+      setSortDirection(key === "tanggal_waktu" || key === "poin" ? "desc" : "asc");
     }
   };
 
@@ -143,10 +131,18 @@ export default function BukuPelanggaranTab({
     }
   };
 
-  // Filters
+  // Filters with 350ms debounced search
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [kelasFilter, setKelasFilter] = useState("ALL");
   const [tanggalFilter, setTanggalFilter] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Unique Kelas List
   const uniqueKelas = useMemo(() => {
@@ -175,7 +171,7 @@ export default function BukuPelanggaranTab({
       const params: Record<string, string | number> = {};
       if (kelasFilter !== "ALL") params.kelas = kelasFilter;
       if (tanggalFilter) params.tanggal = tanggalFilter;
-      if (search.trim()) params.search = search.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
       if (!tanggalFilter) {
         if (periodeMode === "bulan" && selectedBulan)
           params.bulan = selectedBulan;
@@ -212,7 +208,7 @@ export default function BukuPelanggaranTab({
 
   useEffect(() => {
     fetchData();
-  }, [kelasFilter, tanggalFilter, selectedBulan, selectedTahun, periodeMode]);
+  }, [kelasFilter, tanggalFilter, selectedBulan, selectedTahun, periodeMode, debouncedSearch]);
 
   // Sinkronisasi realtime otomatis
   useRealtimeSubscription(["pelanggaran", "siswa"], () => {
@@ -303,7 +299,7 @@ export default function BukuPelanggaranTab({
   // Reset currentPage saat filter berubah atau subtab berpindah
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, kelasFilter, tanggalFilter, activeSubTab]);
+  }, [debouncedSearch, kelasFilter, tanggalFilter, activeSubTab]);
 
   // SubTab 1: Riwayat Catatan Pelanggaran Pagination
   const totalItemsRiwayat = records.length;
@@ -321,17 +317,15 @@ export default function BukuPelanggaranTab({
     totalItemsRiwayat,
   );
   const sortedRecords = useMemo(() => {
+    const collator = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
     return [...records].sort((a, b) => {
       const valA = (a as Record<string, unknown>)[sortKey] ?? "";
       const valB = (b as Record<string, unknown>)[sortKey] ?? "";
       if (typeof valA === "number" && typeof valB === "number") {
         return sortDirection === "asc" ? valA - valB : valB - valA;
       }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirection === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
+      const r = collator.compare(String(valA), String(valB));
+      return sortDirection === "asc" ? r : -r;
     });
   }, [records, sortKey, sortDirection]);
 
@@ -355,23 +349,27 @@ export default function BukuPelanggaranTab({
     totalItemsRekap,
   );
   const sortedRekapSiswa = useMemo(() => {
+    const collator = new Intl.Collator("id", { numeric: true, sensitivity: "base" });
     return [...rekapSiswaList].sort((a, b) => {
       const valA = (a as Record<string, unknown>)[sortKeyRekap] ?? "";
       const valB = (b as Record<string, unknown>)[sortKeyRekap] ?? "";
       if (typeof valA === "number" && typeof valB === "number") {
         return sortDirectionRekap === "asc" ? valA - valB : valB - valA;
       }
-      const strA = String(valA).toLowerCase();
-      const strB = String(valB).toLowerCase();
-      return sortDirectionRekap === "asc"
-        ? strA.localeCompare(strB)
-        : strB.localeCompare(strA);
+      const r = collator.compare(String(valA), String(valB));
+      return sortDirectionRekap === "asc" ? r : -r;
     });
   }, [rekapSiswaList, sortKeyRekap, sortDirectionRekap]);
 
   const paginatedRekapSiswa = useMemo(() => {
     return sortedRekapSiswa.slice(startIndexRekap, endIndexRekap);
   }, [sortedRekapSiswa, startIndexRekap, endIndexRekap]);
+
+  const showSkeletonRiwayat = loading && records.length === 0;
+  const isReloadingRiwayat = loading && records.length > 0;
+
+  const showSkeletonRekap = loading && rekapSiswaList.length === 0;
+  const isReloadingRekap = loading && rekapSiswaList.length > 0;
 
   return (
     <div className="space-y-6">
@@ -381,131 +379,70 @@ export default function BukuPelanggaranTab({
         onClose={() => setNotification(null)}
       />
 
-      {/* Stats Cards */}
+      {/* Stats Cards dengan KpiCard */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
-            <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
-              Pelanggaran Hari Ini
-            </p>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
-              {stat.pelanggaran_hari_ini}
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-            <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
-              Total Catatan Pelanggaran
-            </p>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
-              {stat.total_catatan}
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center gap-3.5 sm:gap-4 sm:col-span-2 lg:col-span-1">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-            <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 truncate">
-              Siswa/i Tercatat Poin
-            </p>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-800 mt-0.5">
-              {stat.siswa_tercatat}
-            </h3>
-          </div>
-        </div>
+        <KpiCard
+          label="Pelanggaran Hari Ini"
+          value={stat.pelanggaran_hari_ini}
+          icon={<ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />}
+          tone="rose"
+          loading={loading && !rekapData}
+        />
+        <KpiCard
+          label="Total Catatan Pelanggaran"
+          value={stat.total_catatan}
+          icon={<FileText className="w-5 h-5 sm:w-6 sm:h-6" />}
+          tone="blue"
+          loading={loading && !rekapData}
+        />
+        <KpiCard
+          label="Siswa/i Tercatat Poin"
+          value={stat.siswa_tercatat}
+          icon={<GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />}
+          tone="amber"
+          loading={loading && !rekapData}
+          className="sm:col-span-2 lg:col-span-1"
+        />
       </div>
 
       {/* Control Bar: Sub-tabs & Action Button */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("riwayat")}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-center transition-colors duration-150 cursor-pointer border ${
-              activeSubTab === "riwayat"
-                ? "bg-rose-600 text-white shadow-xs border-rose-600"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/80"
-            }`}
-          >
-            Riwayat Pelanggaran
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("rekap_poin")}
-            className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-bold text-center transition-colors duration-150 cursor-pointer border ${
-              activeSubTab === "rekap_poin"
-                ? "bg-rose-600 text-white shadow-xs border-rose-600"
-                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/80"
-            }`}
-          >
-            Akumulasi Poin Siswa
-          </button>
-        </div>
+        <SegmentedControl<"riwayat" | "rekap_poin">
+          value={activeSubTab}
+          onChange={(v) => setActiveSubTab(v)}
+          options={[
+            {
+              value: "riwayat",
+              label: "Riwayat Pelanggaran",
+              count: records.length,
+            },
+            {
+              value: "rekap_poin",
+              label: "Akumulasi Poin",
+              count: rekapSiswaList.length,
+            },
+          ]}
+          ariaLabel="Pilih jenis tampilan catatan pelanggaran"
+          className="w-full sm:w-80"
+        />
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {/* Dropdown Ekspor Laporan Pelanggaran */}
-          <div className="relative flex-1 sm:flex-none" ref={exportDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsExportOpen((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors duration-150 border border-slate-200/80 cursor-pointer w-full sm:w-auto shadow-2xs whitespace-nowrap"
-            >
-              <Download className="w-4 h-4 text-slate-600 shrink-0" />
-              <span>Unduh Rekap</span>
-            </button>
-            {isExportOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 animate-in fade-in zoom-in-95">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportOpen(false);
-                    handleExportDirect("pdf");
-                  }}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-rose-50 hover:text-rose-700 flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <FileText className="w-3.5 h-3.5 text-rose-600" />
-                  <span>Format PDF (.pdf)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportOpen(false);
-                    handleExportDirect("xlsx");
-                  }}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Format Excel (.xlsx)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsExportOpen(false);
-                    handleExportDirect("csv");
-                  }}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2 cursor-pointer transition-colors"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Format CSV (.csv)</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <ExportMenu<"pdf" | "xlsx" | "csv">
+            title="Unduh Catatan Pelanggaran"
+            subtitle={
+              activeSubTab === "rekap_poin"
+                ? "Akumulasi Poin Siswa"
+                : "Riwayat Pelanggaran"
+            }
+            options={EXPORT_LIST}
+            onSelect={(fmt) => handleExportDirect(fmt)}
+            className="flex-1 sm:flex-none"
+          />
 
           <Link
             to="/pelanggaran"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer w-full sm:w-auto"
+            className="press inline-flex min-h-11 items-center justify-center gap-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors duration-150 shadow-xs cursor-pointer w-full sm:w-auto"
           >
             <PlusCircle className="w-4 h-4" />
             <span>Input Pelanggaran</span>
@@ -517,16 +454,15 @@ export default function BukuPelanggaranTab({
       {activeSubTab === "riwayat" && (
         <div className="bg-white rounded-2xl border border-slate-200/80 p-3 sm:p-4 shadow-xs space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-            {/* Search Input */}
+            {/* Search Input dengan debounce 350ms */}
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Cari siswa, NIS, atau jenis pelanggaran..."
+                placeholder="Cari siswa, NIS, jenis pelanggaran..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && fetchData()}
-                className="w-full text-xs pl-9 pr-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                className="w-full text-xs pl-9 pr-3.5 min-h-11 rounded-xl bg-slate-50 border border-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
               />
             </div>
 
@@ -543,7 +479,7 @@ export default function BukuPelanggaranTab({
                   ...uniqueKelas.map((k) => ({ value: k, label: k })),
                 ]}
                 icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-                className="w-full"
+                className="w-full min-h-11"
                 align="right"
               />
             </div>
@@ -558,7 +494,7 @@ export default function BukuPelanggaranTab({
                     setCurrentPage(1);
                   }}
                   placeholder="Pilih tanggal..."
-                  className="w-full"
+                  className="w-full min-h-11"
                 />
               </div>
               {tanggalFilter && (
@@ -569,7 +505,7 @@ export default function BukuPelanggaranTab({
                     setCurrentPage(1);
                   }}
                   title="Hapus filter tanggal"
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs cursor-pointer shrink-0 transition-colors"
+                  className="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs cursor-pointer shrink-0 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -581,6 +517,7 @@ export default function BukuPelanggaranTab({
 
       {/* SUB-TAB 1: TABEL RIWAYAT CATATAN PELANGGARAN */}
       <div
+        id="pelanggaran-table-top"
         className={
           activeSubTab === "riwayat"
             ? "bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs min-h-[450px]"
@@ -593,7 +530,7 @@ export default function BukuPelanggaranTab({
           </h4>
         </div>
 
-        {/* Slider Batas Data & Navigasi Halaman Atas */}
+        {/* Toolbar Pagination Atas */}
         <DashboardPagination
           displayLimit={displayLimit}
           setDisplayLimit={setDisplayLimit}
@@ -604,451 +541,334 @@ export default function BukuPelanggaranTab({
           safeCurrentPage={safeCurrentPageRiwayat}
           startIndex={startIndexRiwayat}
           endIndex={endIndexRiwayat}
+          variant="toolbar"
         />
 
-        {/* 1. Mobile Cards View (< md) */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {paginatedRecords.map((r) => {
-            const kat = getKategoriPelanggaran(r.poin);
-            return (
+        {/* Loading skeleton saat belum ada data sama sekali */}
+        {showSkeletonRiwayat && (
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, idx) => (
               <div
-                key={r.id}
-                className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5"
+                key={`skel-m-${idx}`}
+                className="p-3.5 rounded-xl border border-slate-100 space-y-2 animate-pulse"
               >
-                {/* Baris Atas: Tanggal/Waktu & Poin Badge */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-mono text-slate-500 font-medium">
-                      {r.tanggal_waktu_formatted}
-                    </span>
-                    {r.kategori === "Prestasi" ? (
-                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Prestasi
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-                        Pelanggaran
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
-                      r.kategori === "Prestasi"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : kat.badge
-                    }`}
-                  >
-                    {r.kategori === "Prestasi"
-                      ? `+${r.poin} Poin`
-                      : `${r.poin} Poin`}
-                  </span>
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-5 w-16 rounded-md" />
                 </div>
-
-                {/* Baris Siswa & Kelas */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-900 text-sm truncate">
-                      {r.nama_siswa}
-                    </p>
-                    <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      {r.nis}
-                    </p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                    {r.kelas}
-                  </span>
-                </div>
-
-                {/* Jenis Pelanggaran / Prestasi */}
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                    {r.kategori === "Prestasi"
-                      ? "Bentuk Prestasi / Reward"
-                      : "Pelanggaran"}
-                  </span>
-                  <p className="font-semibold text-slate-800 line-clamp-2 leading-relaxed">
-                    {r.jenis_pelanggaran}
-                  </p>
-                </div>
-
-                {/* Footer Kartu: Guru Penegur & Tombol Aksi */}
-                <div className="flex items-center justify-between pt-1 gap-2 border-t border-slate-100">
-                  <div className="text-[11px] text-slate-500 truncate min-w-0">
-                    Penegur{" "}
-                    <strong className="text-slate-700 font-semibold">
-                      {r.nama_penanggung_jawab}
-                    </strong>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedDetail(r)}
-                      title="Lihat Detail Tiket"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-200"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Slip</span>
-                    </button>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => setDeleteConfirmItem(r)}
-                        title="Hapus Catatan (Khusus Admin)"
-                        className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-10 w-full rounded-lg" />
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
 
-          {loading && (
-            <div className="p-4 space-y-3">
-              {Array.from({ length: 3 }).map((_, idx) => (
-                <div
-                  key={`skel-m-${idx}`}
-                  className="p-3.5 rounded-xl border border-slate-100 space-y-2 animate-pulse"
-                >
-                  <div className="flex justify-between">
-                    <Skeleton className="h-4 w-24" />
-                    <Skeleton className="h-5 w-14 rounded-md" />
-                  </div>
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-10 w-full rounded-lg" />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!loading && records.length === 0 && (
-            <div className="py-12 text-center text-slate-400 font-medium text-xs px-4">
-              Belum ada catatan pelanggaran yang sesuai.
-            </div>
-          )}
-        </div>
-
-        {/* 2. Desktop & Tablet Table View (>= md) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[780px]">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th
-                  onClick={() => handleSort("tanggal_waktu")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Tanggal & Waktu"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Tanggal & Waktu</span>
-                    {sortKey === "tanggal_waktu" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSort("nama_siswa")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Nama Siswa"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Siswa</span>
-                    {sortKey === "nama_siswa" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSort("kelas")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Kelas"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Kelas</span>
-                    {sortKey === "kelas" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSort("jenis_pelanggaran")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Jenis Pelanggaran"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Jenis Pelanggaran</span>
-                    {sortKey === "jenis_pelanggaran" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSort("poin")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Bobot Poin"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Poin</span>
-                    {sortKey === "poin" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSort("nama_penanggung_jawab")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Guru Penegur"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Guru / Tendik Penegur</span>
-                    {sortKey === "nama_penanggung_jawab" ? (
-                      sortDirection === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3">Tanda Tangan</th>
-                <th className="px-4 py-3 text-center">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
+        {/* Konten Utama Riwayat Pelanggaran (dengan state reloading subtle) */}
+        {!showSkeletonRiwayat && (
+          <div
+            className={`transition-opacity duration-150 ${
+              isReloadingRiwayat ? "opacity-50 pointer-events-none" : "opacity-100"
+            }`}
+          >
+            {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+            <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 lg:hidden p-0 md:p-3">
               {paginatedRecords.map((r) => {
                 const kat = getKategoriPelanggaran(r.poin);
                 return (
-                  <tr
+                  <div
                     key={r.id}
-                    className="hover:bg-slate-50/80 transition-colors"
+                    className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5 md:rounded-2xl md:border md:border-slate-200/80 md:bg-white"
                   >
-                    <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
-                      {r.tanggal_waktu_formatted}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-bold text-slate-900">{r.nama_siswa}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">
-                        NIS {r.nis}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
-                      {r.kelas}
-                    </td>
-                    <td className="px-4 py-3 max-w-xs">
-                      <div className="flex items-center gap-1.5 mb-1">
+                    {/* Baris Atas: Tanggal/Waktu & Poin Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[11px] font-mono text-slate-500 font-medium truncate">
+                          {r.tanggal_waktu_formatted}
+                        </span>
                         {r.kategori === "Prestasi" ? (
-                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                             Prestasi
                           </span>
                         ) : (
-                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider">
+                          <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 shrink-0">
                             Pelanggaran
                           </span>
                         )}
                       </div>
-                      <p
-                        className="font-semibold text-slate-800 line-clamp-2"
-                        title={r.jenis_pelanggaran}
-                      >
-                        {r.jenis_pelanggaran}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
+                        className={`text-[11px] font-black px-2 py-0.5 rounded-md border shrink-0 ${
                           r.kategori === "Prestasi"
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : kat.badge
                         }`}
                       >
-                        {r.kategori === "Prestasi" ? `+${r.poin}` : r.poin}
+                        {r.kategori === "Prestasi"
+                          ? `+${r.poin} Poin`
+                          : `${r.poin} Poin`}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
-                      {r.nama_penanggung_jawab}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.tanda_tangan_siswa ? (
+                    </div>
+
+                    {/* Baris Siswa & Kelas */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 text-sm truncate">
+                          {r.nama_siswa}
+                        </p>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          {r.nis}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                        {r.kelas}
+                      </span>
+                    </div>
+
+                    {/* Jenis Pelanggaran / Prestasi */}
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                        {r.kategori === "Prestasi"
+                          ? "Bentuk Prestasi / Reward"
+                          : "Pelanggaran"}
+                      </span>
+                      <p className="font-semibold text-slate-800 line-clamp-2 leading-relaxed">
+                        {r.jenis_pelanggaran}
+                      </p>
+                    </div>
+
+                    {/* Footer Kartu: Guru Penegur & Tombol Aksi */}
+                    <div className="flex items-center justify-between pt-1 gap-2 border-t border-slate-100">
+                      <div className="text-[11px] text-slate-500 truncate min-w-0">
+                        Penegur{" "}
+                        <strong className="text-slate-700 font-semibold">
+                          {r.nama_penanggung_jawab}
+                        </strong>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => setSelectedDetail(r)}
-                          className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 cursor-pointer"
-                          title="Klik untuk melihat tanda tangan"
+                          title="Lihat Detail Slip"
+                          className="press inline-flex min-h-9 items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer border border-blue-200"
                         >
-                          <img
-                            src={r.tanda_tangan_siswa}
-                            alt="TTD"
-                            className="h-6 w-12 object-contain"
-                          />
-                        </button>
-                      ) : (
-                        <span
-                          className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] bg-slate-100 text-slate-500 font-medium border border-slate-200/80"
-                          title="Siswa belum membuat tanda tangan digital di profilnya"
-                        >
-                          Belum Buat TTD
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDetail(r)}
-                          title="Lihat Detail Tiket"
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                        >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Slip</span>
                         </button>
                         {isAdmin && (
                           <button
                             type="button"
                             onClick={() => setDeleteConfirmItem(r)}
                             title="Hapus Catatan (Khusus Admin)"
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            className="press grid h-9 w-9 place-items-center text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-rose-200"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
 
-              {loading && (
-                <>
-                  {Array.from({ length: 5 }).map((_, idx) => (
-                    <tr key={`skel-row-${idx}`} className="animate-pulse">
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-4 w-28" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-4 w-36 mb-1" />
-                        <Skeleton className="h-3 w-20" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-4 w-16" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-4 w-44" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-5 w-12 rounded-md" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-4 w-28" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-7 w-7 rounded-lg" />
-                      </td>
-                      <td className="px-4 py-3.5">
-                        <Skeleton className="h-7 w-16 rounded-lg mx-auto" />
+              {!loading && records.length === 0 && (
+                <div className="col-span-2 py-12 text-center text-slate-400 font-medium text-xs px-4">
+                  Belum ada catatan pelanggaran yang sesuai.
+                </div>
+              )}
+            </div>
+
+            {/* 2. Desktop Table View (>= lg) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[780px]">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <SortableTh
+                      label="Tanggal & Waktu"
+                      field="tanggal_waktu"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                      className="whitespace-nowrap"
+                    />
+                    <SortableTh
+                      label="Siswa"
+                      field="nama_siswa"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Kelas"
+                      field="kelas"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Jenis Pelanggaran"
+                      field="jenis_pelanggaran"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Poin"
+                      field="poin"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <SortableTh
+                      label="Guru / Tendik Penegur"
+                      field="nama_penanggung_jawab"
+                      sortKey={sortKey}
+                      sortDir={sortDirection}
+                      onSort={handleSort}
+                    />
+                    <th className="px-4 py-3 font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      Tanda Tangan
+                    </th>
+                    <th className="px-4 py-3 text-center font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedRecords.map((r) => {
+                    const kat = getKategoriPelanggaran(r.poin);
+                    return (
+                      <tr
+                        key={r.id}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
+                        <td className="px-4 py-3 font-mono text-slate-600 whitespace-nowrap">
+                          {r.tanggal_waktu_formatted}
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="font-bold text-slate-900">{r.nama_siswa}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">
+                            NIS {r.nis}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">
+                          {r.kelas}
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            {r.kategori === "Prestasi" ? (
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                                Prestasi
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200 uppercase tracking-wider">
+                                Pelanggaran
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className="font-semibold text-slate-800 line-clamp-2"
+                            title={r.jenis_pelanggaran}
+                          >
+                            {r.jenis_pelanggaran}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`text-[11px] font-black px-2 py-0.5 rounded-md border ${
+                              r.kategori === "Prestasi"
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : kat.badge
+                            }`}
+                          >
+                            {r.kategori === "Prestasi" ? `+${r.poin}` : r.poin}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 font-medium whitespace-nowrap">
+                          {r.nama_penanggung_jawab}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {r.tanda_tangan_siswa ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetail(r)}
+                              className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 cursor-pointer"
+                              title="Klik untuk melihat tanda tangan"
+                            >
+                              <img
+                                src={r.tanda_tangan_siswa}
+                                alt="TTD"
+                                className="h-6 w-12 object-contain"
+                              />
+                            </button>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] bg-slate-100 text-slate-500 font-medium border border-slate-200/80"
+                              title="Siswa belum membuat tanda tangan digital di profilnya"
+                            >
+                              Belum Buat TTD
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDetail(r)}
+                              title="Lihat Detail Tiket"
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmItem(r)}
+                                title="Hapus Catatan (Khusus Admin)"
+                                className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!loading && records.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-16 text-center text-slate-400 font-medium text-xs"
+                      >
+                        Belum ada catatan pelanggaran yang sesuai.
                       </td>
                     </tr>
-                  ))}
-                </>
-              )}
-
-              {!loading && records.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-16 text-center text-slate-400 font-medium text-xs"
-                  >
-                    Belum ada catatan pelanggaran yang sesuai.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Footer Navigasi Halaman Bawah */}
-        <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
-          <p className="text-xs text-slate-500 text-center sm:text-left">
-            {totalItemsRiwayat === 0 ? (
-              "Tidak ada baris data untuk ditampilkan."
-            ) : (
-              <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800">
-                  {startIndexRiwayat + 1}–{endIndexRiwayat}
-                </span>{" "}
-                dari{" "}
-                <span className="font-bold text-slate-800">
-                  {totalItemsRiwayat}
-                </span>{" "}
-                total data catatan pelanggaran
-              </>
-            )}
-          </p>
-
-          {totalPagesRiwayat > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400">
-                Halaman {safeCurrentPageRiwayat} dari {totalPagesRiwayat}
-              </span>
-              <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                <button
-                  type="button"
-                  disabled={safeCurrentPageRiwayat <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
-                >
-                  Sebelumnya
-                </button>
-                <button
-                  type="button"
-                  disabled={safeCurrentPageRiwayat >= totalPagesRiwayat}
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPagesRiwayat, p + 1))
-                  }
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Selanjutnya
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <DashboardPagination
+          displayLimit={displayLimit}
+          setDisplayLimit={setDisplayLimit}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalItems={totalItemsRiwayat}
+          totalPages={totalPagesRiwayat}
+          safeCurrentPage={safeCurrentPageRiwayat}
+          startIndex={startIndexRiwayat}
+          endIndex={endIndexRiwayat}
+          variant="footer"
+          scrollTargetId="pelanggaran-table-top"
+        />
       </div>
 
       {/* SUB-TAB 2: AKUMULASI POIN SISWA */}
       <div
+        id="rekap-poin-table-top"
         className={
           activeSubTab === "rekap_poin"
             ? "bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs min-h-[450px]"
@@ -1057,16 +877,14 @@ export default function BukuPelanggaranTab({
       >
         <div className="p-3.5 sm:p-4 border-b border-slate-200">
           <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">
-            Peringkat Akumulasi Poin Kedisiplinan Siswa ({rekapSiswaList.length}
-            )
+            Peringkat Akumulasi Poin Kedisiplinan Siswa ({rekapSiswaList.length})
           </h4>
           <p className="text-xs text-slate-400 mt-0.5">
-            Daftar siswa dengan catatan poin pelanggaran, diurutkan dari poin
-            tertinggi
+            Daftar siswa dengan catatan poin kedisiplinan dan reward prestasi
           </p>
         </div>
 
-        {/* Slider Batas Data & Navigasi Halaman Atas SubTab 2 */}
+        {/* Toolbar Pagination Atas SubTab 2 */}
         <DashboardPagination
           displayLimit={displayLimit}
           setDisplayLimit={setDisplayLimit}
@@ -1077,428 +895,371 @@ export default function BukuPelanggaranTab({
           safeCurrentPage={safeCurrentPageRekap}
           startIndex={startIndexRekap}
           endIndex={endIndexRekap}
+          variant="toolbar"
         />
 
-        {/* 1. Mobile Cards View (< md) */}
-        <div className="md:hidden divide-y divide-slate-100">
-          {paginatedRekapSiswa.map((item, idx) => {
-            const statusInfo = getStatusPembinaan(item.total_poin);
-            const actualNo = startIndexRekap + idx + 1;
-            return (
+        {showSkeletonRekap && (
+          <div className="p-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, idx) => (
               <div
-                key={idx}
-                className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5"
+                key={`skel-rekap-${idx}`}
+                className="p-3.5 rounded-xl border border-slate-100 space-y-2 animate-pulse"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-extrabold text-xs flex items-center justify-center shrink-0">
-                      {actualNo}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 text-sm truncate">
-                        {item.nama_siswa}
-                      </p>
-                      <p className="text-[11px] text-slate-400 font-mono">
-                        NIS: {item.nis} • {item.kelas}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-900 text-white shadow-xs">
-                      Bersih: {item.poin_bersih ?? item.total_poin} Poin
-                    </span>
-                    <div className="flex items-center gap-1.5 text-[10px] font-semibold">
-                      <span className="text-rose-600 font-bold">
-                        P:{" "}
-                        {item.total_poin_pelanggaran ??
-                          item.total_pelanggaran ??
-                          item.total_poin}
-                      </span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-emerald-600 font-bold">
-                        R: +
-                        {item.total_poin_prestasi ?? item.total_prestasi ?? 0}
-                      </span>
-                    </div>
-                  </div>
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-16 rounded-md" />
                 </div>
-
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
-                  <span className="text-[11px] text-slate-500">
-                    Total Kasus:{" "}
-                    <strong className="text-slate-800">
-                      {item.jumlah_pelanggaran} Kali
-                    </strong>
-                  </span>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.badge}`}
-                  >
-                    {statusInfo.status}
-                  </span>
-                </div>
+                <Skeleton className="h-4 w-48" />
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
 
-          {rekapSiswaList.length === 0 && (
-            <div className="py-12 text-center text-slate-400 font-medium text-xs px-4">
-              Belum ada akumulasi poin tercatat.
-            </div>
-          )}
-        </div>
-
-        {/* 2. Desktop & Tablet Table View (>= md) */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[750px]">
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-              <tr>
-                <th className="px-4 py-3 text-center w-12">No</th>
-                <th
-                  onClick={() => handleSortRekap("nama_siswa")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Nama Siswa"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Nama Siswa</span>
-                    {sortKeyRekap === "nama_siswa" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSortRekap("nis")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan NIS"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>NIS</span>
-                    {sortKeyRekap === "nis" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th
-                  onClick={() => handleSortRekap("kelas")}
-                  className="px-4 py-3 cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Kelas"
-                >
-                  <div className="flex items-center gap-1">
-                    <span>Kelas</span>
-                    {sortKeyRekap === "kelas" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-center text-rose-600">
-                  Poin Pelanggaran
-                </th>
-                <th className="px-4 py-3 text-center text-emerald-600">
-                  Poin Prestasi
-                </th>
-                <th
-                  onClick={() => handleSortRekap("total_poin")}
-                  className="px-4 py-3 text-center cursor-pointer hover:bg-slate-100/80 transition-colors select-none"
-                  title="Urutkan Poin Bersih"
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    <span>Poin Bersih</span>
-                    {sortKeyRekap === "total_poin" ? (
-                      sortDirectionRekap === "asc" ? (
-                        <ArrowUp className="w-3 h-3 text-rose-600" />
-                      ) : (
-                        <ArrowDown className="w-3 h-3 text-rose-600" />
-                      )
-                    ) : (
-                      <ArrowUpDown className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3">Status Pembinaan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
+        {!showSkeletonRekap && (
+          <div
+            className={`transition-opacity duration-150 ${
+              isReloadingRekap ? "opacity-50 pointer-events-none" : "opacity-100"
+            }`}
+          >
+            {/* 1. Mobile & Tablet Portrait Cards View (< lg) */}
+            <div className="divide-y divide-slate-100 md:grid md:grid-cols-2 md:gap-3 md:divide-y-0 lg:hidden p-0 md:p-3">
               {paginatedRekapSiswa.map((item, idx) => {
-                const poinBersih = item.poin_bersih ?? item.total_poin ?? 0;
-                const statusInfo = getStatusPembinaan(poinBersih);
+                const statusInfo = getStatusPembinaan(item.total_poin);
                 const actualNo = startIndexRekap + idx + 1;
                 return (
-                  <tr
+                  <div
                     key={idx}
-                    className="hover:bg-slate-50/80 transition-colors"
+                    className="p-3.5 hover:bg-slate-50/70 transition-colors space-y-2.5 md:rounded-2xl md:border md:border-slate-200/80 md:bg-white"
                   >
-                    <td className="px-4 py-3 text-center font-bold text-slate-400">
-                      {actualNo}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900">
-                      {item.nama_siswa}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-slate-500">
-                      {item.nis}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-700">
-                      {item.kelas}
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold text-rose-600">
-                      {item.total_poin_pelanggaran ??
-                        item.total_pelanggaran ??
-                        item.total_poin}
-                    </td>
-                    <td className="px-4 py-3 text-center font-bold text-emerald-600">
-                      +{item.total_poin_prestasi ?? item.total_prestasi ?? 0}
-                    </td>
-                    <td className="px-4 py-3 text-center font-black text-slate-900 text-sm">
-                      <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200">
-                        {poinBersih} Poin
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-6 h-6 rounded-lg bg-slate-100 text-slate-700 font-extrabold text-xs flex items-center justify-center shrink-0">
+                          {actualNo}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-900 text-sm truncate">
+                            {item.nama_siswa}
+                          </p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            NIS: {item.nis} • {item.kelas}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className="text-xs font-black px-2.5 py-1 rounded-lg bg-slate-900 text-white shadow-xs">
+                          Bersih: {item.poin_bersih ?? item.total_poin} Poin
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                          <span className="text-rose-600 font-bold">
+                            P:{" "}
+                            {item.total_poin_pelanggaran ??
+                              item.total_pelanggaran ??
+                              item.total_poin}
+                          </span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-emerald-600 font-bold">
+                            R: +
+                            {item.total_poin_prestasi ?? item.total_prestasi ?? 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                      <span className="text-[11px] text-slate-500">
+                        Total Kasus:{" "}
+                        <strong className="text-slate-800">
+                          {item.jumlah_pelanggaran} Kali
+                        </strong>
                       </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${statusInfo.badge}`}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.badge}`}
                       >
                         {statusInfo.status}
                       </span>
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
 
-              {rekapSiswaList.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-8 text-center text-slate-400"
-                  >
-                    Belum ada akumulasi poin tercatat.
-                  </td>
-                </tr>
+              {!loading && rekapSiswaList.length === 0 && (
+                <div className="col-span-2 py-12 text-center text-slate-400 font-medium text-xs px-4">
+                  Belum ada akumulasi poin tercatat.
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* 2. Desktop Table View (>= lg) */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[750px]">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="px-4 py-3 text-center w-12 font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      No
+                    </th>
+                    <SortableTh
+                      label="Nama Siswa"
+                      field="nama_siswa"
+                      sortKey={sortKeyRekap}
+                      sortDir={sortDirectionRekap}
+                      onSort={handleSortRekap}
+                    />
+                    <SortableTh
+                      label="NIS"
+                      field="nis"
+                      sortKey={sortKeyRekap}
+                      sortDir={sortDirectionRekap}
+                      onSort={handleSortRekap}
+                    />
+                    <SortableTh
+                      label="Kelas"
+                      field="kelas"
+                      sortKey={sortKeyRekap}
+                      sortDir={sortDirectionRekap}
+                      onSort={handleSortRekap}
+                    />
+                    <th className="px-4 py-3 text-center text-rose-600 font-bold text-[11px] uppercase tracking-wider">
+                      Poin Pelanggaran
+                    </th>
+                    <th className="px-4 py-3 text-center text-emerald-600 font-bold text-[11px] uppercase tracking-wider">
+                      Poin Prestasi
+                    </th>
+                    <SortableTh
+                      label="Poin Bersih"
+                      field="total_poin"
+                      sortKey={sortKeyRekap}
+                      sortDir={sortDirectionRekap}
+                      onSort={handleSortRekap}
+                      align="center"
+                    />
+                    <th className="px-4 py-3 font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      Status Pembinaan
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedRekapSiswa.map((item, idx) => {
+                    const poinBersih = item.poin_bersih ?? item.total_poin ?? 0;
+                    const statusInfo = getStatusPembinaan(poinBersih);
+                    const actualNo = startIndexRekap + idx + 1;
+                    return (
+                      <tr
+                        key={idx}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-center font-bold text-slate-400">
+                          {actualNo}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-900">
+                          {item.nama_siswa}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-500">
+                          {item.nis}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-700">
+                          {item.kelas}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-rose-600">
+                          {item.total_poin_pelanggaran ??
+                            item.total_pelanggaran ??
+                            item.total_poin}
+                        </td>
+                        <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                          +{item.total_poin_prestasi ?? item.total_prestasi ?? 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-black text-slate-900 text-sm">
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200">
+                            {poinBersih} Poin
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${statusInfo.badge}`}
+                          >
+                            {statusInfo.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {!loading && rekapSiswaList.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-4 py-8 text-center text-slate-400"
+                      >
+                        Belum ada akumulasi poin tercatat.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Footer Navigasi Halaman Bawah SubTab 2 */}
-        <div className="p-3.5 sm:p-4 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
-          <p className="text-xs text-slate-500 text-center sm:text-left">
-            {totalItemsRekap === 0 ? (
-              "Tidak ada baris data untuk ditampilkan."
-            ) : (
-              <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800">
-                  {startIndexRekap + 1}–{endIndexRekap}
-                </span>{" "}
-                dari{" "}
-                <span className="font-bold text-slate-800">
-                  {totalItemsRekap}
-                </span>{" "}
-                total siswa tercatat
-              </>
-            )}
-          </p>
-
-          {totalPagesRekap > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400">
-                Halaman {safeCurrentPageRekap} dari {totalPagesRekap}
-              </span>
-              <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                <button
-                  type="button"
-                  disabled={safeCurrentPageRekap <= 1}
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
-                >
-                  Sebelumnya
-                </button>
-                <button
-                  type="button"
-                  disabled={safeCurrentPageRekap >= totalPagesRekap}
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPagesRekap, p + 1))
-                  }
-                  className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  Selanjutnya
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+        <DashboardPagination
+          displayLimit={displayLimit}
+          setDisplayLimit={setDisplayLimit}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          totalItems={totalItemsRekap}
+          totalPages={totalPagesRekap}
+          safeCurrentPage={safeCurrentPageRekap}
+          startIndex={startIndexRekap}
+          endIndex={endIndexRekap}
+          variant="footer"
+          scrollTargetId="rekap-poin-table-top"
+        />
       </div>
 
       {/* Modal Detail & Cetak Tiket Pelanggaran */}
-      {selectedDetail && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 animate-in zoom-in-95 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2.5">
+      <Sheet
+        isOpen={Boolean(selectedDetail)}
+        onClose={() => setSelectedDetail(null)}
+        labelledBy="detail-pelanggaran-title"
+        size="md"
+        tall={true}
+      >
+        {selectedDetail && (
+          <>
+            <SheetHeader
+              id="detail-pelanggaran-title"
+              title="Slip Bukti Pelanggaran Siswa"
+              subtitle="SMKN 21 Jakarta"
+              onClose={() => setSelectedDetail(null)}
+            />
+            <SheetBody>
+              <div className="space-y-4">
+                <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-400">Waktu Kejadian</span>
+                    <span className="font-bold text-slate-800">
+                      {selectedDetail.tanggal_waktu_formatted}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-400">Nama Siswa</span>
+                    <span className="font-bold text-slate-900">
+                      {selectedDetail.nama_siswa}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-400">NIS & Kelas</span>
+                    <span className="font-semibold text-slate-800">
+                      {selectedDetail.nis} • {selectedDetail.kelas}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-200 pb-2">
+                    <span className="text-slate-400">Guru / Tendik Penegur</span>
+                    <span className="font-bold text-slate-800">
+                      {selectedDetail.nama_penanggung_jawab}
+                    </span>
+                  </div>
+                  <div className="space-y-1 border-b border-slate-200 pb-2">
+                    <span className="text-slate-400 block">Jenis Pelanggaran</span>
+                    <span className="font-bold text-slate-900 block leading-relaxed">
+                      {selectedDetail.jenis_pelanggaran}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Bobot Poin</span>
+                    <span className="text-base font-black text-rose-600">
+                      +{selectedDetail.poin} Poin
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tanda Tangan */}
                 <div>
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-                    Slip Bukti Pelanggaran Siswa
-                  </h3>
-                  <p className="text-[11px] text-slate-400">SMKN 21 Jakarta</p>
+                  <span className="text-xs font-bold text-slate-700 block mb-1">
+                    Tanda Tangan Digital Pengakuan Siswa
+                  </span>
+                  <div className="w-full h-28 border border-slate-200 bg-white rounded-2xl flex items-center justify-center p-2 shadow-inner">
+                    {selectedDetail.tanda_tangan_siswa ? (
+                      <img
+                        src={selectedDetail.tanda_tangan_siswa}
+                        alt="TTD Siswa"
+                        className="max-h-full object-contain"
+                      />
+                    ) : (
+                      <div className="text-center p-2">
+                        <p className="text-xs text-slate-500 font-medium">
+                          Siswa belum membuat tanda tangan digital
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          (Tercatat otomatis via Verifikasi Biometrik Wajah)
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedDetail(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">Waktu Kejadian</span>
-                <span className="font-bold text-slate-800">
-                  {selectedDetail.tanggal_waktu_formatted}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">Nama Siswa</span>
-                <span className="font-bold text-slate-900">
-                  {selectedDetail.nama_siswa}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">NIS & Kelas</span>
-                <span className="font-semibold text-slate-800">
-                  {selectedDetail.nis} • {selectedDetail.kelas}
-                </span>
-              </div>
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">Guru / Tendik Penegur</span>
-                <span className="font-bold text-slate-800">
-                  {selectedDetail.nama_penanggung_jawab}
-                </span>
-              </div>
-              <div className="space-y-1 border-b border-slate-200 pb-2">
-                <span className="text-slate-400 block">Jenis Pelanggaran</span>
-                <span className="font-bold text-slate-900 block leading-relaxed">
-                  {selectedDetail.jenis_pelanggaran}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400">Bobot Poin</span>
-                <span className="text-base font-black text-rose-600">
-                  +{selectedDetail.poin} Poin
-                </span>
-              </div>
-            </div>
-
-            {/* Tanda Tangan */}
-            <div>
-              <span className="text-xs font-bold text-slate-700 block mb-1">
-                Tanda Tangan Digital Pengakuan Siswa
-              </span>
-              <div className="w-full h-24 sm:h-28 border border-slate-200 bg-white rounded-2xl flex items-center justify-center p-2 shadow-inner">
-                {selectedDetail.tanda_tangan_siswa ? (
-                  <img
-                    src={selectedDetail.tanda_tangan_siswa}
-                    alt="TTD Siswa"
-                    className="max-h-full object-contain"
-                  />
-                ) : (
-                  <div className="text-center p-2">
-                    <p className="text-xs text-slate-500 font-medium">
-                      Siswa belum membuat tanda tangan digital
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      (Tercatat otomatis via Verifikasi Biometrik Wajah)
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-1">
-              <button
-                type="button"
+            </SheetBody>
+            <SheetFooter>
+              <Button
+                variant="outline"
+                icon={<Printer className="w-4 h-4" />}
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak Slip</span>
-              </button>
-
-              <button
-                type="button"
+                Cetak Slip
+              </Button>
+              <Button
+                variant="soft"
                 onClick={() => setSelectedDetail(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+            </SheetFooter>
+          </>
+        )}
+      </Sheet>
 
       {/* Modal Konfirmasi Hapus */}
-      {deleteConfirmItem && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in">
-          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="p-2 rounded-xl bg-rose-50 border border-rose-100">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-slate-900">
-                Hapus Catatan Pelanggaran?
-              </h3>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Apakah Anda yakin ingin menghapus catatan pelanggaran untuk{" "}
-              <strong className="text-slate-800">
-                {deleteConfirmItem.nama_siswa}
-              </strong>{" "}
-              {deleteConfirmItem.poin} poin ? Tindakan ini akan mengurangi
-              akumulasi poin siswa tersebut.
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <button
-                type="button"
+      <Sheet
+        isOpen={Boolean(deleteConfirmItem)}
+        onClose={() => setDeleteConfirmItem(null)}
+        labelledBy="delete-pelanggaran-title"
+        size="sm"
+      >
+        {deleteConfirmItem && (
+          <>
+            <SheetHeader
+              id="delete-pelanggaran-title"
+              title="Hapus Catatan Pelanggaran?"
+              subtitle={`${deleteConfirmItem.nama_siswa} (${deleteConfirmItem.poin} poin)`}
+              onClose={() => setDeleteConfirmItem(null)}
+            />
+            <SheetBody>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Hapus catatan pelanggaran untuk{" "}
+                <strong className="text-slate-800">
+                  {deleteConfirmItem.nama_siswa}
+                </strong>{" "}
+                ({deleteConfirmItem.poin} poin)? Akumulasi poin siswa akan otomatis disesuaikan di sistem.
+              </p>
+            </SheetBody>
+            <SheetFooter>
+              <Button
+                variant="outline"
                 disabled={deleteLoading}
                 onClick={() => setDeleteConfirmItem(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 Batal
-              </button>
-              <button
-                type="button"
-                disabled={deleteLoading}
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteLoading}
                 onClick={handleDelete}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
               >
-                {deleteLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <span>Ya, Hapus</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                Ya, Hapus
+              </Button>
+            </SheetFooter>
+          </>
+        )}
+      </Sheet>
     </div>
   );
 }

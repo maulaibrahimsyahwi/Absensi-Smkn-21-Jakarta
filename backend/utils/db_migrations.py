@@ -177,13 +177,16 @@ def sync_legacy_data():
 def run_db_migrations(app):
     """
     Menjalankan seluruh tahapan migrasi dan inisialisasi basis data secara terstruktur.
+    Mendukung SQLite dan PostgreSQL secara otomatis.
     """
     with app.app_context():
-        db.create_all()
         try:
-            with db.engine.connect() as conn:
-                apply_sqlite_pragmas(conn)
-                migrate_table_columns(conn)
+            db.create_all()
+            is_sqlite = 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower()
+            if is_sqlite:
+                with db.engine.connect() as conn:
+                    apply_sqlite_pragmas(conn)
+                    migrate_table_columns(conn)
 
             seed_default_staff()
             seed_default_schedule()

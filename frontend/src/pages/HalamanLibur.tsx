@@ -1,25 +1,28 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   Download,
   ExternalLink,
-  LogOut,
   ArrowRight,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  X,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { liburService } from "../services/liburService";
 import { useRealtimeSubscription } from "../services/realtimeService";
 import ProfileModal from "../components/ProfileModal";
+import HolidayCalendarView from "../components/libur/HolidayCalendarView";
+import Sheet from "../components/ui/Sheet";
 import logoSMKN21 from "../assets/Logo SMKN21.png";
-import { HolidayStatusResponse } from "../types/libur";
+import { HolidayEvent, HolidayStatusResponse } from "../types/libur";
 
 export default function HalamanLibur() {
   const navigate = useNavigate();
-  const { user, role, logout, todayStatus, refreshTodayStatus } = useAuth();
+  const { user, role, todayStatus, refreshTodayStatus } = useAuth();
 
   const [statusData, setStatusData] = useState<HolidayStatusResponse | null>(
     (todayStatus as HolidayStatusResponse) || null,
@@ -27,42 +30,52 @@ export default function HalamanLibur() {
   const [, setLoading] = useState<boolean>(!todayStatus);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [profileModalTab, setProfileModalTab] = useState<string>("profil");
-  const [, setCurrentTimeStr] = useState<string>("");
-  const [currentDateStr, setCurrentDateStr] = useState<string>("");
+
+  const todayLabel = useMemo(() => {
+    return new Date().toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }, []);
 
   // PDF Preview & Custom Page Controls
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState<boolean>(true);
   const [pdfCurrentPage, setPdfCurrentPage] = useState<number>(1);
   const [pdfTotalPages, setPdfTotalPages] = useState<number>(1);
 
-  // Custom Logout Confirmation Modal
-  const [showLogoutConfirmModal, setShowLogoutConfirmModal] = useState<boolean>(false);
+  // Calendar Modal State
+  const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
+  const [calendarEvents, setCalendarEvents] = useState<HolidayEvent[]>([]);
+  const [calendarYear, setCalendarYear] = useState<string>(
+    String(new Date().getFullYear()),
+  );
+  const [calendarMonth, setCalendarMonth] = useState<number>(
+    new Date().getMonth(),
+  );
 
-  // Live Clock (WIB) & Tanggal Bahasa Indonesia
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTimeStr(
-        now.toLocaleTimeString("id-ID", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        }) + " WIB",
-      );
-      setCurrentDateStr(
-        now.toLocaleDateString("id-ID", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-        }),
-      );
-    };
-
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
+  const fetchCalendarEvents = useCallback(async (year: string) => {
+    try {
+      const res = await liburService.getHariLiburList({ tahun: year });
+      if (Array.isArray(res)) {
+        setCalendarEvents(res);
+      } else if (res && (res as any).data && Array.isArray((res as any).data)) {
+        setCalendarEvents((res as any).data);
+      }
+      setCalendarYear(year);
+    } catch (e) {
+      console.warn("Gagal mengambil kalender libur:", e);
+    }
   }, []);
+
+  useEffect(() => {
+    if (showCalendarModal) {
+      fetchCalendarEvents(calendarYear);
+    }
+  }, [showCalendarModal, calendarYear, fetchCalendarEvents]);
+
+
 
   // Fetch status operasional hari ini
   const fetchStatus = useCallback(async () => {
@@ -100,10 +113,6 @@ export default function HalamanLibur() {
   useRealtimeSubscription(["libur", "presensi"], () => {
     fetchStatus();
   });
-
-  const handleLogout = () => {
-    setShowLogoutConfirmModal(true);
-  };
 
   const holidayEvent = statusData?.holiday_event;
   const suratUrl = holidayEvent?.lampiran_surat || "";
@@ -224,16 +233,6 @@ export default function HalamanLibur() {
                     </p>
                   </div>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="p-2 sm:px-3 sm:py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer"
-                  title="Keluar dari Akun"
-                >
-                  <LogOut className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Keluar</span>
-                </button>
               </div>
             ) : (
               <button
@@ -264,6 +263,19 @@ export default function HalamanLibur() {
                   <span>Kegiatan Diliburkan</span>
                 </span>
 
+                <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-[11px] font-semibold">
+                  {todayLabel}
+                </span>
+
+                {holidayEvent?.tanggal_mulai && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 text-[11px] font-semibold">
+                    {holidayEvent.tanggal_selesai &&
+                    holidayEvent.tanggal_mulai !== holidayEvent.tanggal_selesai
+                      ? `Periode: ${holidayEvent.tanggal_mulai} s/d ${holidayEvent.tanggal_selesai}`
+                      : `Tanggal: ${holidayEvent.tanggal_mulai}`}
+                  </span>
+                )}
+
                 {holidayEvent?.kategori && (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-200 text-[11px] font-bold">
                     {formatKategori(holidayEvent.kategori)}
@@ -282,6 +294,18 @@ export default function HalamanLibur() {
                   statusData?.message ||
                   "Seluruh kegiatan presensi kehadiran tatap muka, pembinaan piket, dan kegiatan belajar mengajar di lingkungan SMKN 21 Jakarta diliburkan."}
               </p>
+            </div>
+
+            {/* Tombol Kalender Libur Sekolah */}
+            <div className="shrink-0 flex items-center">
+              <button
+                type="button"
+                onClick={() => setShowCalendarModal(true)}
+                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs sm:text-sm font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer backdrop-blur-md"
+              >
+                <Calendar className="w-4 h-4 text-purple-300" />
+                <span>Lihat Kalender Libur</span>
+              </button>
             </div>
           </div>
         </div>
@@ -324,98 +348,138 @@ export default function HalamanLibur() {
               <div className="animate-in fade-in duration-200">
                 {isPdf ? (
                   <>
-                    <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 text-white text-xs select-none">
-                      {/* Center: Custom Page Navigation [ < ] [ 1 ] / 3 [ > ] */}
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPdfCurrentPage((p) => Math.max(1, p - 1));
-                          }}
-                          disabled={pdfCurrentPage <= 1}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
-                          title="Halaman Sebelumnya"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 text-xs font-bold">
-                          <input
-                            type="number"
-                            min={1}
-                            max={pdfTotalPages}
-                            value={pdfCurrentPage}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              if (
-                                !isNaN(val) &&
-                                val >= 1 &&
-                                val <= pdfTotalPages
-                              ) {
-                                setPdfCurrentPage(val);
-                              }
-                            }}
-                            className="w-9 text-center bg-slate-950 border border-slate-700 rounded text-purple-300 font-bold py-0.5 focus:outline-hidden focus:ring-1 focus:ring-purple-400"
-                          />
-                          <span className="text-slate-400">/</span>
-                          <span className="text-slate-200 min-w-[14px] text-center">
-                            {pdfTotalPages}
-                          </span>
+                    {/* Tampilan Ringkas Mobile Khusus Smartphone (< md) */}
+                    <div className="p-4 bg-slate-50 md:hidden space-y-3">
+                      <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                          <FileText className="w-5 h-5" />
                         </div>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPdfCurrentPage((p) =>
-                              Math.min(pdfTotalPages, p + 1),
-                            );
-                          }}
-                          disabled={pdfCurrentPage >= pdfTotalPages}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
-                          title="Halaman Selanjutnya"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-slate-800 truncate">
+                            {namaFileSurat}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Dokumen PDF Resmi • {pdfTotalPages} Halaman
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Right: Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="grid grid-cols-2 gap-2">
                         <a
                           href={suratUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold border border-slate-700"
-                          title="Buka dokumen di tab baru"
+                          className="press py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Tab Baru</span>
+                          <ExternalLink className="w-4 h-4" />
+                          <span>Buka Surat</span>
                         </a>
                         <a
                           href={suratUrl}
                           download
-                          onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-bold shadow-xs"
-                          title="Unduh berkas surat edaran"
+                          className="press py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer text-center"
                         >
-                          <Download className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Unduh</span>
+                          <Download className="w-4 h-4" />
+                          <span>Unduh PDF</span>
                         </a>
                       </div>
                     </div>
 
-                    {/* Frame PDF tanpa toolbar bawaan browser */}
-                    <div className="p-2 sm:p-4 bg-slate-100/70">
-                      <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner">
-                        <iframe
-                          key={`pdf-page-${pdfCurrentPage}`}
-                          src={`${suratUrl}#page=${pdfCurrentPage}&toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                          title="Pratinjau Surat Edaran Resmi"
-                          className="w-full h-[650px] sm:h-[750px] border-none block"
-                        />
+                    {/* Frame PDF khusus Desktop / Tablet Lebar (md+) */}
+                    <div className="hidden md:block">
+                      <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-3 text-white text-xs select-none">
+                        {/* Center: Custom Page Navigation [ < ] [ 1 ] / 3 [ > ] */}
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPdfCurrentPage((p) => Math.max(1, p - 1));
+                            }}
+                            disabled={pdfCurrentPage <= 1}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
+                            title="Halaman Sebelumnya"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800/90 rounded-lg border border-slate-700 text-xs font-bold">
+                            <input
+                              type="number"
+                              min={1}
+                              max={pdfTotalPages}
+                              value={pdfCurrentPage}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (
+                                  !isNaN(val) &&
+                                  val >= 1 &&
+                                  val <= pdfTotalPages
+                                ) {
+                                  setPdfCurrentPage(val);
+                                }
+                              }}
+                              className="w-9 text-center bg-slate-950 border border-slate-700 rounded text-purple-300 font-bold py-0.5 focus:outline-hidden focus:ring-1 focus:ring-purple-400"
+                            />
+                            <span className="text-slate-400">/</span>
+                            <span className="text-slate-200 min-w-[14px] text-center">
+                              {pdfTotalPages}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPdfCurrentPage((p) =>
+                                Math.min(pdfTotalPages, p + 1),
+                              );
+                            }}
+                            disabled={pdfCurrentPage >= pdfTotalPages}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors cursor-pointer border border-slate-700/80"
+                            title="Halaman Selanjutnya"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <a
+                            href={suratUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-semibold border border-slate-700"
+                            title="Buka dokumen di tab baru"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Tab Baru</span>
+                          </a>
+                          <a
+                            href={suratUrl}
+                            download
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white transition-colors cursor-pointer flex items-center gap-1 text-[11px] font-bold shadow-xs"
+                            title="Unduh berkas surat edaran"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Unduh</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* Frame PDF tanpa toolbar bawaan browser */}
+                      <div className="p-2 sm:p-4 bg-slate-100/70">
+                        <div className="w-full bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-inner">
+                          <iframe
+                            key={`pdf-page-${pdfCurrentPage}`}
+                            src={`${suratUrl}#page=${pdfCurrentPage}&toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                            title="Pratinjau Surat Edaran Resmi"
+                            className="w-full h-[650px] sm:h-[750px] border-none block"
+                          />
+                        </div>
                       </div>
                     </div>
                   </>
@@ -461,45 +525,50 @@ export default function HalamanLibur() {
         />
       )}
 
-      {/* Modal Konfirmasi Logout Kustom */}
-      {showLogoutConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs select-none animate-in fade-in">
-          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl border border-slate-100 text-center animate-in zoom-in-95">
-            <div className="w-14 h-14 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto border border-rose-100 shadow-inner">
-              <LogOut className="w-7 h-7" />
+      {/* Modal Kalender Lengkap Sekolah */}
+      <Sheet
+        isOpen={showCalendarModal}
+        onClose={() => setShowCalendarModal(false)}
+        labelledBy="calendar-modal-title"
+        size="xl"
+        tall
+      >
+        <div className="flex flex-col h-full overflow-hidden">
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-purple-200 shrink-0">
+                <Calendar className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 id="calendar-modal-title" className="text-base sm:text-lg font-bold tracking-tight">
+                  Kalender Libur & Akademik SMKN 21
+                </h2>
+                <p className="text-xs text-purple-200">
+                  Jadwal hari libur nasional, libur semester, dan agenda khusus sekolah
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <h3 className="text-lg font-bold text-slate-900">
-                Konfirmasi Keluar Akun
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Apakah Anda yakin ingin keluar dari sistem presensi SMKN 21
-                Jakarta? Anda perlu masuk kembali untuk mengakses portal akun.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowLogoutConfirmModal(false)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowLogoutConfirmModal(false);
-                  logout();
-                  navigate("/login", { replace: true });
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-sm transition-colors cursor-pointer"
-              >
-                Ya, Keluar
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowCalendarModal(false)}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Tutup Kalender"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <HolidayCalendarView
+              events={calendarEvents}
+              selectedYear={calendarYear}
+              onSelectYear={(y) => fetchCalendarEvents(y)}
+              selectedMonth={calendarMonth}
+              onSelectMonth={(m) => setCalendarMonth(m)}
+              isAdmin={role === "admin"}
+            />
           </div>
         </div>
-      )}
+      </Sheet>
     </div>
   );
 }

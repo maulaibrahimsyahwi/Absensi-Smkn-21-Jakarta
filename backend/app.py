@@ -33,6 +33,10 @@ from utils.db_migrations import run_db_migrations
 # Inisialisasi Aplikasi Flask
 app = Flask(__name__)
 
+# Konfigurasi Reverse Proxy (Nginx) agar Flask membaca IP & Protokol HTTPS Asli
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
 # Konfigurasi Database
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS

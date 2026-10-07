@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   CheckCircle2,
   AlertCircle,
@@ -28,13 +28,24 @@ export default function ToastNotification({
   onClose,
   autoCloseMs = 4000,
 }: ToastNotificationProps) {
+  // Simpan onClose di ref agar callback inline tidak mengulang timer tiap render
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!notification) return;
+    // Error butuh waktu baca lebih lama (minimal 6 detik)
+    const ms =
+      notification.type === "error"
+        ? Math.max(autoCloseMs, 6000)
+        : autoCloseMs;
     const timer = setTimeout(() => {
-      if (onClose) onClose();
-    }, autoCloseMs);
+      onCloseRef.current?.();
+    }, ms);
     return () => clearTimeout(timer);
-  }, [notification, autoCloseMs, onClose]);
+  }, [notification, autoCloseMs]);
 
   if (!notification || !notification.message) return null;
 
@@ -52,8 +63,10 @@ export default function ToastNotification({
 
   return (
     <aside
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
       aria-label="Notifikasi sistem"
-      className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-md w-[calc(100%-2rem)] sm:w-auto sm:min-w-[340px] pointer-events-auto select-none"
+      className="pointer-events-auto fixed left-1/2 top-[max(1.25rem,env(safe-area-inset-top))] z-[80] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 select-none sm:w-auto sm:min-w-[340px]"
     >
       <div
         className={`flex items-center gap-3 px-4 py-3 rounded-2xl border backdrop-blur-md shadow-xl text-xs sm:text-sm font-semibold animate-in fade-in slide-in-from-top-3 duration-200 ${bgBorderClass}`}
@@ -82,7 +95,8 @@ export default function ToastNotification({
             type="button"
             onClick={onClose}
             title="Tutup notifikasi"
-            className="p-1 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer"
+            aria-label="Tutup notifikasi"
+            className="press grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>

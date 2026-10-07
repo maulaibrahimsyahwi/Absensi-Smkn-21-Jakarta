@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from "react";
-import {
-  Activity,
-  AlertCircle,
-  CheckCircle2,
-  Loader2,
-  ShieldAlert,
-  Trash2,
-  X,
-} from "lucide-react";
 import api from "../../services/api";
 import CustomDatePicker from "../CustomDatePicker";
 import { Siswa } from "../../types/siswa";
+import Sheet, { SheetBody, SheetFooter, SheetHeader } from "../ui/Sheet";
+import Button from "../ui/Button";
+import InlineAlert from "../ui/InlineAlert";
+import ChipSelect from "../ui/ChipSelect";
+import ConfirmSheet from "../ui/ConfirmSheet";
+import { todayWib, addDaysYmd, isExemptActive } from "../../utils/date";
 
 export interface MedicalExemptionModalProps {
   isOpen: boolean;
@@ -19,31 +16,55 @@ export interface MedicalExemptionModalProps {
   onSuccess: (msg: string) => void;
 }
 
+const REASONS = [
+  "Perban atau cedera pada wajah",
+  "Penyakit kulit sementara",
+  "Pemulihan setelah tindakan medis",
+  "Lainnya",
+] as const;
+
+type ExemptionReason = (typeof REASONS)[number];
+const MAX_DAYS = 30;
+
 export default function MedicalExemptionModal({
   isOpen,
   onClose,
   targetSiswa,
   onSuccess,
 }: MedicalExemptionModalProps) {
+  const today = todayWib();
   const [exemptUntil, setExemptUntil] = useState<string>("");
-  const [alasan, setAlasan] = useState<string>("");
+  const [reason, setReason] = useState<ExemptionReason>(REASONS[0]);
+  const [catatanLainnya, setCatatanLainnya] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [revokeConfirmOpen, setRevokeConfirmOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    if (targetSiswa) {
-      setExemptUntil(targetSiswa.medical_exemption_until || "");
-      setAlasan(targetSiswa.medical_exemption_alasan || "");
+    if (targetSiswa && isOpen) {
+      setExemptUntil(
+        targetSiswa.medical_exemption_until || addDaysYmd(today, 7),
+      );
+      const currentAlasan = targetSiswa.medical_exemption_alasan || "";
+      const matched = REASONS.find((r) => r === currentAlasan);
+      if (matched) {
+        setReason(matched);
+        setCatatanLainnya("");
+      } else if (currentAlasan) {
+        setReason("Lainnya");
+        setCatatanLainnya(currentAlasan);
+      } else {
+        setReason(REASONS[0]);
+        setCatatanLainnya("");
+      }
       setErrorMsg("");
+      setRevokeConfirmOpen(false);
     }
-  }, [targetSiswa, isOpen]);
+  }, [targetSiswa, isOpen, today]);
 
-  if (!isOpen || !targetSiswa) return null;
+  if (!targetSiswa) return null;
 
-  const isCurrentlyExempt =
-    targetSiswa.medical_exemption_until &&
-    new Date(targetSiswa.medical_exemption_until) >=
-      new Date(new Date().toDateString());
+  const isCurrentlyExempt = isExemptActive(targetSiswa.medical_exemption_until);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,16 +75,21 @@ export default function MedicalExemptionModal({
       return;
     }
 
-    if (!alasan.trim()) {
-      setErrorMsg("Alasan dispensasi medis wajib diisi.");
+    if (exemptUntil < today) {
+      setErrorMsg("Tanggal berakhir tidak boleh tanggal lampau.");
       return;
     }
+
+    const finalAlasan =
+      reason === "Lainnya" && catatanLainnya.trim()
+        ? `Lainnya: ${catatanLainnya.trim()}`
+        : reason;
 
     setLoading(true);
     try {
       const res = await api.post(`/siswa/${targetSiswa.id}/medical_exemption`, {
         exempt_until: exemptUntil,
-        alasan: alasan.trim(),
+        alasan: finalAlasan,
       });
 
       if (res.data?.success) {
@@ -95,6 +121,7 @@ export default function MedicalExemptionModal({
       });
 
       if (res.data?.success) {
+        setRevokeConfirmOpen(false);
         onSuccess(
           `Dispensasi medis untuk ${targetSiswa.nama} berhasil dicabut.`,
         );
@@ -105,7 +132,7 @@ export default function MedicalExemptionModal({
     } catch (err: any) {
       setErrorMsg(
         err.response?.data?.message ||
-          "Terjadi kesalahan saat mencabut dispensasi.",
+          "Terjadi kesalahan saat mencabut dispensasi medis.",
       );
     } finally {
       setLoading(false);
@@ -113,139 +140,133 @@ export default function MedicalExemptionModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-md max-h-[92vh] overflow-y-auto shadow-2xl p-5 sm:p-6 relative">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={loading}
-          className="absolute top-4 right-4 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
+    <>
+      <Sheet isOpen={isOpen} onClose={onClose} size="md" labelledBy="med-title">
+        <form onSubmit={handleSave} className="flex min-h-0 flex-1 flex-col">
+          <SheetHeader
+            id="med-title"
+            title="Dispensasi medis wajah"
+            subtitle={`${targetSiswa.nama} (${targetSiswa.kelas})`}
+            onClose={onClose}
+          />
+          <SheetBody>
+            <div className="space-y-5">
+              {errorMsg && <InlineAlert type="error">{errorMsg}</InlineAlert>}
 
-        {/* Header Modal */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-600 flex-shrink-0">
-            <Activity className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-900 leading-snug">
-              Dispensasi Medis Biometrik Wajah
-            </h3>
-            <p className="text-xs text-teal-600 font-semibold mt-0.5">
-              Medical Exemption Pass Siswa
-            </p>
-          </div>
-        </div>
+              <InlineAlert type="warning">
+                Selama masa dispensasi aktif, siswa dapat melakukan presensi
+                tanpa verifikasi wajah. Pemberian dispensasi ini dicatat dalam
+                log audit sekolah.
+              </InlineAlert>
 
-        {/* Identitas Siswa */}
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-4 text-xs space-y-1">
-          <p className="font-bold text-slate-900 text-sm">{targetSiswa.nama}</p>
-          <p className="text-slate-500 font-mono">
-            NIS {targetSiswa.nis} • Kelas {targetSiswa.kelas}
-          </p>
-          {isCurrentlyExempt && (
-            <div className="pt-2 border-t border-slate-200 mt-2 flex items-center gap-1.5 text-amber-700 font-bold">
-              <ShieldAlert className="w-4 h-4 text-amber-600" />
-              <span>
-                Sedang Aktif s/d {targetSiswa.medical_exemption_until}
-              </span>
+              <div>
+                <p className="mb-1.5 text-xs font-bold text-slate-700">
+                  Berlaku sampai <span className="text-rose-500">*</span>
+                </p>
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {[3, 7, 14, 30].map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setExemptUntil(addDaysYmd(today, d))}
+                      className="press min-h-9 rounded-full border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      {d} hari
+                    </button>
+                  ))}
+                </div>
+                <CustomDatePicker
+                  value={exemptUntil}
+                  onChange={setExemptUntil}
+                  minDate={today}
+                  maxDate={addDaysYmd(today, MAX_DAYS)}
+                  className="w-full"
+                  placeholder="Pilih tanggal berakhir..."
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Maksimal durasi satu kali penetapan adalah {MAX_DAYS} hari.
+                </p>
+              </div>
+
+              <div>
+                <ChipSelect
+                  label="Kategori kondisi medis"
+                  value={reason}
+                  onChange={setReason}
+                  options={REASONS}
+                  grid
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Cukup pilih kategori. Jangan menuliskan diagnosa penyakit
+                  spesifik demi menjaga privasi medis siswa. Bukti surat dokter
+                  asli diarsipkan fisik oleh Tata Usaha.
+                </p>
+              </div>
+
+              {reason === "Lainnya" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Catatan Kategori Lainnya (Singkat)
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={catatanLainnya}
+                    onChange={(e) => setCatatanLainnya(e.target.value)}
+                    placeholder="Contoh: Kondisi pasca tindakan dokter"
+                    className="w-full min-h-11 rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-colors"
+                  />
+                </div>
+              )}
             </div>
-          )}
-        </div>
-
-        {errorMsg && (
-          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-500" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-4 text-xs">
-          <div className="space-y-1.5">
-            <label className="font-bold text-slate-700 block uppercase tracking-wider text-[11px]">
-              Masa Berlaku Dispensasi Sampai Dengan{" "}
-              <span className="text-rose-500">*</span>
-            </label>
-            <CustomDatePicker
-              value={exemptUntil}
-              onChange={setExemptUntil}
-              placeholder="Pilih tanggal berakhir..."
-              className="w-full"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="font-bold text-slate-700 block uppercase tracking-wider text-[11px]">
-              Alasan Medis / Keterangan Penyakit{" "}
-              <span className="text-rose-500">*</span>
-            </label>
-            <textarea
-              rows={3}
-              value={alasan}
-              onChange={(e) => setAlasan(e.target.value)}
-              placeholder="Contoh: Perban operasi wajah, cacar air, atau luka bakar..."
-              className="w-full p-2.5 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800"
-              required
-            />
-          </div>
-
-          <div className="p-3 bg-teal-50/60 border border-teal-200/80 rounded-xl text-teal-800 text-[11px] leading-relaxed space-y-1.5">
-            <p className="font-bold flex items-center gap-1.5 text-teal-900">
-              <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-              <span>Bypass Otomatis Pada Gerbang</span>
-            </p>
-            <p>
-              Selama tanggal dispensasi aktif, pemindaian wajah siswa di gerbang
-              akan otomatis lolos dengan status{" "}
-              <strong>Hadir (Dispensasi Medis)</strong> tanpa ditolak kecerdasan
-              buatan.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-            {isCurrentlyExempt ? (
-              <button
-                type="button"
-                onClick={handleRevoke}
-                disabled={loading}
-                className="px-3 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-xl font-bold cursor-pointer transition-colors flex items-center gap-1"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Cabut Dispensasi</span>
-              </button>
-            ) : (
-              <div />
-            )}
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="px-3.5 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-bold cursor-pointer transition-colors"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-md shadow-teal-600/20 flex items-center gap-1.5 cursor-pointer transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <span>Simpan Dispensasi</span>
-                )}
-              </button>
+          </SheetBody>
+          <SheetFooter>
+            <div className="flex w-full items-center justify-between gap-2">
+              {isCurrentlyExempt ? (
+                <Button
+                  type="button"
+                  variant="dangerSoft"
+                  onClick={() => setRevokeConfirmOpen(true)}
+                  disabled={loading}
+                >
+                  Cabut Dispensasi
+                </Button>
+              ) : (
+                <div />
+              )}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={onClose} disabled={loading}>
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={loading}
+                  disabled={!exemptUntil}
+                >
+                  Simpan Dispensasi
+                </Button>
+              </div>
             </div>
-          </div>
+          </SheetFooter>
         </form>
-      </div>
-    </div>
+      </Sheet>
+
+      <ConfirmSheet
+        isOpen={revokeConfirmOpen}
+        onClose={() => setRevokeConfirmOpen(false)}
+        onConfirm={handleRevoke}
+        loading={loading}
+        title="Cabut dispensasi medis?"
+        confirmLabel="Ya, cabut sekarang"
+        danger={true}
+      >
+        <p>
+          Dispensasi medis wajah untuk <b>{targetSiswa.nama}</b> akan dicabut
+          segera. Siswa akan kembali diwajibkan melakukan pemindaian wajah saat
+          presensi.
+        </p>
+      </ConfirmSheet>
+    </>
   );
 }

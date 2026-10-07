@@ -205,11 +205,21 @@ def verifikasi_pengajuan_izin(id):
         return jsonify({"success": False, "message": "Data pengajuan tidak ditemukan."}), 404
 
     data = request.json or {}
-    aksi = str(data.get('aksi', '')).strip()  # "Disetujui" atau "Ditolak"
+    raw_aksi = str(data.get('aksi', '')).strip()
     catatan = str(data.get('catatan', '')).strip()
 
-    if aksi not in ["Disetujui", "Ditolak"]:
+    if raw_aksi.upper() in ["SETUJUI", "DISETUJUI"]:
+        aksi = "Disetujui"
+    elif raw_aksi.upper() in ["TOLAK", "DITOLAK"]:
+        aksi = "Ditolak"
+    else:
         return jsonify({"success": False, "message": "Aksi harus 'Disetujui' atau 'Ditolak'."}), 400
+
+    if pengajuan.status_pengajuan != "Menunggu":
+        return jsonify({
+            "success": False,
+            "message": f"Pengajuan izin ini sudah diverifikasi sebelumnya ({pengajuan.status_pengajuan})."
+        }), 400
 
     try:
         pengajuan.status_pengajuan = aksi

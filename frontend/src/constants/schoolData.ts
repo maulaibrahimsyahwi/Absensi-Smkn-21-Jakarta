@@ -93,18 +93,13 @@ export const KELAS_FILTER_DROPDOWN: Array<{ value: string; label: string } | Kel
  */
 export function getJurusanInfo(kelasStr?: string | null): JurusanInfo | null {
   if (!kelasStr) return null;
-  const upper = kelasStr.toUpperCase();
-  for (const jur of JURUSAN_SMKN21) {
-    if (upper.includes(jur.kode)) {
-      return jur;
+  const parts = kelasStr.toUpperCase().trim().split(/\s+/);
+  const kode = parts[1] ?? parts[0];
+  return (
+    JURUSAN_SMKN21.find((j) => j.kode === kode) ?? {
+      kode,
+      nama: parts.join(" "),
+      badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
     }
-  }
-  // Fallback untuk kelas / jurusan kustom
-  const parts = upper.split(/\s+/);
-  const kode = parts.length > 1 ? parts[1] : upper;
-  return {
-    kode: kode,
-    nama: upper,
-    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
-  };
+  );
 }

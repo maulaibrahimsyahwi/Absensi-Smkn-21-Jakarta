@@ -1,6 +1,7 @@
 import React, { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { RouteAwareSkeleton } from "./common/Skeleton";
 import { UserRole } from "../types";
 
 export interface ProtectedRouteProps {
@@ -20,8 +21,13 @@ export default function ProtectedRoute({
   allowOnHoliday = false,
   children,
 }: ProtectedRouteProps) {
-  const { user, role, isAuthenticated, todayStatus } = useAuth();
+  const { user, role, isAuthenticated, todayStatus, initializing } = useAuth();
   const location = useLocation();
+
+  // 0. Tunggu validasi inisialisasi sesi awal selesai agar tidak terjadi redirect instan saat refresh
+  if (initializing) {
+    return <RouteAwareSkeleton />;
+  }
 
   // 1. Jika belum login, alihkan ke halaman login
   if (!isAuthenticated || !user) {

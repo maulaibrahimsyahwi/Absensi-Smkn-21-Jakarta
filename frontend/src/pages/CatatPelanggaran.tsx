@@ -12,6 +12,7 @@ import {
   PenTool,
   X,
   GraduationCap,
+  CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -29,24 +30,10 @@ import {
 import CustomDropdown from "../components/CustomDropdown";
 import CustomDatePicker from "../components/CustomDatePicker";
 import CustomTimePicker from "../components/CustomTimePicker";
+import SignaturePad, { SignaturePadHandle } from "../components/ui/SignaturePad";
+import StudentPicker from "../components/common/StudentPicker";
+import { todayWib, nowTimeWib } from "../utils/date";
 import { Siswa } from "../types/auth";
-
-// Helper: Format tanggal hari ini YYYY-MM-DD
-const getTodayDateStr = () => {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-// Helper: Format jam saat ini HH:MM
-const getCurrentTimeStr = () => {
-  const d = new Date();
-  const hours = String(d.getHours()).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
-};
 
 interface PelanggaranSuccessPayload {
   id?: number | string;
@@ -93,12 +80,18 @@ export default function CatatPelanggaran(): React.JSX.Element {
     }
   }, [isSiswa, user]);
 
-  // State Tanggal & Waktu Kejadian
-  const [tanggal, setTanggal] = useState(getTodayDateStr);
-  const [waktu, setWaktu] = useState(getCurrentTimeStr);
+  // State Tanggal & Waktu Kejadian (WIB)
+  const [tanggal, setTanggal] = useState(todayWib);
+  const [waktu, setWaktu] = useState(nowTimeWib);
 
-  // Kategori Form: Pelanggaran vs Prestasi (Restorative Justice)
+  // Kategori Form: Pelanggaran vs Prestasi (Restorative Justice) - Siswa dilarang mencatat prestasi mandiri
   const [kategoriForm, setKategoriForm] = useState<"Pelanggaran" | "Prestasi">("Pelanggaran");
+
+  useEffect(() => {
+    if (isSiswa && kategoriForm !== "Pelanggaran") {
+      setKategoriForm("Pelanggaran");
+    }
+  }, [isSiswa, kategoriForm]);
 
   // State Pelanggaran & Poin
   const [jenisPelanggaran, setJenisPelanggaran] = useState("");
@@ -115,64 +108,23 @@ export default function CatatPelanggaran(): React.JSX.Element {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const violationDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  // Quick Staf list & Student Autocomplete
-  const [staffList, setStaffList] = useState<any[]>([]);
-  const [studentList, setStudentList] = useState<Siswa[]>([]);
-  const [studentSearch, setStudentSearch] = useState("");
-  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
-  const studentDropdownRef = useRef<HTMLDivElement | null>(null);
-
-  // State Status & Signature
+  // State Status & Signature Pad
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successData, setSuccessData] = useState<PelanggaranSuccessPayload | null>(null);
 
-  // Canvas E-Signature
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
+  const sigPadRef = useRef<SignaturePadHandle | null>(null);
+  const [, setSigValid] = useState(false);
+  const [useSavedSig, setUseSavedSig] = useState(false);
 
-  // Inisialisasi Canvas
-  const setupCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
-    ctx.strokeStyle = "#0f172a";
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-  };
+  // Tanda tangan tersimpan dari profil siswa
+  const savedSignature = isSiswa ? user?.tanda_tangan : selectedStudent?.tanda_tangan;
 
-  // Muat tanda tangan tersimpan ke kanvas
-  const loadSignatureImage = (dataUrl: string) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !dataUrl) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const img = new Image();
-    img.onload = () => {
-      const rect = canvas.getBoundingClientRect();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 10, 10, rect.width - 20, rect.height - 20);
-      setHasSignature(true);
-    };
-    img.src = dataUrl;
-  };
-
-  // Setup Canvas & Muat otomatis tanda tangan siswa jika ada
   useEffect(() => {
-    setupCanvas();
     if (isSiswa && user?.tanda_tangan) {
-      loadSignatureImage(user.tanda_tangan);
+      setUseSavedSig(true);
     }
-    window.addEventListener("resize", setupCanvas);
-    return () => window.removeEventListener("resize", setupCanvas);
-  }, [successData, isSiswa, user?.tanda_tangan]);
+  }, [isSiswa, user?.tanda_tangan]);
 
   // Tutup dropdown jika klik di luar
   useEffect(() => {
@@ -182,12 +134,6 @@ export default function CatatPelanggaran(): React.JSX.Element {
         !violationDropdownRef.current.contains(e.target as Node)
       ) {
         setIsDropdownOpen(false);
-      }
-      if (
-        studentDropdownRef.current &&
-        !studentDropdownRef.current.contains(e.target as Node)
-      ) {
-        setIsStudentDropdownOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -203,32 +149,17 @@ export default function CatatPelanggaran(): React.JSX.Element {
     }
   }, [isPiket, user]);
 
-  // Ambil daftar Staf & Siswa untuk autocomplete (jika piket/admin)
-  useEffect(() => {
-    if (isPiket || isAdmin) {
-      api
-        .get("/staf")
-        .then((res) => {
-          if (res.data?.data) {
-            setStaffList(res.data.data);
-          }
-        })
-        .catch(() => {});
-
-      api
-        .get("/siswa")
-        .then((res) => {
-          if (Array.isArray(res.data)) {
-            // Hanya tampilkan siswa berstatus Aktif (bukan Alumni)
-            setStudentList(res.data.filter((s) => s.status !== "Alumni"));
-          }
-        })
-        .catch(() => {});
+  // Handle pilih siswa dari StudentPicker
+  const handleSelectStudent = (siswa: Siswa | null) => {
+    if (!siswa) {
+      setSelectedStudent(null);
+      setNamaSiswa("");
+      setKelas("");
+      setNis("");
+      setSiswaId(null);
+      clearSignature();
+      return;
     }
-  }, [isPiket, isAdmin]);
-
-  // Handle pilih siswa dari database (Piket/Admin)
-  const handleSelectStudent = (siswa: Siswa) => {
     if (siswa.status === "Alumni") {
       setErrorMsg(`Siswa ${siswa.nama} sudah berstatus Alumni / Lulus.`);
       return;
@@ -238,20 +169,16 @@ export default function CatatPelanggaran(): React.JSX.Element {
     setKelas(siswa.kelas || "");
     setNis(siswa.nis || "");
     setSiswaId(siswa.id || null);
-    setIsStudentDropdownOpen(false);
-    setStudentSearch("");
-
     clearSignature();
+    if (siswa.tanda_tangan) {
+      setUseSavedSig(true);
+    }
   };
 
-  const handleClearSelectedStudent = () => {
-    setSelectedStudent(null);
-    setNamaSiswa("");
-    setKelas("");
-    setNis("");
-    setSiswaId(null);
-    setStudentSearch("");
-    clearSignature();
+  const clearSignature = () => {
+    sigPadRef.current?.clear();
+    setSigValid(false);
+    setUseSavedSig(false);
   };
 
   // Filter jenis pelanggaran / prestasi berdasarkan kata kunci pencarian
@@ -275,71 +202,8 @@ export default function CatatPelanggaran(): React.JSX.Element {
 
   // Set Waktu Sekarang
   const handleSetWaktuSekarang = () => {
-    setTanggal(getTodayDateStr());
-    setWaktu(getCurrentTimeStr());
-  };
-
-  // Canvas Drawing Handlers
-  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    if ("touches" in e && e.touches.length > 0) {
-      return {
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top,
-      };
-    }
-    const mouseEvent = e as React.MouseEvent<HTMLCanvasElement>;
-    return {
-      x: mouseEvent.clientX - rect.left,
-      y: mouseEvent.clientY - rect.top,
-    };
-  };
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const { x, y } = getCoordinates(e);
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    setIsDrawing(true);
-    setHasSignature(true);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const { x, y } = getCoordinates(e);
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const stopDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.closePath();
-    setIsDrawing(false);
-  };
-
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setHasSignature(false);
+    setTanggal(todayWib());
+    setWaktu(nowTimeWib());
   };
 
   // Submit Handler
@@ -374,15 +238,17 @@ export default function CatatPelanggaran(): React.JSX.Element {
       setErrorMsg("Nama Lengkap Guru / Tendik penanggung jawab wajib diisi.");
       return;
     }
-    if (!hasSignature) {
+
+    const signatureBase64 = (useSavedSig && savedSignature)
+      ? savedSignature
+      : (sigPadRef.current?.toDataURL() || "");
+
+    if (!signatureBase64) {
       setErrorMsg(
-        "Tanda tangan digital siswa wajib digoreskan pada area E-Signature.",
+        "Tanda tangan digital siswa wajib digoreskan atau gunakan tanda tangan tersimpan akun.",
       );
       return;
     }
-
-    const canvas = canvasRef.current;
-    const signatureBase64 = canvas ? canvas.toDataURL("image/png") : "";
 
     // Bentuk string waktu lengkap (YYYY-MM-DD HH:MM:00)
     const formattedTanggalWaktu = `${tanggal} ${waktu || "00:00"}:00`;
@@ -435,13 +301,12 @@ export default function CatatPelanggaran(): React.JSX.Element {
       setNis("");
       setSiswaId(null);
       setKelas("");
-      setStudentSearch("");
     }
     setJenisPelanggaran("");
     setPoin("");
     setKeterangan("");
-    setTanggal(getTodayDateStr());
-    setWaktu(getCurrentTimeStr());
+    setTanggal(todayWib());
+    setWaktu(nowTimeWib());
     clearSignature();
   };
 
@@ -652,39 +517,41 @@ export default function CatatPelanggaran(): React.JSX.Element {
               </div>
             </div>
 
-            {/* Tab Switcher: Pelanggaran vs Prestasi */}
-            <div className="flex items-center bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  setKategoriForm("Pelanggaran");
-                  setJenisPelanggaran("");
-                  setPoin("");
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  kategoriForm === "Pelanggaran"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>Pelanggaran</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setKategoriForm("Prestasi");
-                  setJenisPelanggaran("");
-                  setPoin("");
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  kategoriForm === "Prestasi"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                <span>Prestasi</span>
-              </button>
-            </div>
+            {/* Tab Switcher: Pelanggaran vs Prestasi (Hanya untuk Piket & Admin) */}
+            {!isSiswa && (
+              <div className="flex items-center bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKategoriForm("Pelanggaran");
+                    setJenisPelanggaran("");
+                    setPoin("");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    kategoriForm === "Pelanggaran"
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span>Pelanggaran</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKategoriForm("Prestasi");
+                    setJenisPelanggaran("");
+                    setPoin("");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    kategoriForm === "Prestasi"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <span>Prestasi</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <form
@@ -700,127 +567,40 @@ export default function CatatPelanggaran(): React.JSX.Element {
 
             {/* SECTION 1: IDENTITAS SISWA */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  1. Nama Siswa & Identitas{" "}
-                  <span className="text-rose-500">*</span>
-                </label>
-                {isSiswa && (
-                  <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
-                    <Lock className="w-3 h-3" />
-                    <span>Terkunci</span>
-                  </span>
-                )}
-              </div>
-
-              {/* Mode Siswa: Tampilan Card Terkunci */}
               {isSiswa ? (
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                      {user?.nama?.charAt(0) || "S"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 leading-tight">
-                        {user?.nama}
-                      </p>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        {user?.nis || "-"}{" "}
-                      </p>
+                <>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      1. Nama Siswa & Identitas{" "}
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      <span>Terkunci</span>
+                    </span>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                        {user?.nama?.charAt(0) || "S"}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900 leading-tight">
+                          {user?.nama}
+                        </p>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                          {user?.nis || "-"}{" "}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : selectedStudent ? (
-                /* Mode Piket / Admin: Kartu Siswa Terpilih */
-                <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between gap-3 animate-in fade-in">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                      {selectedStudent.nama?.charAt(0) || "S"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 leading-tight">
-                        {selectedStudent.nama}
-                      </p>
-                      <p className="text-xs text-slate-500 font-medium mt-0.5">
-                        {selectedStudent.nis || "-"}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleClearSelectedStudent}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors cursor-pointer"
-                    title="Ganti Siswa"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
+                </>
               ) : (
-                /* Mode Piket / Admin: Autocomplete Search & Input Nama */
-                <div className="space-y-2">
-                  <div className="relative" ref={studentDropdownRef}>
-                    <div className="relative">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        type="text"
-                        placeholder="Cari siswa terdaftar (Ketik Nama atau NIS)..."
-                        value={studentSearch}
-                        onChange={(e) => {
-                          setStudentSearch(e.target.value);
-                          setIsStudentDropdownOpen(true);
-                        }}
-                        onFocus={() => setIsStudentDropdownOpen(true)}
-                        className="w-full text-xs sm:text-sm pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-                      />
-                    </div>
-
-                    {isStudentDropdownOpen &&
-                      studentSearch.trim().length > 0 && (
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto z-30 divide-y divide-slate-100 p-1">
-                          {studentList
-                            .filter(
-                              (s) =>
-                                s.nama
-                                  .toLowerCase()
-                                  .includes(studentSearch.toLowerCase()) ||
-                                s.nis.includes(studentSearch),
-                            )
-                            .slice(0, 8)
-                            .map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => handleSelectStudent(s)}
-                                className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 rounded-lg flex items-center justify-between transition-colors cursor-pointer"
-                              >
-                                <div>
-                                  <p className="font-bold text-slate-800">
-                                    {s.nama}
-                                  </p>
-                                  <p className="text-[11px] text-slate-500">
-                                    {s.nis} • {s.kelas}
-                                  </p>
-                                </div>
-                                <span className="text-[10px] text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded">
-                                  Pilih
-                                </span>
-                              </button>
-                            ))}
-                          {studentList.filter(
-                            (s) =>
-                              s.nama
-                                .toLowerCase()
-                                .includes(studentSearch.toLowerCase()) ||
-                              s.nis.includes(studentSearch),
-                          ).length === 0 && (
-                            <div className="p-3 text-center text-xs text-slate-400">
-                              Siswa tidak ditemukan.
-                            </div>
-                          )}
-                        </div>
-                      )}
-                  </div>
-                </div>
+                <StudentPicker
+                  value={selectedStudent}
+                  onChange={handleSelectStudent}
+                  label="1. Nama Siswa & Identitas"
+                />
               )}
             </div>
 
@@ -1154,34 +934,57 @@ export default function CatatPelanggaran(): React.JSX.Element {
                 </div>
               </div>
 
-              <p className="text-xs text-slate-500">
-                Goreskan tanda tangan digital siswa pada area kotak di bawah
-              </p>
-
-              <div className="border-2 border-dashed border-slate-300 hover:border-blue-400 rounded-2xl p-2 bg-slate-50/50 transition-colors relative">
-                <canvas
-                  ref={canvasRef}
-                  onMouseDown={startDrawing}
-                  onMouseMove={draw}
-                  onMouseUp={stopDrawing}
-                  onMouseLeave={stopDrawing}
-                  onTouchStart={startDrawing}
-                  onTouchMove={draw}
-                  onTouchEnd={stopDrawing}
-                  className="w-full h-40 bg-white rounded-xl touch-none cursor-crosshair border border-slate-200 shadow-inner"
-                />
-                {!hasSignature && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-slate-400 gap-1.5">
-                    <PenTool className="w-5 h-5 text-slate-300" />
-                    <span className="text-xs font-semibold">
-                      Area Tanda Tangan Digital Siswa
-                    </span>
-                    <span className="text-[10px] text-slate-300">
-                      Sentuh atau goreskan di sini
-                    </span>
+              {useSavedSig && savedSignature ? (
+                <div className="flex items-center justify-between gap-3 p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-16 w-32 bg-white rounded-xl border border-blue-200 p-1 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <img
+                        src={savedSignature}
+                        alt="Tanda Tangan Profil"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs truncate">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <span>Tanda Tangan Profil Terverifikasi</span>
+                      </div>
+                      <p className="text-[11px] text-blue-700 mt-0.5 line-clamp-2">
+                        Menggunakan tanda tangan digital resmi dari akun siswa.
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseSavedSig(false)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
+                  >
+                    Tanda Tangan Ulang
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-500">
+                      Goreskan tanda tangan digital siswa pada area kotak di bawah
+                    </p>
+                    {savedSignature && (
+                      <button
+                        type="button"
+                        onClick={() => setUseSavedSig(true)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                      >
+                        Gunakan Tanda Tangan Akun
+                      </button>
+                    )}
+                  </div>
+                  <SignaturePad
+                    ref={sigPadRef}
+                    onChange={setSigValid}
+                    className="h-44 rounded-2xl"
+                  />
+                </div>
+              )}
             </div>
 
             {/* SUBMIT BUTTON */}

@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api";
 import { rekapService, izinService } from "../services";
+import type { AksiVerifikasi } from "../services/izinService";
+import ConfirmSheet from "../components/ui/ConfirmSheet";
 import {
   Users,
   CheckCircle2,
@@ -211,12 +213,26 @@ export default function Dashboard(): React.JSX.Element {
     return () => clearTimeout(timer);
   }, [notification]);
 
+  // Request ID race guard & state konfirmasi hapus izin piket
+  const reqIdRef = useRef(0);
+  const abortCtrlRef = useRef<AbortController | null>(null);
+  const [deletingIzin, setDeletingIzin] = useState<{ id: number; nama: string } | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   // Reset pagination saat ganti filter/tab
   useEffect(() => {
     setCurrentPage(1);
   }, [activeTab, searchTerm, kelasFilter, statusIzinFilter, displayLimit]);
 
   const fetchData = async (isManual = false) => {
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort();
+    }
+    const abortCtrl = new AbortController();
+    abortCtrlRef.current = abortCtrl;
+    const signal = abortCtrl.signal;
+
+    const currentReqId = ++reqIdRef.current;
     setLoading(true);
     try {
       const delayPromise = isManual
@@ -224,53 +240,76 @@ export default function Dashboard(): React.JSX.Element {
         : Promise.resolve();
 
       const [
-        dataPeriode,
-        dataHarian,
-        dataPerpus,
-        dataPengajuan,
-        dataPiket,
+        resPeriode,
+        resHarian,
+        resPerpus,
+        resPengajuan,
+        resPiket,
         resPelanggaran,
         resStaf,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         rekapService.getSiswaPeriode({
           mode: periodeMode,
           bulan: selectedBulan,
           tahun: selectedTahun,
-        }),
+        }, signal),
         rekapService.getHarian({
           mode: periodeMode,
           bulan: selectedBulan,
           tahun: selectedTahun,
-        }),
+        }, signal),
         rekapService.getPerpus({
           mode: periodeMode,
           bulan: selectedBulan,
           tahun: selectedTahun,
-        }),
-        izinService.getPengajuanList(),
+        }, signal),
+        izinService.getPengajuanList(signal),
         izinService.getIzinPiketList({
           tanggal: "ALL",
+        }, signal),
+        api.get("/pelanggaran", {
+          params: {
+            limit: 1000,
+            ...(periodeMode === "bulan" ? { bulan: selectedBulan } : {}),
+            tahun: selectedTahun,
+          },
+          signal,
         }),
-        api
-          .get("/pelanggaran", {
-            params: {
-              limit: 1000,
-              ...(periodeMode === "bulan" ? { bulan: selectedBulan } : {}),
-              tahun: selectedTahun,
-            },
-          })
-          .catch(() => ({ data: { data: [] } })),
-        api.get("/staf").catch(() => ({ data: { data: [] } })),
+        api.get("/staf", { signal }),
         delayPromise,
       ]);
 
-      setSiswaPeriode(dataPeriode || { statistik: {}, daftar: [] });
-      setRiwayatHarian(dataHarian || []);
-      setRiwayatPerpus(dataPerpus || []);
-      setPengajuanList(dataPengajuan || []);
-      setIzinPiketList(dataPiket || []);
-      setPelanggaranList(resPelanggaran?.data?.data || []);
-      setStafList(resStaf?.data?.data || []);
+      if (currentReqId !== reqIdRef.current || signal.aborted) return;
+
+      if (resPeriode.status === "fulfilled" && resPeriode.value) {
+        setSiswaPeriode(resPeriode.value);
+      }
+      if (resHarian.status === "fulfilled" && resHarian.value) {
+        setRiwayatHarian(
+          Array.isArray(resHarian.value)
+            ? resHarian.value
+            : (resHarian.value as any)?.items || [],
+        );
+      }
+      if (resPerpus.status === "fulfilled" && resPerpus.value) {
+        setRiwayatPerpus(
+          Array.isArray(resPerpus.value)
+            ? resPerpus.value
+            : (resPerpus.value as any)?.items || [],
+        );
+      }
+      if (resPengajuan.status === "fulfilled" && resPengajuan.value) {
+        setPengajuanList(resPengajuan.value);
+      }
+      if (resPiket.status === "fulfilled" && resPiket.value) {
+        setIzinPiketList(resPiket.value);
+      }
+      if (resPelanggaran.status === "fulfilled" && resPelanggaran.value?.data?.data) {
+        setPelanggaranList(resPelanggaran.value.data.data);
+      }
+      if (resStaf.status === "fulfilled" && resStaf.value?.data?.data) {
+        setStafList(resStaf.value.data.data);
+      }
 
       if (isManual) {
         setNotification({
@@ -279,6 +318,7 @@ export default function Dashboard(): React.JSX.Element {
         });
       }
     } catch (err) {
+      if (currentReqId !== reqIdRef.current || abortCtrl.signal.aborted) return;
       console.error("Gagal mengambil data rekap:", err);
       if (isManual) {
         setNotification({
@@ -288,33 +328,63 @@ export default function Dashboard(): React.JSX.Element {
         });
       }
     } finally {
-      setLoading(false);
+      if (currentReqId === reqIdRef.current && !abortCtrl.signal.aborted) {
+        setLoading(false);
+      }
     }
   };
 
-  const handleDeleteIzinPiket = async (id: number, nama: string) => {
-    if (
-      !window.confirm(
-        `Apakah Anda yakin ingin menghapus surat izin untuk ${nama}?`,
-      )
-    )
-      return;
+  const handleDeleteIzinPiket = (id: number, nama: string) => {
+    setDeletingIzin({ id, nama });
+  };
+
+  const executeDeleteIzinPiket = async () => {
+    if (!deletingIzin) return;
+    setDeleteLoading(true);
     try {
-      await izinService.deleteIzinPiket(id);
+      await izinService.deleteIzinPiket(deletingIzin.id);
+      setNotification({
+        type: "success",
+        message: `Surat izin untuk ${deletingIzin.nama} berhasil dihapus dari sistem.`,
+      });
+      setDeletingIzin(null);
       fetchData();
-    } catch (err) {
-      alert("Gagal menghapus surat izin piket.");
+    } catch (err: any) {
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message || "Gagal menghapus surat izin piket.",
+      });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
-  const handleVerifikasi = async (id: number, aksi: string, catatan = "") => {
+  const handleVerifikasi = async (id: number, aksi: AksiVerifikasi, catatan = "") => {
     setVerifyingId(id);
+    const prevPengajuan = pengajuanList;
+    // Optimistic update status pengajuan langsung di UI
+    setPengajuanList((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status_pengajuan: aksi === "Disetujui" ? "Disetujui" : "Ditolak",
+              catatan_guru: catatan || item.catatan_guru,
+            }
+          : item,
+      ),
+    );
+
     try {
       const res = await izinService.verifikasiPengajuan(id, aksi, catatan);
       if (res && res.success) {
-        await fetchData();
         setRejectModalItem(null);
         setRejectNote("");
+        setNotification({
+          type: "success",
+          message: `Pengajuan izin berhasil ${aksi.toLowerCase()}!`,
+        });
 
         // Broadcast real-time event ke tab portal siswa
         try {
@@ -339,12 +409,24 @@ export default function Dashboard(): React.JSX.Element {
         } catch {
           // ignore
         }
+        fetchData();
+      } else {
+        // Rollback jika server menolak
+        setPengajuanList(prevPengajuan);
+        setNotification({
+          type: "error",
+          message: "Gagal memproses verifikasi surat pengajuan.",
+        });
       }
     } catch (err: any) {
-      alert(
-        err.response?.data?.message ||
+      // Rollback jika terjadi kesalahan jaringan
+      setPengajuanList(prevPengajuan);
+      setNotification({
+        type: "error",
+        message:
+          err.response?.data?.message ||
           "Gagal memproses verifikasi surat pengajuan.",
-      );
+      });
     } finally {
       setVerifyingId(null);
     }
@@ -352,6 +434,11 @@ export default function Dashboard(): React.JSX.Element {
 
   useEffect(() => {
     fetchData();
+    return () => {
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort();
+      }
+    };
   }, [periodeMode, selectedBulan, selectedTahun]);
 
   // Sinkronisasi data realtime otomatis lintas tab & perangkat dashboard
@@ -591,9 +678,9 @@ export default function Dashboard(): React.JSX.Element {
       };
 
       if (format === "pdf") {
-        exportPdf(activeTab, datasets, periodeInfo);
+        await exportPdf(activeTab, datasets, periodeInfo);
       } else {
-        exportSpreadsheet(format, activeTab, datasets, periodeInfo);
+        await exportSpreadsheet(format, activeTab, datasets, periodeInfo);
       }
     } catch (err) {
       console.error("Gagal memuat modul ekspor:", err);
@@ -631,55 +718,63 @@ export default function Dashboard(): React.JSX.Element {
       <DashboardKpiCards stats={stats} isPiket={isPiket} />
 
       {/* 3 Kategori Utama Pengelompokan Dashboard */}
-      <div className="bg-slate-100/90 p-1.5 rounded-2xl flex flex-col sm:flex-row gap-1.5 border border-slate-200 shadow-2xs">
+      <div className="bg-slate-100/90 p-1 sm:p-1.5 rounded-2xl grid grid-cols-3 gap-1 border border-slate-200 shadow-2xs">
         {/* Kategori 1: Presensi & Kehadiran */}
         <button
           type="button"
           onClick={() => handleSelectCategory("kehadiran")}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
             activeCategory === "kehadiran"
               ? "bg-white text-blue-700 shadow-xs border-slate-200/80"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
           }`}
         >
-          <BarChart3 className="w-4 h-4 text-blue-600" />
-          <span>Presensi & Kehadiran</span>
+          <BarChart3 className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="hidden sm:inline">Presensi & Kehadiran</span>
+          <span className="sm:hidden">Presensi</span>
         </button>
 
         {/* Kategori 2: Perizinan Siswa */}
         <button
           type="button"
           onClick={() => handleSelectCategory("perizinan")}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
             activeCategory === "perizinan"
               ? "bg-white text-indigo-700 shadow-xs border-slate-200/80"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
           }`}
         >
-          <FileText className="w-4 h-4 text-indigo-600" />
-          <span>Perizinan Siswa</span>
+          <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+          <span className="hidden sm:inline">Perizinan Siswa</span>
+          <span className="sm:hidden">Perizinan</span>
+          {pendingCount > 0 && (
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500 text-white shadow-xs">
+              {pendingCount}
+            </span>
+          )}
         </button>
 
         {/* Kategori 3: Tata Tertib & Staf */}
         <button
           type="button"
           onClick={() => handleSelectCategory("manajemen")}
-          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-colors duration-150 cursor-pointer flex-1 border ${
+          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-2.5 px-2 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
             activeCategory === "manajemen"
               ? "bg-white text-purple-700 shadow-xs border-slate-200/80"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/60 border-transparent"
           }`}
         >
-          <ShieldAlert className="w-4 h-4 text-rose-600" />
-          <span>Tata Tertib & Staf</span>
+          <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+          <span className="hidden sm:inline">Tata Tertib & Staf</span>
+          <span className="sm:hidden">Tata Tertib</span>
         </button>
       </div>
 
       {/* 4. Main Content Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div id="dashboard-table-top" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {/* Sub-Tab Navigation Bar */}
-        <div className="border-b border-slate-200 px-4 sm:px-6 py-3 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="border-b border-slate-200 px-3 sm:px-6 py-2.5 bg-slate-50/70 flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 shrink-0">
             {/* --- SUB-TAB UNTUK KATEGORI: PRESENSI & KEHADIRAN --- */}
             {activeCategory === "kehadiran" && (
               <>
@@ -887,31 +982,35 @@ export default function Dashboard(): React.JSX.Element {
           }
         >
           {/* Filter & Search Bar */}
-          <div className="p-3.5 sm:p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="p-3 sm:p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Cari berdasarkan nama, NIS, alasan, atau kelas..."
+                placeholder="Cari nama, NIS, alasan, atau kelas..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               />
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div
+              className={`grid ${
+                activeTab === "verifikasi_izin" ? "grid-cols-2" : "grid-cols-1"
+              } sm:flex sm:items-center gap-2 w-full sm:w-auto`}
+            >
               {activeTab === "verifikasi_izin" && (
                 <CustomDropdown
                   value={statusIzinFilter}
                   onChange={setStatusIzinFilter}
                   options={[
                     { value: "ALL", label: "Semua Status" },
-                    { value: "Menunggu", label: "Menunggu Konfirmasi" },
+                    { value: "Menunggu", label: "Menunggu" },
                     { value: "Disetujui", label: "Disetujui" },
                     { value: "Ditolak", label: "Ditolak" },
                   ]}
                   icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-                  className="w-full sm:w-auto min-w-[150px]"
+                  className="w-full sm:w-auto sm:min-w-[130px]"
                   align="right"
                 />
               )}
@@ -924,7 +1023,7 @@ export default function Dashboard(): React.JSX.Element {
                   ...uniqueKelas.map((k) => ({ value: k, label: k })),
                 ]}
                 icon={<Filter className="w-3.5 h-3.5 text-slate-400" />}
-                className="w-full sm:w-auto"
+                className="w-full sm:w-auto sm:min-w-[120px]"
                 align="right"
               />
             </div>
@@ -955,6 +1054,8 @@ export default function Dashboard(): React.JSX.Element {
                   <RekapSiswaTab
                     filteredSiswa={filteredSiswa}
                     paginatedSiswa={paginatedSiswa}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
                   />
                 )}
 
@@ -966,6 +1067,8 @@ export default function Dashboard(): React.JSX.Element {
                     periodeMode={periodeMode}
                     namaBulanTerpilih={namaBulanTerpilih}
                     selectedTahun={selectedTahun}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
                   />
                 )}
 
@@ -977,6 +1080,8 @@ export default function Dashboard(): React.JSX.Element {
                     periodeMode={periodeMode}
                     namaBulanTerpilih={namaBulanTerpilih}
                     selectedTahun={selectedTahun}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
                   />
                 )}
 
@@ -990,6 +1095,8 @@ export default function Dashboard(): React.JSX.Element {
                     onVerifikasi={handleVerifikasi}
                     onOpenRejectModal={(item) => setRejectModalItem(item)}
                     onOpenSuratModal={(item) => setSelectedSuratModal(item)}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
                   />
                 )}
 
@@ -1000,6 +1107,8 @@ export default function Dashboard(): React.JSX.Element {
                     paginatedIzinPiket={paginatedIzinPiket}
                     onOpenSlipModal={(item) => setSelectedSlipModal(item)}
                     onDeleteIzin={isAdmin ? handleDeleteIzinPiket : undefined}
+                    startIndex={startIndex}
+                    endIndex={endIndex}
                   />
                 )}
               </>
@@ -1007,55 +1116,19 @@ export default function Dashboard(): React.JSX.Element {
           </div>
 
           {/* Footer Navigasi Halaman Bawah */}
-          <div className="p-4 sm:p-5 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 rounded-b-2xl">
-            <p className="text-xs text-slate-500 text-center sm:text-left">
-              {totalItems === 0 ? (
-                "Tidak ada baris data untuk ditampilkan."
-              ) : (
-                <>
-                  Menampilkan{" "}
-                  <span className="font-bold text-slate-800">
-                    {startIndex + 1}–{endIndex}
-                  </span>{" "}
-                  dari{" "}
-                  <span className="font-bold text-slate-800">{totalItems}</span>{" "}
-                  total data
-                </>
-              )}
-            </p>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-400">
-                  Halaman {safeCurrentPage} dari {totalPages}
-                </span>
-                <div className="inline-flex rounded-lg border border-slate-200 bg-white shadow-2xs overflow-hidden">
-                  <button
-                    type="button"
-                    disabled={safeCurrentPage <= 1}
-                    onClick={() => {
-                      setCurrentPage((p) => Math.max(1, p - 1));
-                      window.scrollTo({ top: 350, behavior: "smooth" });
-                    }}
-                    className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed border-r border-slate-200 cursor-pointer"
-                  >
-                    Sebelumnya
-                  </button>
-                  <button
-                    type="button"
-                    disabled={safeCurrentPage >= totalPages}
-                    onClick={() => {
-                      setCurrentPage((p) => Math.min(totalPages, p + 1));
-                      window.scrollTo({ top: 350, behavior: "smooth" });
-                    }}
-                    className="px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    Selanjutnya
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <DashboardPagination
+            displayLimit={displayLimit}
+            setDisplayLimit={setDisplayLimit}
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            totalItems={totalItems}
+            totalPages={totalPages}
+            safeCurrentPage={safeCurrentPage}
+            startIndex={startIndex}
+            endIndex={endIndex}
+            variant="footer"
+            scrollTargetId="dashboard-table-top"
+          />
         </div>
       </div>
 
@@ -1084,6 +1157,25 @@ export default function Dashboard(): React.JSX.Element {
         slipData={selectedSlipModal}
         onClose={() => setSelectedSlipModal(null)}
       />
+
+      {/* Modal Konfirmasi Hapus Izin Piket */}
+      <ConfirmSheet
+        isOpen={!!deletingIzin}
+        onClose={() => setDeletingIzin(null)}
+        onConfirm={executeDeleteIzinPiket}
+        loading={deleteLoading}
+        title="Hapus Surat Izin Piket?"
+        subtitle="Tindakan ini tidak dapat dibatalkan"
+        confirmLabel="Ya, Hapus Surat"
+        cancelLabel="Batal"
+        danger
+      >
+        <p>
+          Apakah Anda yakin ingin menghapus surat izin untuk{" "}
+          <strong className="text-slate-900">{deletingIzin?.nama}</strong>? Catatan
+          surat izin ini akan dihapus secara permanen dari server.
+        </p>
+      </ConfirmSheet>
 
       {/* Modal Tanda Tangan Guru Piket */}
       <SignaturePadModal

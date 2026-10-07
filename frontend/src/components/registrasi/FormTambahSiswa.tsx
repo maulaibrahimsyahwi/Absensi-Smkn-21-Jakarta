@@ -1,18 +1,16 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Webcam from "react-webcam";
 import {
   UserPlus,
   Camera,
-  GraduationCap,
   X,
-  Loader2,
+  RefreshCw,
 } from "lucide-react";
-import CustomDropdown, { DropdownGroup } from "../CustomDropdown";
-import {
-  DAFTAR_KELAS_SMKN21,
-  KELAS_GROUPS_DROPDOWN,
-} from "../../constants/schoolData";
 import { Siswa } from "../../types/siswa";
+import SegmentedControl from "../ui/SegmentedControl";
+import Button from "../ui/Button";
+import Field, { INPUT_CLASS } from "../ui/Field";
+import KelasPicker from "./KelasPicker";
 
 export interface FormTambahSiswaProps {
   nis: string;
@@ -57,54 +55,35 @@ export default function FormTambahSiswa({
   onCancelReRecord,
   siswaList = [],
 }: FormTambahSiswaProps) {
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [facing, setFacing] = useState<"user" | "environment">("user");
+  const [camError, setCamError] = useState("");
+  const [flash, setFlash] = useState(false);
 
-  // Jika sedang re-record atau nilai kelas awal tidak ada di master baku, aktifkan custom mode jika perlu
   useEffect(() => {
-    if (kelas && !DAFTAR_KELAS_SMKN21.includes(kelas)) {
-      setIsCustomMode(true);
-    }
+    setConsent(false);
   }, [reRecordingSiswa]);
 
-  // Kelompok opsi dropdown cerdas: Master bawaan + Kelas Tambahan yang sudah ada di DB + Opsi Ketik Baru
-  const availableGroups = useMemo<DropdownGroup[]>(() => {
-    const existingClasses = new Set<string>(DAFTAR_KELAS_SMKN21);
-    const extraClasses: string[] = [];
-    (siswaList || []).forEach((s) => {
-      if (
-        s.kelas &&
-        !existingClasses.has(s.kelas) &&
-        !extraClasses.includes(s.kelas)
-      ) {
-        extraClasses.push(s.kelas);
+  // Otomatis pindah ke slot kosong berikutnya setelah foto diambil
+  useEffect(() => {
+    const next = [0, 1, 2].find((i) => !samples[i]);
+    if (next !== undefined) setCurrentSlot(next);
+  }, [samples.length, setCurrentSlot]);
+
+  const shoot = () => {
+    takeSamplePhoto();
+    setFlash(true);
+    setTimeout(() => setFlash(false), 140);
+    if ("vibrate" in navigator) {
+      try {
+        navigator.vibrate(15);
+      } catch {
+        // ignore
       }
-    });
-
-    const groups: DropdownGroup[] = [...KELAS_GROUPS_DROPDOWN];
-
-    if (extraClasses.length > 0) {
-      groups.push({
-        group: "Kelas Tambahan Terdaftar",
-        badge: "AKTIF",
-        badgeClass: "bg-indigo-100 text-indigo-800 border-indigo-200",
-        options: extraClasses.map((k) => ({ value: k, label: k })),
-      });
     }
+  };
 
-    groups.push({
-      group: "Opsi Tambahan",
-      badge: "+",
-      badgeClass: "bg-emerald-100 text-emerald-800 border-emerald-200",
-      options: [
-        {
-          value: "__CUSTOM__",
-          label: "+ Ketik Kelas Baru...",
-        },
-      ],
-    });
-
-    return groups;
-  }, [siswaList]);
+  const ready = samples.length >= 3 && consent;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
@@ -129,31 +108,31 @@ export default function FormTambahSiswa({
       </div>
 
       <form onSubmit={onSubmit}>
-        <div className="space-y-3.5 mb-5">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Nomor Induk Siswa (NIS)
-              </label>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Hanya angka (4-18 digit)
-              </span>
-            </div>
+        <div className="space-y-4 mb-5">
+          {/* NIS Input */}
+          <Field
+            label="Nomor Induk Siswa (NIS)"
+            required
+            hint="4-18 digit angka. NIS digunakan sebagai kredensial login default."
+          >
             <input
               type="text"
               inputMode="numeric"
+              maxLength={18}
+              minLength={4}
               required
               placeholder="Contoh: 20261001"
               value={nis}
               onChange={(e) => setNis(e.target.value.replace(/\D/g, ""))}
               disabled={reRecordingSiswa !== null}
-              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/50 disabled:bg-slate-100 font-mono"
+              className={`${INPUT_CLASS} font-mono`}
             />
             {nis.length > 0 && nis.length < 4 && (
               <p className="text-[11px] text-amber-600 mt-1 font-medium">
                 * NIS minimal 4 digit angka
               </p>
             )}
+
             {!reRecordingSiswa &&
               nis.length >= 3 &&
               (() => {
@@ -192,129 +171,50 @@ export default function FormTambahSiswa({
                   </div>
                 );
               })()}
-          </div>
+          </Field>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Nama Lengkap Siswa
-              </label>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Minimal 3 karakter
-              </span>
-            </div>
+          {/* Nama Lengkap */}
+          <Field
+            label="Nama Lengkap Siswa"
+            required
+            hint="Sesuai dokumen resmi sekolah atau ijazah."
+          >
             <input
               type="text"
               required
+              minLength={3}
               placeholder="Contoh: Muhammad Rizky Pratama"
               value={nama}
               onChange={(e) => setNama(e.target.value)}
               disabled={reRecordingSiswa !== null}
-              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/50 disabled:bg-slate-100"
+              className={INPUT_CLASS}
             />
-            {nama.trim().length > 0 && nama.trim().length < 3 && (
-              <p className="text-[11px] text-amber-600 mt-1 font-medium">
-                * Nama minimal 3 karakter huruf
-              </p>
-            )}
-          </div>
+          </Field>
 
-          {/* Pilihan Gender / Jenis Kelamin */}
+          {/* Jenis Kelamin via SegmentedControl */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Jenis Kelamin
-              </label>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setJenisKelamin && setJenisKelamin("Laki-laki")}
-                disabled={reRecordingSiswa !== null}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                  jenisKelamin === "Laki-laki"
-                    ? "bg-blue-50 border-blue-500 text-blue-700 shadow-xs ring-2 ring-blue-500/20"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <span>Laki-laki (Siswa)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setJenisKelamin && setJenisKelamin("Perempuan")}
-                disabled={reRecordingSiswa !== null}
-                className={`flex items-center justify-center gap-2 py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                  jenisKelamin === "Perempuan"
-                    ? "bg-pink-50 border-pink-500 text-pink-700 shadow-xs ring-2 ring-pink-500/20"
-                    : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                }`}
-              >
-                <span>Perempuan (Siswi)</span>
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1">
-              * Menentukan sapaan resmi di sistem (Siswa untuk laki-laki, Siswi
-              untuk perempuan).
+            <p className="mb-1.5 text-xs font-bold text-slate-700">
+              Jenis Kelamin <span className="text-rose-500">*</span>
             </p>
+            <SegmentedControl
+              ariaLabel="Pilih jenis kelamin"
+              value={jenisKelamin as "Laki-laki" | "Perempuan"}
+              onChange={(val) => setJenisKelamin && setJenisKelamin(val)}
+              options={[
+                { value: "Laki-laki", label: "Laki-laki (Siswa)" },
+                { value: "Perempuan", label: "Perempuan (Siswi)" },
+              ]}
+            />
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-slate-700">
-                Kelas & Jurusan SMKN 21
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCustomMode(!isCustomMode);
-                  if (!isCustomMode) {
-                    setKelas("");
-                  }
-                }}
-                disabled={reRecordingSiswa !== null}
-                className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer flex items-center gap-1"
-              >
-                {isCustomMode ? "Pilih kelas" : "+ Kelas Baru"}
-              </button>
-            </div>
-
-            {isCustomMode ? (
-              <div className="space-y-1.5">
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: X PPLG atau X PPLG 3"
-                  value={kelas}
-                  onChange={(e) => setKelas(e.target.value.toUpperCase())}
-                  disabled={reRecordingSiswa !== null}
-                  className="w-full px-3.5 py-2 text-xs sm:text-sm font-semibold uppercase border border-blue-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 bg-blue-50/20 font-mono tracking-wide"
-                  autoFocus
-                />
-                <p className="text-[10px] text-slate-400">
-                  Format: Tingkat (X/XI/XII) spasi Jurusan/Rombel. Contoh:{" "}
-                  <strong className="text-slate-600">X PPLG</strong> atau{" "}
-                  <strong className="text-slate-600">X PPLG 3</strong>
-                </p>
-              </div>
-            ) : (
-              <CustomDropdown
-                value={kelas}
-                onChange={(val) => {
-                  if (val === "__CUSTOM__") {
-                    setIsCustomMode(true);
-                    setKelas("");
-                  } else {
-                    setKelas(val);
-                  }
-                }}
-                groups={availableGroups}
-                disabled={reRecordingSiswa !== null}
-                className="w-full"
-                placeholder="Pilih Kelas & Jurusan SMKN 21"
-                icon={<GraduationCap className="w-4 h-4 text-blue-600" />}
-              />
-            )}
-          </div>
+          {/* Pemilih Kelas dengan KelasPicker */}
+          <KelasPicker
+            value={kelas}
+            onChange={setKelas}
+            siswaList={siswaList}
+            disabled={reRecordingSiswa !== null}
+            resetKey={reRecordingSiswa?.id}
+          />
         </div>
 
         {/* Area Kamera */}
@@ -334,12 +234,40 @@ export default function FormTambahSiswa({
               ref={webcamRef}
               screenshotFormat="image/jpeg"
               videoConstraints={{
-                facingMode: "user",
+                facingMode: facing,
                 width: 640,
                 height: 480,
               }}
+              onUserMedia={() => setCamError("")}
+              onUserMediaError={() =>
+                setCamError(
+                  "Kamera tidak dapat diakses. Izinkan akses kamera pada pengaturan browser.",
+                )
+              }
               className="w-full h-full object-cover"
             />
+            {camError && (
+              <div className="absolute inset-0 grid place-items-center bg-slate-950/90 p-6 text-center text-sm text-slate-200">
+                {camError}
+              </div>
+            )}
+            {flash && (
+              <div className="absolute inset-0 bg-white animate-in fade-in duration-75 pointer-events-none" />
+            )}
+
+            {/* Switch Camera Button (Front/Back) */}
+            <button
+              type="button"
+              onClick={() =>
+                setFacing((f) => (f === "user" ? "environment" : "user"))
+              }
+              aria-label="Ganti kamera depan atau belakang"
+              className="press absolute right-2 top-2 grid h-10 w-10 place-items-center rounded-xl bg-black/60 text-white backdrop-blur-md hover:bg-black/80 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+
+            {/* Viewfinder guides */}
             <div className="absolute inset-8 border-2 border-dashed border-white/40 rounded-xl pointer-events-none flex flex-col justify-between">
               <div className="flex justify-between p-1">
                 <div className="w-4 h-4 border-t-2 border-l-2 border-blue-400"></div>
@@ -364,8 +292,8 @@ export default function FormTambahSiswa({
 
           <button
             type="button"
-            onClick={takeSamplePhoto}
-            className="w-full mt-2.5 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer"
+            onClick={shoot}
+            className="w-full mt-2.5 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer min-h-11"
           >
             <Camera className="w-4 h-4" />
             <span>Ambil Foto {currentSlot + 1}</span>
@@ -373,7 +301,7 @@ export default function FormTambahSiswa({
         </div>
 
         {/* 3 Slot Sampel Wajah (Multi-Sample Preview) */}
-        <div className="mb-5 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+        <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-700">
               Sampel Terkumpul ({samples.length}/3)
@@ -385,9 +313,11 @@ export default function FormTambahSiswa({
               const photo = samples[idx];
               const isCurrent = currentSlot === idx;
               return (
-                <div
+                <button
                   key={idx}
+                  type="button"
                   onClick={() => setCurrentSlot(idx)}
+                  aria-label={`Foto ${idx + 1}${photo ? " (terisi)" : " (kosong)"}`}
                   className={`relative aspect-[3/4] rounded-lg overflow-hidden border-2 cursor-pointer transition-all flex flex-col items-center justify-center ${
                     isCurrent
                       ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/50"
@@ -403,17 +333,25 @@ export default function FormTambahSiswa({
                         alt={`Sampel ${idx + 1}`}
                         className="w-full h-full object-cover"
                       />
-                      <button
-                        type="button"
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Hapus foto ${idx + 1}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           removeSample(idx);
                         }}
-                        className="absolute top-1 right-1 w-6 h-6 bg-rose-600 text-white rounded-full flex items-center justify-center hover:bg-rose-700 active:scale-90 transition-transform shadow-sm cursor-pointer"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            removeSample(idx);
+                          }
+                        }}
+                        className="absolute top-1 right-1 grid h-9 w-9 place-items-center rounded-full bg-rose-600 text-white hover:bg-rose-700 active:scale-95 transition-transform shadow-xs cursor-pointer"
                         title="Hapus Sampel Ini"
                       >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                        <X className="w-4 h-4" />
+                      </span>
                       <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[9px] font-bold">
                         #{idx + 1}
                       </span>
@@ -426,24 +364,38 @@ export default function FormTambahSiswa({
                       </span>
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={submitting || samples.length === 0}
-          className="w-full py-3 px-6 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-        >
-          {submitting ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <span>{reRecordingSiswa ? `Perbarui Wajah` : `Simpan`}</span>
-          )}
-        </button>
+        {/* Persetujuan Perekaman Biometrik (UU PDP No. 27/2022 Pasal 25) */}
+        <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 select-none">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-blue-600 cursor-pointer"
+          />
+          <span className="text-xs leading-relaxed text-slate-700">
+            Persetujuan orang tua / wali untuk perekaman data biometrik wajah
+            siswa ini sudah diterima (sesuai UU PDP No. 27/2022 Pasal 25).
+          </span>
+        </label>
+
+        {/* Submit Button Sticky */}
+        <div className="sticky bottom-[calc(5.5rem+env(safe-area-inset-bottom))] -mx-4 mt-4 bg-white/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 xl:bottom-0 border-t border-slate-100">
+          <Button
+            type="submit"
+            variant="primary"
+            loading={submitting}
+            disabled={!ready}
+            className="w-full min-h-12"
+          >
+            {reRecordingSiswa ? "Perbarui Wajah" : "Simpan Siswa"}
+          </Button>
+        </div>
       </form>
     </div>
   );

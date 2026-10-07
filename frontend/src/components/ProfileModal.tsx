@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import TabInfoProfil from "./profile/TabInfoProfil";
 import TabKeamanan from "./profile/TabKeamanan";
+import Sheet from "./ui/Sheet";
+import LogoutConfirm from "./common/LogoutConfirm";
 
 export interface ProfileModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export default function ProfileModal({
     saveSignature,
   } = useAuth();
 
+  const [confirmLogout, setConfirmLogout] = useState(false);
+
   const resolveTab = (tab?: string): "profil" | "keamanan" => {
     if (tab === "password" || tab === "2fa" || tab === "keamanan") {
       return "keamanan";
@@ -40,77 +43,62 @@ export default function ProfileModal({
     }
   }, [isOpen, initialTab]);
 
-  // Support tombol Escape untuk menutup modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const tabs: Array<{ id: "profil" | "keamanan"; label: string }> = [
     { id: "profil", label: "Profil" },
     { id: "keamanan", label: "Keamanan" },
   ];
 
-  const modalContent = (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="bg-white rounded-3xl border border-slate-200/80 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70 flex-shrink-0">
+  return (
+    <>
+      <Sheet isOpen={isOpen} onClose={onClose} labelledBy="profile-title" size="md">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-3 sm:p-5">
           <div>
-            <h3 className="font-extrabold text-slate-800 text-base sm:text-lg">
+            <h3 id="profile-title" className="text-base font-bold text-slate-900 sm:text-lg">
               Pengaturan Akun & Profil
             </h3>
             <p className="text-xs text-slate-500">
-              Kelola informasi akun, biometrik, tanda tangan, dan keamanan Anda
+              Profil, biometrik, tanda tangan, dan keamanan
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
-            aria-label="Tutup Modal"
+            aria-label="Tutup dialog profil"
+            className="press grid h-10 w-10 shrink-0 place-items-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Tab Selector Bar */}
-        <div className="flex border-b border-slate-100 bg-white px-3 pt-2 gap-1 overflow-x-auto no-scrollbar flex-shrink-0">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-t-xl border-b-2 transition cursor-pointer whitespace-nowrap ${
-                  isActive
-                    ? "border-blue-600 text-blue-600 bg-blue-50/50"
-                    : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                }`}
-              >
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
+        <div
+          role="tablist"
+          className="relative mx-5 mb-3 grid shrink-0 grid-cols-2 rounded-2xl bg-slate-100 p-1 text-sm select-none"
+        >
+          <span
+            aria-hidden="true"
+            className={`absolute inset-y-1 left-1 w-[calc(50%-0.25rem)] rounded-xl bg-white shadow-xs transition-transform duration-300 ease-out-expo ${
+              activeTab === "keamanan" ? "translate-x-full" : ""
+            }`}
+          />
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative z-10 py-2 text-center text-xs font-bold transition-colors cursor-pointer ${
+                activeTab === tab.id
+                  ? "text-slate-900"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Modal Body Container */}
-        <div className="p-4 sm:p-6 overflow-y-auto min-h-[380px]">
+        <div className="overflow-y-auto px-5 pb-5 sm:pb-6 flex-1">
           {activeTab === "profil" && (
             <TabInfoProfil
               user={user}
@@ -125,9 +113,26 @@ export default function ProfileModal({
             <TabKeamanan user={user} updateUserProfile={updateUserProfile} />
           )}
         </div>
-      </div>
-    </div>
-  );
 
-  return createPortal(modalContent, document.body);
+        <div className="shrink-0 border-t border-slate-100 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => setConfirmLogout(true)}
+            className="press flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white text-sm font-bold text-rose-600 transition-colors hover:bg-rose-50 cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            Keluar dari akun
+          </button>
+        </div>
+      </Sheet>
+
+      <LogoutConfirm
+        isOpen={confirmLogout}
+        onClose={() => {
+          setConfirmLogout(false);
+          onClose();
+        }}
+      />
+    </>
+  );
 }

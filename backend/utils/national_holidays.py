@@ -72,6 +72,23 @@ OFFLINE_BASELINE_HOLIDAYS = {
         {"nama": "Hari Kemerdekaan RI (HUT RI ke-81)", "kategori": "libur_nasional", "tanggal_mulai": "2026-08-17", "tanggal_selesai": "2026-08-17", "keterangan": "HUT Proklamasi Kemerdekaan RI ke-81"},
         {"nama": "Maulid Nabi Muhammad SAW", "kategori": "libur_nasional", "tanggal_mulai": "2026-08-25", "tanggal_selesai": "2026-08-25", "keterangan": "Peringatan Maulid Nabi Muhammad SAW"},
         {"nama": "Hari Raya Natal", "kategori": "libur_nasional", "tanggal_mulai": "2026-12-25", "tanggal_selesai": "2026-12-25", "keterangan": "Hari Raya Natal 2026"}
+    ],
+    2027: [
+        {"nama": "Tahun Baru 2027 Masehi", "kategori": "libur_nasional", "tanggal_mulai": "2027-01-01", "tanggal_selesai": "2027-01-01", "keterangan": "Libur Nasional Tahun Baru Masehi"},
+        {"nama": "Isra Mi'raj Nabi Muhammad SAW", "kategori": "libur_nasional", "tanggal_mulai": "2027-01-05", "tanggal_selesai": "2027-01-05", "keterangan": "Peringatan Isra Mi'raj 1448 H"},
+        {"nama": "Tahun Baru Imlek 2578 Kongzili", "kategori": "libur_nasional", "tanggal_mulai": "2027-02-06", "tanggal_selesai": "2027-02-06", "keterangan": "Tahun Baru Imlek 2578 Kongzili"},
+        {"nama": "Hari Suci Nyepi (Tahun Baru Saka 1949)", "kategori": "libur_nasional", "tanggal_mulai": "2027-03-09", "tanggal_selesai": "2027-03-09", "keterangan": "Hari Suci Nyepi Saka 1949"},
+        {"nama": "Hari Raya Idul Fitri 1448 H", "kategori": "libur_nasional", "tanggal_mulai": "2027-03-10", "tanggal_selesai": "2027-03-11", "keterangan": "Hari Raya Idul Fitri 1448 H"},
+        {"nama": "Wafat Isa Al Masih (Jumat Agung)", "kategori": "libur_nasional", "tanggal_mulai": "2027-03-26", "tanggal_selesai": "2027-03-26", "keterangan": "Wafat Isa Al Masih"},
+        {"nama": "Hari Buruh Internasional", "kategori": "libur_nasional", "tanggal_mulai": "2027-05-01", "tanggal_selesai": "2027-05-01", "keterangan": "Hari Buruh Internasional"},
+        {"nama": "Kenaikan Yesus Kristus", "kategori": "libur_nasional", "tanggal_mulai": "2027-05-06", "tanggal_selesai": "2027-05-06", "keterangan": "Kenaikan Yesus Kristus"},
+        {"nama": "Hari Raya Waisak 2571 BE", "kategori": "libur_nasional", "tanggal_mulai": "2027-05-20", "tanggal_selesai": "2027-05-20", "keterangan": "Hari Raya Waisak 2571 BE"},
+        {"nama": "Hari Lahir Pancasila", "kategori": "libur_nasional", "tanggal_mulai": "2027-06-01", "tanggal_selesai": "2027-06-01", "keterangan": "Hari Lahir Pancasila"},
+        {"nama": "Hari Raya Idul Adha 1448 H", "kategori": "libur_nasional", "tanggal_mulai": "2027-06-16", "tanggal_selesai": "2027-06-16", "keterangan": "Hari Raya Idul Adha 1448 H"},
+        {"nama": "Tahun Baru Islam 1449 H", "kategori": "libur_nasional", "tanggal_mulai": "2027-07-06", "tanggal_selesai": "2027-07-06", "keterangan": "Tahun Baru Islam 1449 H"},
+        {"nama": "Hari Kemerdekaan RI (HUT RI ke-82)", "kategori": "libur_nasional", "tanggal_mulai": "2027-08-17", "tanggal_selesai": "2027-08-17", "keterangan": "HUT Proklamasi Kemerdekaan RI ke-82"},
+        {"nama": "Maulid Nabi Muhammad SAW", "kategori": "libur_nasional", "tanggal_mulai": "2027-08-15", "tanggal_selesai": "2027-08-15", "keterangan": "Peringatan Maulid Nabi Muhammad SAW"},
+        {"nama": "Hari Raya Natal", "kategori": "libur_nasional", "tanggal_mulai": "2027-12-25", "tanggal_selesai": "2027-12-25", "keterangan": "Hari Raya Natal 2027"}
     ]
 }
 

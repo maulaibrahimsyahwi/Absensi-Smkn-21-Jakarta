@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   ShieldAlert,
   Smartphone,
-  Laptop,
   ArrowRight,
-  Clock,
 } from "lucide-react";
+import Button from "../ui/Button";
 
 export interface SessionConflictData {
   errorCode: string;
@@ -13,23 +13,28 @@ export interface SessionConflictData {
 }
 
 /**
- * Modal Notifikasi Standar Industri untuk Konflik Sesi Multi-Perangkat (Single Active Session).
+ * Modal Notifikasi untuk Konflik Sesi Multi-Perangkat (Single Active Session).
  */
 export default function ModalSessionConflict() {
-  const [conflictData, setConflictData] = useState<SessionConflictData | null>(null);
+  const [conflictData, setConflictData] = useState<SessionConflictData | null>(
+    null,
+  );
   const [countdown, setCountdown] = useState<number>(5);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // 1. Tangkap custom event internal dari axios interceptor (api.js)
     const handleSessionConflictEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<{ errorCode?: string; message?: string }>;
+      const customEvent = e as CustomEvent<{
+        errorCode?: string;
+        message?: string;
+      }>;
       const detail = customEvent.detail || {};
       setConflictData({
         errorCode: detail.errorCode || "SESSION_TERMINATED",
         message:
           detail.message ||
-          "Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda",
+          "Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda.",
       });
       setCountdown(5);
     };
@@ -113,72 +118,58 @@ export default function ModalSessionConflict() {
     conflictData.errorCode === "SESSION_TERMINATED" ||
     conflictData.message.includes("perangkat lain");
 
-  return (
-    <div className="fixed inset-0 z-[10000] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200 select-none">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200 text-center relative overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Dekorasi Aksen Keamanan Atas */}
-        <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-500 via-rose-500 to-red-600" />
-
-        {/* Visual Badge Dua Perangkat */}
-        <div className="relative w-20 h-20 mx-auto mb-5 flex items-center justify-center">
-          <div className="absolute inset-0 bg-rose-100 rounded-3xl animate-ping opacity-40" />
-          <div className="relative w-18 h-18 rounded-3xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center shadow-inner">
-            {isMultiDevice ? (
-              <div className="flex items-center gap-1">
-                <Laptop className="w-7 h-7 text-rose-600" />
-                <Smartphone className="w-5 h-5 text-amber-600 -ml-1 mt-2" />
-              </div>
-            ) : (
-              <ShieldAlert className="w-9 h-9 text-rose-600" />
-            )}
-          </div>
-        </div>
-
-        {/* Judul & Pesan Formal */}
-        <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-          {isMultiDevice
-            ? "Akun Login di Perangkat Lain"
-            : "Sesi Autentikasi Berakhir"}
+  return createPortal(
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="conflict-title"
+      aria-describedby="conflict-desc"
+      className="fixed inset-0 z-[10000] flex items-end justify-center bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 sm:items-center sm:p-4 select-none"
+    >
+      <div className="w-full max-w-md rounded-t-3xl bg-white p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center shadow-2xl animate-in slide-in-from-bottom duration-300 sm:rounded-3xl sm:p-8">
+        <span className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-rose-50 text-rose-600 ring-1 ring-rose-100">
+          {isMultiDevice ? (
+            <Smartphone className="h-7 w-7" />
+          ) : (
+            <ShieldAlert className="h-7 w-7" />
+          )}
+        </span>
+        <h2
+          id="conflict-title"
+          className="text-lg font-extrabold tracking-tight text-slate-900"
+        >
+          {isMultiDevice ? "Akun masuk di perangkat lain" : "Sesi berakhir"}
         </h2>
-
-        <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed max-w-sm mx-auto">
+        <p
+          id="conflict-desc"
+          className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-600"
+        >
           {conflictData.message}
         </p>
 
-        {/* Kotak Informasi Keamanan Institusional */}
-        <div className="my-5 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs text-left space-y-1">
-          <p className="font-bold flex items-center gap-1.5 text-amber-950">
-            <Clock className="w-4 h-4 text-amber-700 shrink-0" />
-            Pengalihan Otomatis:
-          </p>
-          <p className="text-amber-800 leading-relaxed text-[11px]">
-            Sesi pada browser/perangkat ini dinonaktifkan. Anda akan dialihkan
-            ke halaman login dalam{" "}
-            <span className="font-extrabold text-rose-700 text-xs px-1.5 py-0.5 rounded bg-rose-100 border border-rose-200 inline-block mx-0.5">
-              {countdown} detik
-            </span>
-          </p>
-          {/* Progress Bar Countdown */}
-          <div className="w-full bg-amber-200/80 h-1.5 rounded-full overflow-hidden mt-2">
+        <div className="mt-5">
+          <div className="h-1 overflow-hidden rounded-full bg-slate-100">
             <div
-              className="bg-gradient-to-r from-amber-500 to-rose-600 h-full transition-all duration-1000 ease-linear"
+              className="h-full rounded-full bg-slate-900 transition-[width] duration-1000 ease-linear"
               style={{ width: `${(countdown / 5) * 100}%` }}
             />
           </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Dialihkan ke halaman login dalam {countdown} detik
+          </p>
         </div>
 
-        {/* Tombol Aksi Langsung */}
-        <div className="space-y-2 pt-1">
-          <button
-            type="button"
-            onClick={handleRedirectToLogin}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-slate-900 to-blue-950 hover:from-black hover:to-blue-900 text-white font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-          >
-            <span>Login Ulang Sekarang</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
+        <Button
+          autoFocus
+          variant="primary"
+          className="mt-4 w-full"
+          icon={<ArrowRight className="h-4 w-4" />}
+          onClick={handleRedirectToLogin}
+        >
+          Login ulang sekarang
+        </Button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -168,3 +168,6 @@ $RECYCLE.BIN/
 .system_generated/
 *.tmp
 *.temp
+claude_chat.json
+scratch/
+

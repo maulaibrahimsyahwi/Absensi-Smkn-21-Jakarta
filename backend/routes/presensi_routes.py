@@ -1,4 +1,5 @@
-from datetime import datetime, time, date, timedelta
+import json
+from datetime import datetime, time, date, timedelta, timezone
 from flask import Blueprint, request, jsonify
 from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_POLYGON, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengaturanJadwal
@@ -598,8 +599,9 @@ def get_sekolah_lokasi():
 @token_required
 def sync_offline():
     """
-    Endpoint Buffer Darurat Pemadaman Internet & Listrik Total (Offline Emergency Kiosk Sync).
-    Menerima batch transaksi presensi lokal yang tersimpan di browser kiosk saat offline dan menyinkronkannya ke server.
+    Endpoint Buffer Darurat Pemadaman Internet & Listrik Total (Offline Emergency Kiosk/Client Sync).
+    Menerima batch bukti transaksi presensi lokal yang tersimpan di browser kiosk/klien saat offline.
+    Server memverifikasi biometrik wajah, menghitung waktu WIB, menentukan status kehadiran, dan mengembalikan hasil per-item.
     """
     data = request.json or {}
     records = data.get('records', [])
@@ -610,39 +612,91 @@ def sync_offline():
     curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
     curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
+    wib_tz = timezone(timedelta(hours=7))
     synced_count = 0
     duplicate_count = 0
     failed_count = 0
+    results = []
+
+    # Cache known faces untuk efisiensi jika ada banyak record kiosk dalam batch
+    cached_encodings = None
+    cached_siswa_ids = None
 
     for item in records:
+        item_id = item.get('id')
         try:
-            siswa_id = item.get('siswa_id')
-            nis = item.get('nis')
+            mode = item.get('mode', 'kiosk')
+            image_data = item.get('image')
+            expected_siswa_id = item.get('expected_siswa_id') or item.get('siswa_id')
             device_id = item.get('device_id')
-            waktu_str = item.get('waktu') or item.get('captured_at')
-            raw_status = item.get('status', 'Tepat Waktu')
+            latitude = item.get('latitude')
+            longitude = item.get('longitude')
+            raw_waktu = item.get('captured_at') or item.get('waktu')
 
-            siswa = None
-            if siswa_id:
-                siswa = Siswa.query.get(siswa_id)
-            elif nis:
-                siswa = Siswa.query.filter_by(nis=str(nis).strip()).first()
-
-            if not siswa:
-                failed_count += 1
-                continue
-
-            try:
-                record_dt = datetime.strptime(waktu_str, "%Y-%m-%d %H:%M:%S")
-            except Exception:
+            # Konversi waktu captured_at (UTC ISO / String) ke WIB
+            record_dt = None
+            if raw_waktu:
                 try:
-                    record_dt = datetime.fromisoformat(waktu_str.replace('Z', '+00:00'))
+                    if isinstance(raw_waktu, str) and (raw_waktu.endswith('Z') or '+' in raw_waktu or 'T' in raw_waktu):
+                        parsed_utc = datetime.fromisoformat(raw_waktu.replace('Z', '+00:00'))
+                        if parsed_utc.tzinfo is not None:
+                            record_dt = parsed_utc.astimezone(wib_tz).replace(tzinfo=None)
+                        else:
+                            record_dt = parsed_utc
+                    elif isinstance(raw_waktu, str):
+                        record_dt = datetime.strptime(raw_waktu, "%Y-%m-%d %H:%M:%S")
                 except Exception:
-                    record_dt = datetime.now()
+                    pass
+
+            if not record_dt:
+                record_dt = datetime.now()
 
             rec_date = record_dt.date()
             t_start = datetime.combine(rec_date, time.min)
             t_end = datetime.combine(rec_date, time.max)
+
+            siswa = None
+            # 1. Verifikasi Biometrik Wajah Server-Side
+            if image_data:
+                if mode == 'mandiri' and expected_siswa_id:
+                    target = Siswa.query.get(expected_siswa_id)
+                    if target and target.face_encoding:
+                        try:
+                            stored = json.loads(target.face_encoding)
+                            encs = stored if isinstance(stored, list) else []
+                            ids = [target.id] * len(encs)
+                            match = verify_face(image_data, encs, ids)
+                            if match.get('success'):
+                                siswa = target
+                        except Exception:
+                            pass
+                    # Dispensasi medis
+                    if not siswa and target and target.medical_exemption_until and target.medical_exemption_until >= rec_date:
+                        siswa = target
+                else:
+                    # Kiosk mode: cari kecocokan wajah terhadap seluruh siswa SMKN 21
+                    if cached_encodings is None:
+                        cached_encodings, cached_siswa_ids = get_flattened_known_faces()
+                    if cached_encodings:
+                        match = verify_face(image_data, cached_encodings, cached_siswa_ids)
+                        if match.get('success'):
+                            siswa = Siswa.query.get(match.get('siswa_id'))
+
+            # Fallback jika presensi dicatat tanpa foto (legacy record)
+            if not siswa:
+                if expected_siswa_id:
+                    siswa = Siswa.query.get(expected_siswa_id)
+                elif item.get('nis'):
+                    siswa = Siswa.query.filter_by(nis=str(item.get('nis')).strip()).first()
+
+            if not siswa:
+                failed_count += 1
+                results.append({
+                    "id": item_id,
+                    "status": "rejected",
+                    "reason": "Siswa tidak ditemukan atau biometrik wajah tidak cocok."
+                })
+                continue
 
             # Cek apakah sudah pernah presensi pada tanggal tersebut
             existing = AbsensiHarian.query.filter(
@@ -653,16 +707,32 @@ def sync_offline():
 
             if existing:
                 duplicate_count += 1
+                results.append({
+                    "id": item_id,
+                    "status": "duplicate",
+                    "siswa_id": siswa.id,
+                    "nama": siswa.nama,
+                    "message": f"{siswa.nama} sudah tercatat presensi pada {existing.waktu.strftime('%H:%M:%S')} WIB."
+                })
                 continue
 
-            clean_status = "Terlambat" if "Terlambat" in raw_status else "Tepat Waktu"
+            # Hitung status kehadiran resmi (Tepat Waktu / Terlambat) oleh server berbasis waktu kejadian WIB
+            base_status = check_status_kehadiran(record_dt)
+            pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, record_dt)
+            if pjj_active and "PKL" in (pjj_info or "").upper():
+                clean_status = f"{base_status} (PKL)"
+            else:
+                clean_status = base_status
+
             absen = AbsensiHarian(
                 siswa_id=siswa.id,
                 status=clean_status,
                 waktu=record_dt,
+                latitude=latitude,
+                longitude=longitude,
                 device_id=device_id or None,
                 is_flagged_proxy=False,
-                proxy_note="(Sync Offline Kiosk)",
+                proxy_note="(Sync Offline)",
                 tahun_ajaran=curr_ta,
                 semester=curr_sem
             )
@@ -672,14 +742,26 @@ def sync_offline():
                 catat_pelanggaran_terlambat(
                     siswa=siswa,
                     waktu=record_dt,
-                    sumber="Sync Offline Kiosk",
-                    petugas="Sistem Kiosk Offline SMKN 21",
+                    sumber="Sync Offline",
+                    petugas="Sistem Kiosk/Buffer Offline SMKN 21",
                     alasan=f"Presensi offline tersinkronisasi ({record_dt.strftime('%H:%M:%S')} WIB)"
                 )
 
             synced_count += 1
-        except Exception:
+            results.append({
+                "id": item_id,
+                "status": "synced",
+                "siswa_id": siswa.id,
+                "nama": siswa.nama,
+                "status_kehadiran": clean_status
+            })
+        except Exception as e:
             failed_count += 1
+            results.append({
+                "id": item_id,
+                "status": "error",
+                "message": str(e)
+            })
 
     try:
         db.session.commit()
@@ -689,7 +771,8 @@ def sync_offline():
             "synced": synced_count,
             "duplicates": duplicate_count,
             "failed": failed_count,
-            "message": f"Sinkronisasi Buffer Kiosk Selesai: {synced_count} berhasil disimpan, {duplicate_count} sudah ada (duplikat), {failed_count} gagal."
+            "results": results,
+            "message": f"Sinkronisasi Buffer Selesai: {synced_count} berhasil disimpan, {duplicate_count} sudah ada (duplikat), {failed_count} gagal."
         })
     except Exception as e:
         db.session.rollback()
