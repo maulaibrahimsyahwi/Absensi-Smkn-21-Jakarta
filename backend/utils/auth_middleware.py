@@ -151,10 +151,12 @@ def token_required(f):
                             'message': 'Akun Anda wajib memperbarui kata sandi default sebelum dapat mengakses sistem.'
                         }), 403
         except Exception as db_err:
-            # Jika terjadi error koneksi database, log dan izinkan payload yang valid tetap berjalan agar tidak memblokir sementara
-            current_app.logger.warning(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")
-            
-        return f(*args, **kwargs)
+            current_app.logger.error(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")
+            return jsonify({
+                'status': 'error',
+                'error_code': 'DATABASE_UNAVAILABLE',
+                'message': 'Layanan basis data sedang sibuk atau mengalami kendala koneksi. Silakan coba sesaat lagi.'
+            }), 503
     return decorated
 
 def role_required(allowed_roles):

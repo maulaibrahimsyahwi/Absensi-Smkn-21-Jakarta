@@ -31,6 +31,7 @@ import ExportMenu, { EXPORT_FORMATS, ExportOption } from "../../ui/ExportMenu";
 import { KpiCard } from "../DashboardKpiCards";
 import SortableTh from "../../ui/SortableTh";
 import Button from "../../ui/Button";
+import ModalCetakSuratPanggilan from "../../pelanggaran/ModalCetakSuratPanggilan";
 
 export interface PelanggaranRecord {
   id: number;
@@ -159,6 +160,7 @@ export default function BukuPelanggaranTab({
   const [deleteConfirmItem, setDeleteConfirmItem] =
     useState<PelanggaranRecord | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [spModalSiswa, setSpModalSiswa] = useState<RekapSiswaPoin | null>(null);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -972,11 +974,24 @@ export default function BukuPelanggaranTab({
                           {item.jumlah_pelanggaran} Kali
                         </strong>
                       </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.badge}`}
-                      >
-                        {statusInfo.status}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusInfo.badge}`}
+                        >
+                          {statusInfo.status}
+                        </span>
+                        {(item.poin_bersih ?? item.total_poin ?? 0) >= 15 && (
+                          <button
+                            type="button"
+                            onClick={() => setSpModalSiswa(item)}
+                            title="Cetak Surat Panggilan (SP)"
+                            className="px-2 py-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>SP</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1035,6 +1050,9 @@ export default function BukuPelanggaranTab({
                     <th className="px-4 py-3 font-bold text-[11px] text-slate-600 uppercase tracking-wider">
                       Status Pembinaan
                     </th>
+                    <th className="px-4 py-3 text-center font-bold text-[11px] text-slate-600 uppercase tracking-wider">
+                      Aksi
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -1079,6 +1097,23 @@ export default function BukuPelanggaranTab({
                             {statusInfo.status}
                           </span>
                         </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          {poinBersih >= 15 ? (
+                            <button
+                              type="button"
+                              onClick={() => setSpModalSiswa(item)}
+                              title="Cetak Surat Panggilan Orang Tua (SP)"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Cetak SP</span>
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-medium italic">
+                              -
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
@@ -1086,7 +1121,7 @@ export default function BukuPelanggaranTab({
                   {!loading && rekapSiswaList.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         className="px-4 py-8 text-center text-slate-400"
                       >
                         Belum ada akumulasi poin tercatat.
@@ -1260,6 +1295,25 @@ export default function BukuPelanggaranTab({
           </>
         )}
       </Sheet>
+
+      {/* Modal Cetak Surat Panggilan (SP) Orang Tua Siswa */}
+      {spModalSiswa && (
+        <ModalCetakSuratPanggilan
+          isOpen={Boolean(spModalSiswa)}
+          onClose={() => setSpModalSiswa(null)}
+          siswa={{
+            nama: spModalSiswa.nama_siswa,
+            nis: spModalSiswa.nis,
+            kelas: spModalSiswa.kelas,
+          }}
+          totalPoin={spModalSiswa.poin_bersih ?? spModalSiswa.total_poin ?? 0}
+          statusPembinaan={
+            getStatusPembinaan(
+              spModalSiswa.poin_bersih ?? spModalSiswa.total_poin ?? 0,
+            ).status
+          }
+        />
+      )}
     </div>
   );
 }

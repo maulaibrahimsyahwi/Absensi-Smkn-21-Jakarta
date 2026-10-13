@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from utils.realtime_bus import get_realtime_state, notify_data_changed
+from utils.auth_middleware import token_required
 
 realtime_bp = Blueprint('realtime', __name__)
 
@@ -20,6 +21,7 @@ def get_pulse():
 
 
 @realtime_bp.route('/api/realtime/notify', methods=['POST'])
+@token_required
 def trigger_notify():
     """
     Endpoint pemantik sinkronisasi ketika suatu aksi mutasi data dieksekusi.

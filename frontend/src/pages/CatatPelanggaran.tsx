@@ -170,9 +170,8 @@ export default function CatatPelanggaran(): React.JSX.Element {
     setNis(siswa.nis || "");
     setSiswaId(siswa.id || null);
     clearSignature();
-    if (siswa.tanda_tangan) {
-      setUseSavedSig(true);
-    }
+    // Demi integritas pembinaan & keabsahan hukum, selalu wajibkan goresan baru di tempat
+    setUseSavedSig(false);
   };
 
   const clearSignature = () => {

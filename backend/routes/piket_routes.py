@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, time
 from flask import Blueprint, request, jsonify
 from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa, PengaturanJadwal
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
@@ -201,9 +201,13 @@ def get_piket_summary_today():
         izin_masuk = sum(1 for i in izin_hari_ini if i.tipe == "Izin Masuk")
         izin_keluar = sum(1 for i in izin_hari_ini if i.tipe == "Izin Meninggalkan Kelas")
 
-        # 2. Siswa Terlambat Hari Ini (dari AbsensiHarian & Izin Masuk)
+        # 2. Siswa Terlambat Hari Ini (dari AbsensiHarian & Izin Masuk - Sargable Date Range)
+        start_of_today = datetime.combine(today, time.min)
+        end_of_today = datetime.combine(today, time.max)
+
         terlambat_presensi = AbsensiHarian.query.filter(
-            db.func.date(AbsensiHarian.waktu) == today,
+            AbsensiHarian.waktu >= start_of_today,
+            AbsensiHarian.waktu <= end_of_today,
             AbsensiHarian.status == 'Terlambat'
         ).count()
         total_terlambat = max(terlambat_presensi, izin_masuk)
@@ -211,9 +215,10 @@ def get_piket_summary_today():
         # 3. Pengajuan Izin Siswa Online yang Menunggu Verifikasi
         izin_menunggu = PengajuanIzin.query.filter(PengajuanIzin.status_pengajuan == 'Menunggu').count()
 
-        # 4. Pelanggaran Siswa Tercatat Hari Ini
+        # 4. Pelanggaran Siswa Tercatat Hari Ini (Sargable Date Range)
         pelanggaran_today = PelanggaranSiswa.query.filter(
-            db.func.date(PelanggaranSiswa.tanggal_waktu) == today
+            PelanggaranSiswa.tanggal_waktu >= start_of_today,
+            PelanggaranSiswa.tanggal_waktu <= end_of_today
         ).count()
 
         # 5. Daftar 6 surat izin piket terbaru hari ini

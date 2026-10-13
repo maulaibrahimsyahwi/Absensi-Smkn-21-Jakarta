@@ -212,7 +212,11 @@ export default function AbsensiHarian(): React.JSX.Element {
       (!isSiswa || !attendanceToday?.already_attended),
     onLiveVerified: (token) => {
       if (token) verifiedTokenRef.current = token;
-      setCountdown(3);
+      setCountdown(0);
+      // Langsung eksekusi pemotretan tanpa jeda 3 detik pasca-kedipan
+      setTimeout(() => {
+        captureRef.current();
+      }, 50);
     },
     pollIntervalMs: 750,
   });
@@ -686,7 +690,10 @@ export default function AbsensiHarian(): React.JSX.Element {
 
           <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
             <Clock className="w-3.5 h-3.5 text-blue-400" />
-            <span>05:00 - 06:30 WIB</span>
+            <span>
+              {attendanceToday?.jam_buka || "05:00"} - {attendanceToday?.jam_batas || "06:30"} WIB
+              {attendanceToday?.mode_darurat ? " (Darurat)" : ""}
+            </span>
           </div>
           <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>

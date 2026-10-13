@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime
+from datetime import datetime, time
 from models import db, PelanggaranSiswa, Siswa, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
@@ -90,12 +90,15 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
         return None
 
     target_date = waktu.date() if isinstance(waktu, datetime) else waktu
+    start_of_day = datetime.combine(target_date, time.min)
+    end_of_day = datetime.combine(target_date, time.max)
 
-    # Cek apakah sudah tercatat pelanggaran terlambat pada hari tersebut
+    # Cek apakah sudah tercatat pelanggaran terlambat pada hari tersebut (Sargable index query)
     existing = PelanggaranSiswa.query.filter(
         PelanggaranSiswa.siswa_id == siswa.id,
         PelanggaranSiswa.jenis_pelanggaran == "Terlambat masuk sekolah",
-        db.func.date(PelanggaranSiswa.tanggal_waktu) == target_date
+        PelanggaranSiswa.tanggal_waktu >= start_of_day,
+        PelanggaranSiswa.tanggal_waktu <= end_of_day
     ).first()
 
     if existing:
@@ -397,7 +400,11 @@ def konfirmasi_pelanggaran(id):
         return jsonify({"success": False, "message": "Catatan pelanggaran tidak ditemukan."}), 404
 
     data = request.json or {}
-    aksi = str(data.get('aksi', 'setujui')).strip().lower()
+    raw_aksi = data.get('aksi') or data.get('tindakan')
+    if not raw_aksi:
+        return jsonify({"success": False, "message": "Parameter 'aksi' atau 'tindakan' wajib disertakan ('setujui' atau 'tolak')."}), 400
+
+    aksi = str(raw_aksi).strip().lower()
     if aksi not in ['setujui', 'tolak']:
         return jsonify({"success": False, "message": "Aksi tidak valid. Pilihan yang diizinkan: 'setujui' atau 'tolak'."}), 400
 

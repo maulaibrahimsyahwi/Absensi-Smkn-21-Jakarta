@@ -825,17 +825,26 @@ def sync_offline():
                     clean_status = base_status
 
                 sumber_label = "offline_kiosk" if mode == "kiosk" else "offline_mandiri"
-                proxy_label = "(Sync Offline Kiosk)" if mode == "kiosk" else "(Sync Offline Mandiri)"
+                is_student_mandiri = (user_role == 'siswa' or mode != "kiosk")
+
+                if is_student_mandiri:
+                    clean_status_final = f"{clean_status} (Perlu Verifikasi Piket)"
+                    is_flagged = True
+                    proxy_label = "(Sync Offline Mandiri - Menunggu Verifikasi Guru Piket)"
+                else:
+                    clean_status_final = clean_status
+                    is_flagged = False
+                    proxy_label = "(Sync Offline Kiosk Terverifikasi)"
 
                 absen = AbsensiHarian(
                     siswa_id=siswa.id,
-                    status=clean_status,
+                    status=clean_status_final,
                     waktu=record_dt,
                     latitude=latitude,
                     longitude=longitude,
                     sumber=sumber_label,
                     device_id=device_id or None,
-                    is_flagged_proxy=False,
+                    is_flagged_proxy=is_flagged,
                     proxy_note=proxy_label,
                     tahun_ajaran=curr_ta,
                     semester=curr_sem

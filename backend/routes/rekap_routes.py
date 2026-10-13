@@ -354,8 +354,13 @@ def get_admin_summary():
         siswa_alumni = Siswa.query.filter(Siswa.status == 'Alumni').count()
         siswa_biometrik = Siswa.query.filter(Siswa.face_encoding.isnot(None), Siswa.face_encoding != '').count()
 
-        # 2. Kehadiran Hari Ini
-        presensi_today = AbsensiHarian.query.filter(db.func.date(AbsensiHarian.waktu) == today).all()
+        # 2. Kehadiran Hari Ini (Sargable Date Range)
+        start_of_today = datetime.combine(today, time.min)
+        end_of_today = datetime.combine(today, time.max)
+        presensi_today = AbsensiHarian.query.filter(
+            AbsensiHarian.waktu >= start_of_today,
+            AbsensiHarian.waktu <= end_of_today
+        ).all()
         tepat_waktu = sum(1 for p in presensi_today if 'Tepat Waktu' in (p.status or ''))
         terlambat = sum(1 for p in presensi_today if 'Terlambat' in (p.status or ''))
         pjj_count = sum(1 for p in presensi_today if '(PJJ)' in (p.status or ''))

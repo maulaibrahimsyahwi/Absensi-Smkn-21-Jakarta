@@ -100,13 +100,16 @@ def reset_siswa_face(id):
 import hmac
 import hashlib
 import secrets
+import threading
 import time as time_module
 from collections import defaultdict
 from config import SECRET_KEY
 
-# Pelacak sesi liveness kedipan server-side {user_id: {"last_closed": float, "last_open": float, "last_update": float}}
+# Pelacak sesi liveness kedipan server-side terproteksi thread lock
+_liveness_lock = threading.Lock()
+# {user_id: {"initial_open": float, "last_closed": float, "last_open": float, "last_update": float}}
 _liveness_tracker = defaultdict(dict)
-_used_liveness_nonces = set()
+_used_liveness_nonces = {}  # {nonce: timestamp}
 _last_nonce_cleanup = 0
 
 def create_liveness_token(user_id):
@@ -123,6 +126,7 @@ def create_liveness_token(user_id):
 def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=True):
     """
     Memverifikasi keabsahan dan masa berlaku liveness token dari kamera serta mencegah replay attack.
+    Thread-safe dan menggunakan pembersihan TTL parsial (tidak menghapus nonce aktif).
     """
     global _last_nonce_cleanup
     if not token or not isinstance(token, str):
@@ -135,30 +139,34 @@ def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=T
         ts = int(ts_str)
     except ValueError:
         return False, "Timestamp token liveness tidak valid."
-    
+
     now = int(time_module.time())
     if now - ts > max_age_seconds or ts > now + 10:
         return False, "Sesi verifikasi wajah telah kedaluwarsa (> 60 detik). Mohon ulangi kedipan di depan kamera."
-    
+
     if str(uid) != str(expected_user_id):
         return False, "Token liveness tidak cocok dengan identitas akun siswa."
 
-    # Cegah penggunaan token berulang (Replay Attack)
-    if nonce in _used_liveness_nonces:
-        return False, "Token liveness sudah pernah digunakan. Mohon ulangi verifikasi kamera."
-    
     expected_raw = f"{uid}:{ts}:{nonce}"
     expected_sig = hmac.new(SECRET_KEY.encode(), expected_raw.encode(), hashlib.sha256).hexdigest()[:32]
     if not hmac.compare_digest(sig, expected_sig):
         return False, "Tanda tangan token liveness tidak valid (terindikasi pemalsuan)."
-    
-    if consume:
-        _used_liveness_nonces.add(nonce)
-        if now - _last_nonce_cleanup > 300:
-            if len(_used_liveness_nonces) > 5000:
-                _used_liveness_nonces.clear()
-            _last_nonce_cleanup = now
-            
+
+    with _liveness_lock:
+        # Cegah penggunaan token berulang (Replay Attack)
+        if nonce in _used_liveness_nonces:
+            return False, "Token liveness sudah pernah digunakan. Mohon ulangi verifikasi kamera."
+
+        if consume:
+            _used_liveness_nonces[nonce] = now
+            # Pembersihan berkala hanya untuk nonce yang sudah kedaluwarsa (> 120 detik)
+            if now - _last_nonce_cleanup > 60:
+                cutoff = now - 120
+                expired_nonces = [k for k, v in _used_liveness_nonces.items() if v < cutoff]
+                for k in expired_nonces:
+                    del _used_liveness_nonces[k]
+                _last_nonce_cleanup = now
+
     return True, "Valid"
 
 
@@ -189,42 +197,49 @@ def detect_liveness():
     result = analyze_liveness(image_data)
     now_t = time_module.time()
 
-    if result.get('face_detected'):
-        eye_state = result.get('eye_state')
-        user_state = _liveness_tracker[user_id]
+    with _liveness_lock:
+        if result.get('face_detected'):
+            eye_state = result.get('eye_state')
+            user_state = _liveness_tracker[user_id]
 
-        # Reset jika jeda antar-frame melebihi 15 detik
-        if now_t - user_state.get('last_update', 0) > 15:
-            user_state.clear()
-        user_state['last_update'] = now_t
+            # Reset jika jeda antar-frame melebihi 15 detik
+            if now_t - user_state.get('last_update', 0) > 15:
+                user_state.clear()
+            user_state['last_update'] = now_t
 
-        if eye_state == 'CLOSED':
-            user_state['last_closed'] = now_t
-        elif eye_state == 'OPEN':
-            user_state['last_open'] = now_t
-            # Verifikasi transisi siklus kedipan: CLOSED dalam rentang 0.2s s/d 5.0s yang lalu
-            if 'last_closed' in user_state and (now_t - user_state['last_closed'] <= 5.0):
-                # Khusus akun siswa: Validasi biometrik wajah wajib cocok dengan akun siswa tersebut
-                can_issue = True
-                if user_role == 'siswa':
-                    siswa = Siswa.query.get(user_id)
-                    if siswa and siswa.face_encoding:
-                        try:
-                            stored = json.loads(siswa.face_encoding)
-                            encs = stored if isinstance(stored, list) else []
-                            ids = [siswa.id] * len(encs)
-                            match = verify_face(image_data, encs, ids)
-                            if not match.get('success'):
-                                can_issue = False
-                                result['liveness_verified'] = False
-                                result['message'] = "Wajah di kamera tidak cocok dengan data biometrik akun siswa yang login."
-                        except Exception:
-                            pass
+            if eye_state == 'OPEN':
+                # Cek apakah sudah melalui siklus lengkap 3 tahap: OPEN -> CLOSED -> OPEN
+                if 'last_closed' in user_state and 'initial_open' in user_state:
+                    if (user_state['last_closed'] > user_state['initial_open']) and (now_t - user_state['last_closed'] <= 5.0):
+                        can_issue = True
+                        if user_role == 'siswa':
+                            siswa = Siswa.query.get(user_id)
+                            if siswa and siswa.face_encoding:
+                                try:
+                                    stored = json.loads(siswa.face_encoding)
+                                    encs = stored if isinstance(stored, list) else []
+                                    ids = [siswa.id] * len(encs)
+                                    match = verify_face(image_data, encs, ids)
+                                    if not match.get('success'):
+                                        can_issue = False
+                                        result['liveness_verified'] = False
+                                        result['message'] = "Wajah di kamera tidak cocok dengan data biometrik akun siswa yang login."
+                                except Exception:
+                                    pass
 
-                if can_issue:
-                    token = create_liveness_token(user_id)
-                    result['liveness_token'] = token
-                    result['liveness_verified'] = True
+                        if can_issue:
+                            token = create_liveness_token(user_id)
+                            result['liveness_token'] = token
+                            result['liveness_verified'] = True
+                            user_state.clear()
+                else:
+                    # Tahap 1: Rekam mata terbuka awal
+                    user_state['initial_open'] = now_t
+
+            elif eye_state == 'CLOSED':
+                # Tahap 2: Rekam kedipan (mata terpejam) hanya jika mata sebelumnya sudah terdeteksi terbuka
+                if 'initial_open' in user_state and (now_t - user_state['initial_open'] <= 10.0):
+                    user_state['last_closed'] = now_t
 
     return jsonify(result)
 

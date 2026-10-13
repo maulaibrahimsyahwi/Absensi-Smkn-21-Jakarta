@@ -236,7 +236,7 @@ export default function PortalPiket() {
 
   const handleKonfirmasiPelanggaran = async (id: number | string, tindakan: "setujui" | "tolak") => {
     try {
-      const res = await api.post(`/pelanggaran/${id}/konfirmasi`, { tindakan });
+      const res = await api.post(`/pelanggaran/${id}/konfirmasi`, { aksi: tindakan, tindakan });
       if (res.data?.success) {
         setNotification({
           type: "success",
@@ -722,7 +722,7 @@ export default function PortalPiket() {
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
-                          {item.kategori || "Pelanggaran"} (-{item.poin} Poin)
+                          {item.kategori || "Pelanggaran"} (+{item.poin} Poin)
                         </span>
                       )}
                     </div>
