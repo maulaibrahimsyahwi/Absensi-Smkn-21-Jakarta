@@ -37,7 +37,8 @@ app = Flask(__name__)
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
-# Konfigurasi Database
+# Konfigurasi Database & Batas Muatan Berkas (12MB)
+app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
@@ -54,8 +55,8 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor.execute("PRAGMA temp_store = MEMORY;")
         cursor.close()
 
-# Inisialisasi Ekstensi
-CORS(app, resources={r"/api/*": {"origins": "*"}, r"/static/*": {"origins": "*"}})
+# Inisialisasi Ekstensi Keamanan & CORS
+CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}}, supports_credentials=True)
 Compress(app)
 db.init_app(app)
 
@@ -70,7 +71,7 @@ def get_smart_limiter_key():
     - Jika siswa/guru sudah login (membawa token JWT), gunakan user_id & role sebagai kunci.
       Ini memastikan setiap siswa memiliki kuota terpisah, meskipun 1000 siswa menggunakan
       Wi-Fi SMKN 21 yang sama (NAT Gateway berbagi 1 IP Publik).
-    - Jika request unauthenticated (belum login), gunakan IP asli dari X-Forwarded-For atau remote_addr.
+    - Jika request unauthenticated (belum login), gunakan IP asli yang diverifikasi oleh ProxyFix.
     """
     auth = request.headers.get("Authorization")
     if auth and auth.strip().startswith("Bearer "):
@@ -84,9 +85,6 @@ def get_smart_limiter_key():
         except Exception:
             pass
 
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
     return get_remote_address()
 
 limiter = Limiter(
@@ -112,13 +110,57 @@ app.register_blueprint(pjj_bp)
 app.register_blueprint(libur_bp)
 app.register_blueprint(realtime_bp)
 
+# Batasi percobaan login maksimal 10 per menit untuk mencegah brute-force kata sandi
+if 'auth.login' in app.view_functions:
+    limiter.limit("10 per minute")(app.view_functions['auth.login'])
+
 # Bebaskan endpoint presensi, biometrik, dan realtime agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
 limiter.exempt(biometrik_bp)
 limiter.exempt(presensi_bp)
 limiter.exempt(realtime_bp)
 
-# Inisialisasi basis data, migrasi kolom dinamis, dan akun staf default
-run_db_migrations(app)
+# CLI Command untuk inisialisasi basis data secara eksplisit
+@app.cli.command("init-db")
+def init_db_command():
+    """Inisialisasi basis data dan jalankan migrasi skema dinamis."""
+    run_db_migrations(app)
+    print("Inisialisasi basis data dan migrasi selesai.")
+
+# Jalankan migrasi otomatis hanya jika SQLite lokal belum dibuat atau diinstruksikan via env AUTO_MIGRATE=1
+_db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
+_should_migrate = False
+if 'sqlite' in _db_uri:
+    _db_file = _db_uri.replace('sqlite:///', '')
+    if not os.path.exists(_db_file):
+        _should_migrate = True
+if os.environ.get('AUTO_MIGRATE') == '1':
+    _should_migrate = True
+
+if _should_migrate:
+    run_db_migrations(app)
+
+
+# Middleware: Proteksi Dokumen Medis Sensitif (UU PDP No. 27/2022)
+@app.before_request
+def protect_medical_records():
+    """
+    Melindungi berkas surat izin / surat keterangan dokter dari akses langsung tanpa otorisasi.
+    """
+    if request.path.startswith('/static/uploads/surat/'):
+        auth = request.headers.get("Authorization")
+        if not auth or not auth.strip().startswith("Bearer "):
+            return jsonify({
+                "success": False,
+                "message": "Akses dokumen medis rahasia wajib menyertakan token otorisasi yang sah."
+            }), 403
+        try:
+            token = auth.strip().split(" ")[1]
+            jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+        except Exception:
+            return jsonify({
+                "success": False,
+                "message": "Sesi token tidak valid untuk mengakses dokumen medis ini."
+            }), 403
 
 
 # Middleware: Security Headers
@@ -140,6 +182,13 @@ def not_found(e):
 def method_not_allowed(e):
     return jsonify({"success": False, "message": "Metode HTTP tidak diizinkan"}), 405
 
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    return jsonify({
+        "success": False,
+        "message": "Ukuran data atau berkas melebihi batas maksimum 12MB."
+    }), 413
+
 @app.errorhandler(429)
 def ratelimit_handler(e):
     return jsonify({
@@ -156,4 +205,6 @@ def internal_error(e):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    run_db_migrations(app)
+    is_debug = os.environ.get('FLASK_DEBUG') == '1'
+    app.run(debug=is_debug, host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))

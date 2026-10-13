@@ -145,7 +145,7 @@ export default function DashboardKpiCards({
         loading={loading}
         icon={<HeartPulse className="h-4 w-4" />}
       >
-        <div className="mt-2 flex gap-1.5 text-xs font-semibold">
+        <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] sm:text-xs font-semibold">
           <span className="rounded-md bg-rose-50 px-1.5 py-0.5 text-rose-700 border border-rose-200/60">
             Sakit {sakit}
           </span>

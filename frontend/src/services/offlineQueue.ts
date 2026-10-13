@@ -217,24 +217,30 @@ export function syncOfflineQueueToServer(): Promise<SyncOfflineResult> {
           };
         }
 
-        // Ambil ID entri yang telah diputuskan oleh server (synced, duplicate, rejected)
-        const decided = new Set<string>(
-          Array.isArray(res.results)
-            ? res.results
-                .filter((r) => r.status !== "error")
-                .map((r) => r.id)
-                .filter((x): x is string => Boolean(x))
-            : part.map((e) => e.id),
-        );
-
-        if (decided.size === 0) {
+        // Ambil ID entri yang telah diputuskan secara definitif oleh server (synced, duplicate, rejected)
+        const decided = new Set<string>();
+        if (Array.isArray(res.results)) {
+          for (const r of res.results) {
+            if (
+              r.id &&
+              (r.status === "synced" ||
+                r.status === "duplicate" ||
+                r.status === "rejected")
+            ) {
+              decided.add(r.id);
+            }
+          }
+        } else {
+          // Fallback untuk respons server legacy tanpa rincian status per-item
           part.forEach((e) => decided.add(e.id));
         }
 
-        // Hapus hanya entri yang telah diproses server, entri baru yang masuk selama request tetap aman
-        cache = cache.filter((e) => !decided.has(e.id));
-        await deleteManyFromIdb([...decided]);
-        totalDecided += decided.size;
+        // Hapus hanya entri yang telah definitif diproses server, entri gagal/error tetap tersimpan untuk dicoba ulang
+        if (decided.size > 0) {
+          cache = cache.filter((e) => !decided.has(e.id));
+          await deleteManyFromIdb([...decided]);
+          totalDecided += decided.size;
+        }
       }
 
       if (totalDecided > 0) {

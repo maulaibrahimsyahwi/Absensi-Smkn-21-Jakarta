@@ -23,33 +23,33 @@ export default function ModalCetakSuratPanggilan({
   totalPoin = 0,
   statusPembinaan = "Peringatan",
 }: ModalCetakSuratPanggilanProps): React.JSX.Element | null {
-  if (!isOpen || !siswa) return null;
-
   const todayStr = new Date().toLocaleDateString("id-ID", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
 
-  const nextDay = new Date();
-  nextDay.setDate(nextDay.getDate() + 2);
-  const defaultJadwalTanggal = nextDay.toLocaleDateString("id-ID", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
   const [nomorSurat, setNomorSurat] = useState(
-    `421.5/0${Math.floor(Math.random() * 80 + 20)}/SMKN.21/${new Date().getFullYear()}`,
+    () => `421.5/0${Math.floor(Math.random() * 80 + 20)}/SMKN.21/${new Date().getFullYear()}`,
   );
-  const [jadwalHariTanggal, setJadwalHariTanggal] = useState(defaultJadwalTanggal);
+  const [jadwalHariTanggal, setJadwalHariTanggal] = useState(() => {
+    const nextDay = new Date();
+    nextDay.setDate(nextDay.getDate() + 2);
+    return nextDay.toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  });
   const [jadwalWaktu, setJadwalWaktu] = useState("08.30 WIB s/d selesai");
   const [jadwalRuangan, setJadwalRuangan] = useState("Ruang Bimbingan & Konseling (BK) SMKN 21");
   const [menghadap, setMenghadap] = useState("Guru BK & Tim Kesiswaan SMKN 21 Jakarta");
   const [catatanKhusus] = useState(
     "Mengingat pentingnya koordinasi pembinaan kedisiplinan putra/putri Bapak/Ibu, dimohon kehadiran tepat waktu dan tidak dapat diwakilkan.",
   );
+
+  if (!isOpen || !siswa) return null;
 
   const handlePrint = () => {
     window.print();
@@ -60,23 +60,23 @@ export default function ModalCetakSuratPanggilan({
       {/* Modal Container */}
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[96vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Modal Toolbar (Disembunyikan saat Print) */}
-        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-400" />
-            <div>
-              <h3 className="font-bold text-xs sm:text-sm">
+        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <FileText className="w-5 h-5 text-blue-400 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-xs sm:text-sm truncate">
                 Pratinjau Surat Pemanggilan Resmi Orang Tua / Wali
               </h3>
-              <p className="text-[11px] text-slate-300">
+              <p className="text-[11px] text-slate-300 truncate">
                 Format Standar Kedinasan SMKN 21 Jakarta • {statusPembinaan} ({totalPoin} Poin)
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrint}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 transition shadow-xs cursor-pointer min-h-[36px]"
             >
               <Printer className="w-4 h-4" />
               <span>Cetak Berkas (Print)</span>
@@ -84,7 +84,7 @@ export default function ModalCetakSuratPanggilan({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
               title="Tutup"
             >
               <X className="w-5 h-5" />

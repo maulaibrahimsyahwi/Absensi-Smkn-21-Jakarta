@@ -101,8 +101,8 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
     if existing:
         return existing
 
-    # Siapkan tanda tangan siswa (gunakan tanda tangan digital profil siswa jika ada, atau string kosong jika belum membuat)
-    ttd = tanda_tangan_siswa or getattr(siswa, 'tanda_tangan', None) or ""
+    # Tanda tangan pengakuan keterlambatan hanya diisi jika siswa membubuhkan langsung
+    ttd = tanda_tangan_siswa or ""
 
     waktu_dt = waktu if isinstance(waktu, datetime) else datetime.combine(waktu, datetime.now().time())
     ket = f"Otomatis tercatat ({sumber})"
@@ -282,11 +282,15 @@ def create_pelanggaran():
         status_verifikasi = "Menunggu Konfirmasi"
         if kategori == 'Prestasi':
             matched = next((m for m in MASTER_PRESTASI if m['nama'].strip().lower() == jenis_pelanggaran.strip().lower()), None)
-            poin = matched['poin_default'] if matched else 10
+            if not matched:
+                return jsonify({"success": False, "message": "Prestasi yang diajukan harus dipilih dari daftar master resmi sekolah."}), 400
+            poin = matched['poin_default']
             nama_penanggung_jawab = "Klaim Mandiri Siswa (Menunggu Verifikasi Guru/Pembina)"
         else:
             matched = next((m for m in MASTER_PELANGGARAN if m['nama'].strip().lower() == jenis_pelanggaran.strip().lower()), None)
-            poin = matched['poin_default'] if matched else 5
+            if not matched:
+                return jsonify({"success": False, "message": "Pelanggaran yang dilaporkan harus dipilih dari daftar master resmi sekolah."}), 400
+            poin = matched['poin_default']
             nama_penanggung_jawab = "Lapor Mandiri Siswa (Menunggu Verifikasi Guru Piket)"
     else:
         if poin is None:
@@ -394,17 +398,33 @@ def konfirmasi_pelanggaran(id):
 
     data = request.json or {}
     aksi = str(data.get('aksi', 'setujui')).strip().lower()
+    if aksi not in ['setujui', 'tolak']:
+        return jsonify({"success": False, "message": "Aksi tidak valid. Pilihan yang diizinkan: 'setujui' atau 'tolak'."}), 400
+
     current_u = getattr(request, 'current_user', {})
     officer_name = current_u.get('identifier', 'Guru Piket')
 
     try:
-        if aksi in ['tolak', 'batal']:
-            db.session.delete(rec)
+        if aksi == 'tolak':
+            rec.status_verifikasi = "Ditolak"
+            rec.nama_penanggung_jawab = f"Ditolak oleh {officer_name}"
             db.session.commit()
             notify_data_changed("pelanggaran")
+
+            record_audit_log(
+                user_id=current_u.get('user_id'),
+                role=current_u.get('role', 'piket'),
+                user_name=officer_name,
+                action='TOLAK_PELANGGARAN_MANDIRI',
+                target_type='PelanggaranSiswa',
+                target_id=rec.id,
+                keterangan=f"Guru Piket menolak laporan mandiri {rec.nama_siswa} ({rec.jenis_pelanggaran})"
+            )
+
             return jsonify({
                 "success": True,
-                "message": f"Laporan pelanggaran mandiri {rec.nama_siswa} ({rec.jenis_pelanggaran}) berhasil dibatalkan / ditolak."
+                "message": f"Laporan mandiri {rec.nama_siswa} ({rec.jenis_pelanggaran}) ditolak.",
+                "data": rec.to_dict()
             })
 
         rec.status_verifikasi = "Disetujui"
@@ -419,12 +439,12 @@ def konfirmasi_pelanggaran(id):
             action='KONFIRMASI_PELANGGARAN_MANDIRI',
             target_type='PelanggaranSiswa',
             target_id=rec.id,
-            keterangan=f"Guru Piket mengesahkan laporan pelanggaran {rec.nama_siswa} ({rec.jenis_pelanggaran}, +{rec.poin} poin)"
+            keterangan=f"Guru Piket mengesahkan laporan mandiri {rec.nama_siswa} ({rec.jenis_pelanggaran}, +{rec.poin} poin)"
         )
 
         return jsonify({
             "success": True,
-            "message": f"Pelanggaran mandiri {rec.nama_siswa} (+{rec.poin} poin) berhasil disahkan resmi!",
+            "message": f"Laporan mandiri {rec.nama_siswa} (+{rec.poin} poin) berhasil disahkan resmi!",
             "data": rec.to_dict()
         })
     except Exception as e:
@@ -454,7 +474,8 @@ def get_pelanggaran_list():
     tahun_ajaran = request.args.get('tahun_ajaran')
     semester = request.args.get('semester')
     search = request.args.get('search')
-    limit = request.args.get('limit', default=1000, type=int)
+    include_sig = request.args.get('include_signature', 'false').lower() == 'true'
+    limit = min(1000, max(1, request.args.get('limit', default=1000, type=int)))
 
     query = PelanggaranSiswa.query
 
@@ -513,7 +534,7 @@ def get_pelanggaran_list():
 
     return jsonify({
         "success": True,
-        "data": [r.to_dict() for r in records],
+        "data": [r.to_dict(include_signature=include_sig) for r in records],
         "total": len(records)
     })
 
@@ -535,7 +556,8 @@ def get_pelanggaran_rekap():
         tahun_ajaran = request.args.get('tahun_ajaran')
         semester = request.args.get('semester')
 
-        query_base = PelanggaranSiswa.query
+        # Rekap hanya menghitung catatan yang sudah resmi disetujui
+        query_base = PelanggaranSiswa.query.filter(PelanggaranSiswa.status_verifikasi == 'Disetujui')
         if tahun_ajaran and tahun_ajaran != 'ALL':
             query_base = query_base.filter(PelanggaranSiswa.tahun_ajaran == tahun_ajaran)
         if semester and semester != 'ALL':

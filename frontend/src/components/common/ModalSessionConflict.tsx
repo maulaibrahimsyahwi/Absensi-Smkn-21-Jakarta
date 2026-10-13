@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import {
-  ShieldAlert,
-  Smartphone,
-  ArrowRight,
-} from "lucide-react";
+import { ShieldAlert, Smartphone, ArrowRight } from "lucide-react";
 import Button from "../ui/Button";
 
 export interface SessionConflictData {
@@ -163,10 +159,9 @@ export default function ModalSessionConflict() {
           autoFocus
           variant="primary"
           className="mt-4 w-full"
-          icon={<ArrowRight className="h-4 w-4" />}
           onClick={handleRedirectToLogin}
         >
-          Login ulang sekarang
+          Login ulang
         </Button>
       </div>
     </div>,

@@ -1,8 +1,8 @@
 import type { HolidayStatusResponse } from './libur';
 
 export type UserRole = 'admin' | 'piket' | 'siswa';
-export type JenisKelamin = 'Laki-laki' | 'Perempuan' | 'L' | 'P';
-export type StatusSiswa = 'Aktif' | 'Alumni';
+export type JenisKelamin = 'Laki-laki' | 'Perempuan';
+export type StatusSiswa = 'Aktif' | 'Alumni' | 'Mutasi';
 
 export interface ServiceResult {
   success: boolean;

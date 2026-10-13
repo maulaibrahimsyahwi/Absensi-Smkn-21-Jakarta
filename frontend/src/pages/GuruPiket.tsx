@@ -423,8 +423,8 @@ export default function GuruPiket(): React.JSX.Element {
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-slate-50 py-6 px-3 sm:px-6 lg:px-8 max-w-7xl mx-auto">
       {/* ================= HEADER SECTION ================= */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
-        <div className="flex items-center gap-3.5">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs">
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
           <Link
             to={backTarget}
             title={
@@ -435,8 +435,8 @@ export default function GuruPiket(): React.JSX.Element {
             <ArrowLeft className="w-5 h-5" />
           </Link>
 
-          <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg sm:text-2xl font-extrabold text-slate-900 tracking-tight mt-0.5 break-words">
               Surat Ijin Masuk / Meninggalkan Kelas
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
@@ -470,12 +470,12 @@ export default function GuruPiket(): React.JSX.Element {
             )}
 
             {!currentSignature && (
-              <div className="mb-4 bg-amber-500/10 border border-amber-500/30 text-slate-800 p-3.5 rounded-xl flex items-center justify-between gap-3 text-xs animate-in fade-in shadow-2xs">
+              <div className="mb-4 bg-amber-500/10 border border-amber-500/30 text-slate-800 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in shadow-2xs">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-700 flex-shrink-0">
                     <PenTool className="w-3.5 h-3.5" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="font-bold text-slate-900 leading-tight">
                       Tanda Tangan Guru Piket Diperlukan
                     </p>
@@ -488,7 +488,7 @@ export default function GuruPiket(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => setShowSignatureModal(true)}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer shadow-xs transition-all"
+                  className="w-full sm:w-auto px-3.5 py-2 min-h-[38px] bg-amber-600 hover:bg-amber-700 active:scale-[0.99] text-white rounded-lg text-xs font-bold whitespace-nowrap cursor-pointer shadow-xs transition-all text-center flex items-center justify-center"
                 >
                   Buat TTD
                 </button>
@@ -756,11 +756,11 @@ export default function GuruPiket(): React.JSX.Element {
             {/* Baris 1: Toggle Mode Tanggal & Custom Date Picker */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Toggle Tanggal Mode */}
-              <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200 text-xs">
+              <div className="grid grid-cols-3 sm:inline-flex w-full sm:w-auto rounded-xl p-0.5 bg-slate-100 border border-slate-200 text-xs">
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("today")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer text-center ${
                     filterTanggalMode === "today"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -771,7 +771,7 @@ export default function GuruPiket(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("all")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer text-center ${
                     filterTanggalMode === "all"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -782,7 +782,7 @@ export default function GuruPiket(): React.JSX.Element {
                 <button
                   type="button"
                   onClick={() => setFilterTanggalMode("custom")}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-colors duration-150 cursor-pointer text-center ${
                     filterTanggalMode === "custom"
                       ? "bg-white text-slate-900 shadow-2xs"
                       : "text-slate-500 hover:text-slate-800"
@@ -818,7 +818,7 @@ export default function GuruPiket(): React.JSX.Element {
           </div>
 
           {/* List Cards Riwayat Izin Piket */}
-          <div className="flex-1 overflow-y-auto max-h-[600px] space-y-3 pr-1">
+          <div className="flex-1 overflow-y-auto max-h-[500px] sm:max-h-[600px] lg:max-h-[720px] overscroll-contain space-y-3 pr-1">
             {loadingRiwayat ? (
               <div className="space-y-2.5 py-1">
                 {[...Array(3)].map((_, i) => (
@@ -856,7 +856,7 @@ export default function GuruPiket(): React.JSX.Element {
                     className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-blue-200 hover:shadow-sm transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
                   >
                     {/* Info Siswa & Izin */}
-                    <div className="space-y-1">
+                    <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md ${
@@ -890,31 +890,31 @@ export default function GuruPiket(): React.JSX.Element {
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-700 italic bg-slate-50 p-2 rounded-lg border border-slate-100">
+                      <p className="text-xs text-slate-700 italic bg-slate-50 p-2 rounded-lg border border-slate-100 break-words">
                         "{item.alasan}"
                       </p>
                     </div>
 
                     {/* Tombol Aksi */}
-                    <div className="flex items-center gap-1.5 sm:self-center flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <div className="flex items-center gap-2 sm:self-center flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <button
                         type="button"
                         onClick={() => setSelectedSlip(item)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[38px] rounded-lg bg-blue-50 hover:bg-blue-100 active:bg-blue-200 text-blue-700 text-xs font-bold transition-colors cursor-pointer"
                         title="Lihat / Cetak E-Slip Surat Izin"
                       >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>E-Slip</span>
+                        <Printer className="w-4 h-4" />
+                        <span>Cetak Slip</span>
                       </button>
 
                       {isAdmin && (
                         <button
                           type="button"
                           onClick={() => setDeletingIzin(item)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="p-2 min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Hapus Surat Izin (Khusus Admin)"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       )}
                     </div>

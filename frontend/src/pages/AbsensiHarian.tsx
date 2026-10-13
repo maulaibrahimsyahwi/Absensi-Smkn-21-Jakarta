@@ -675,10 +675,12 @@ export default function AbsensiHarian(): React.JSX.Element {
               type="button"
               onClick={() => setShowOfflineModal(true)}
               title="Ada presensi darurat tersimpan di buffer lokal kiosk. Klik untuk melihat & menyinkronkan."
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse cursor-pointer shrink-0"
             >
-              <CloudOff className="w-3.5 h-3.5" />
-              <span>Buffer Offline ({offlineQueueCount})</span>
+              <CloudOff className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                <span className="hidden sm:inline">Buffer </span>Offline ({offlineQueueCount})
+              </span>
             </button>
           )}
 
@@ -783,7 +785,7 @@ export default function AbsensiHarian(): React.JSX.Element {
 
       {/* Overlay: Siswa Sudah Melakukan Presensi Hari Ini */}
       {isSiswa && attendanceToday?.already_attended && (
-        <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+        <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200 overflow-y-auto max-h-screen py-8">
           <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mb-5 shadow-xl shadow-emerald-950/50">
             <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12" />
           </div>
@@ -837,7 +839,7 @@ export default function AbsensiHarian(): React.JSX.Element {
         attendanceToday &&
         attendanceToday.is_presensi_open === false &&
         !attendanceToday.already_attended && (
-          <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md flex flex-col items-center justify-center text-white z-50 p-4 sm:p-6 text-center animate-in fade-in duration-200 overflow-y-auto max-h-screen py-8">
             <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-3xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mb-5 shadow-xl shadow-amber-950/50">
               <Clock className="w-10 h-10 sm:w-12 sm:h-12" />
             </div>
@@ -887,7 +889,7 @@ export default function AbsensiHarian(): React.JSX.Element {
 
       {/* 7A. Overlay Menunggu GPS */}
       {!isPjjActive && isGpsWaiting && (
-        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-200">
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center text-white z-40 p-4 sm:p-6 text-center animate-in fade-in duration-200 overflow-y-auto max-h-screen py-8">
           <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/40 flex items-center justify-center mb-4 sm:mb-5">
             <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin text-blue-400" />
             <MapPin className="w-4 h-4 text-blue-300 absolute" />

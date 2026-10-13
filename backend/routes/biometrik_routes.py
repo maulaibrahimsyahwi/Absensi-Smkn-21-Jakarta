@@ -1,7 +1,7 @@
 import json
 from flask import Blueprint, request, jsonify
 from models import db, Siswa
-from face_utils import get_face_encoding, check_face_present, analyze_liveness
+from face_utils import get_face_encoding, check_face_present, analyze_liveness, verify_face
 
 biometrik_bp = Blueprint('biometrik', __name__)
 
@@ -99,33 +99,38 @@ def reset_siswa_face(id):
 
 import hmac
 import hashlib
+import secrets
 import time as time_module
 from collections import defaultdict
 from config import SECRET_KEY
 
 # Pelacak sesi liveness kedipan server-side {user_id: {"last_closed": float, "last_open": float, "last_update": float}}
 _liveness_tracker = defaultdict(dict)
+_used_liveness_nonces = set()
+_last_nonce_cleanup = 0
 
 def create_liveness_token(user_id):
     """
-    Membuat token tantangan liveness terenkripsi (HMAC-SHA256) berdurasi 60 detik.
-    Hanya dapat diterbitkan jika server memvalidasi transisi kedipan mata asli.
+    Membuat token tantangan liveness sekali pakai (single-use) terenkripsi (HMAC-SHA256) berdurasi 60 detik.
+    Menyertakan nonce acak kriptografis untuk mencegah replay attack.
     """
     ts = int(time_module.time())
-    raw = f"{user_id}:{ts}"
+    nonce = secrets.token_hex(8)
+    raw = f"{user_id}:{ts}:{nonce}"
     sig = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()[:32]
-    return f"{user_id}:{ts}:{sig}"
+    return f"{user_id}:{ts}:{nonce}:{sig}"
 
-def verify_liveness_token(token, expected_user_id, max_age_seconds=60):
+def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=True):
     """
-    Memverifikasi keabsahan dan masa berlaku liveness token dari kamera.
+    Memverifikasi keabsahan dan masa berlaku liveness token dari kamera serta mencegah replay attack.
     """
+    global _last_nonce_cleanup
     if not token or not isinstance(token, str):
         return False, "Token verifikasi liveness tidak ditemukan."
     parts = token.split(":")
-    if len(parts) != 3:
+    if len(parts) != 4:
         return False, "Format token liveness tidak valid."
-    uid, ts_str, sig = parts
+    uid, ts_str, nonce, sig = parts
     try:
         ts = int(ts_str)
     except ValueError:
@@ -137,12 +142,23 @@ def verify_liveness_token(token, expected_user_id, max_age_seconds=60):
     
     if str(uid) != str(expected_user_id):
         return False, "Token liveness tidak cocok dengan identitas akun siswa."
+
+    # Cegah penggunaan token berulang (Replay Attack)
+    if nonce in _used_liveness_nonces:
+        return False, "Token liveness sudah pernah digunakan. Mohon ulangi verifikasi kamera."
     
-    expected_raw = f"{uid}:{ts}"
+    expected_raw = f"{uid}:{ts}:{nonce}"
     expected_sig = hmac.new(SECRET_KEY.encode(), expected_raw.encode(), hashlib.sha256).hexdigest()[:32]
     if not hmac.compare_digest(sig, expected_sig):
         return False, "Tanda tangan token liveness tidak valid (terindikasi pemalsuan)."
     
+    if consume:
+        _used_liveness_nonces.add(nonce)
+        if now - _last_nonce_cleanup > 300:
+            if len(_used_liveness_nonces) > 5000:
+                _used_liveness_nonces.clear()
+            _last_nonce_cleanup = now
+            
     return True, "Valid"
 
 
@@ -168,6 +184,7 @@ def detect_liveness():
     
     current_user = getattr(request, 'current_user', {})
     user_id = current_user.get('user_id', 0)
+    user_role = str(current_user.get('role', '')).lower()
 
     result = analyze_liveness(image_data)
     now_t = time_module.time()
@@ -187,10 +204,27 @@ def detect_liveness():
             user_state['last_open'] = now_t
             # Verifikasi transisi siklus kedipan: CLOSED dalam rentang 0.2s s/d 5.0s yang lalu
             if 'last_closed' in user_state and (now_t - user_state['last_closed'] <= 5.0):
-                # Terbitkan Liveness Challenge Token resmi
-                token = create_liveness_token(user_id)
-                result['liveness_token'] = token
-                result['liveness_verified'] = True
+                # Khusus akun siswa: Validasi biometrik wajah wajib cocok dengan akun siswa tersebut
+                can_issue = True
+                if user_role == 'siswa':
+                    siswa = Siswa.query.get(user_id)
+                    if siswa and siswa.face_encoding:
+                        try:
+                            stored = json.loads(siswa.face_encoding)
+                            encs = stored if isinstance(stored, list) else []
+                            ids = [siswa.id] * len(encs)
+                            match = verify_face(image_data, encs, ids)
+                            if not match.get('success'):
+                                can_issue = False
+                                result['liveness_verified'] = False
+                                result['message'] = "Wajah di kamera tidak cocok dengan data biometrik akun siswa yang login."
+                        except Exception:
+                            pass
+
+                if can_issue:
+                    token = create_liveness_token(user_id)
+                    result['liveness_token'] = token
+                    result['liveness_verified'] = True
 
     return jsonify(result)
 

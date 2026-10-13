@@ -31,7 +31,7 @@ export function toggleVoiceMuted(): boolean {
  */
 export function speakIndonesian(text: string, priority = false): void {
   if (isVoiceMuted()) return;
-  if (typeof window === 'undefined' || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
 
   try {
     if (priority) {
@@ -61,12 +61,13 @@ export function speakIndonesian(text: string, priority = false): void {
 /**
  * Konfirmasi Presensi Berhasil Tepat Waktu
  */
-export function speakAttendanceSuccess(nama?: string | null, status = "Tepat Waktu"): void {
+export function speakAttendanceSuccess(
+  nama?: string | null,
+  status = "Tepat Waktu",
+): void {
   const cleanName = nama ? nama.split(" ")[0] : "Siswa";
   if (status.includes("Terlambat")) {
-    speakIndonesian(
-      `Presensi tercatat terlambat. Selamat pagi, ${cleanName}. Silakan ambil slip keterlambatan di meja piket.`,
-    );
+    speakIndonesian(`Presensi tercatat terlambat. Selamat pagi, ${cleanName}`);
   } else if (status.includes("Dispensasi Medis")) {
     speakIndonesian(
       `Dispensasi medis terverifikasi. Presensi berhasil, selamat pagi ${cleanName}.`,

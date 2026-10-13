@@ -19,17 +19,20 @@ class User(db.Model):
     two_factor_secret = db.Column(db.String(128), nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
     active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
+    must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force change password
     created_at = db.Column(db.DateTime, default=datetime.now)
 
-    def to_dict(self):
+    def to_dict(self, include_signature=False):
         return {
             "id": self.id,
             "username": self.username,
             "nama": self.nama,
             "role": self.role,
-            "tanda_tangan": self.tanda_tangan,
+            "tanda_tangan": self.tanda_tangan if include_signature else None,
+            "has_signature": bool(self.tanda_tangan),
             "foto_profil": self.foto_profil,
             "two_factor_enabled": bool(self.two_factor_enabled),
+            "must_change_password": bool(getattr(self, 'must_change_password', False)),
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None
         }
 
@@ -124,6 +127,9 @@ class AbsensiHarian(db.Model):
     proxy_note = db.Column(db.String(255), nullable=True)  # Rincian peringatan proxy/titip absen
     tahun_ajaran = db.Column(db.String(20), nullable=True, index=True)  # e.g., "2026/2027"
     semester = db.Column(db.String(10), nullable=True, index=True)  # "Ganjil" atau "Genap"
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    sumber = db.Column(db.String(20), default="online", nullable=True)  # "online", "kiosk", "offline_sync"
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_harian', lazy=True))
 
@@ -148,6 +154,9 @@ class AbsensiHarian(db.Model):
             "kelas": self.kelas,
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
             "status": self.status,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "sumber": self.sumber or "online",
             "device_id": self.device_id,
             "is_flagged_proxy": bool(self.is_flagged_proxy),
             "proxy_note": self.proxy_note,
@@ -329,11 +338,13 @@ class PelanggaranSiswa(db.Model):
 
     siswa = db.relationship('Siswa', backref=db.backref('catatan_pelanggaran', lazy=True))
 
-    def to_dict(self):
+    def to_dict(self, include_signature=False):
         # Integritas Hukum: Tanda tangan pengakuan pelanggaran HANYA berasal dari kanvas saat pencatatan
-        ttd = self.tanda_tangan_siswa
+        ttd = self.tanda_tangan_siswa if include_signature else None
         if not ttd or 'TERCATAT TERLAMBAT' in str(ttd):
             ttd = None
+
+        has_sig = bool(self.tanda_tangan_siswa and 'TERCATAT TERLAMBAT' not in str(self.tanda_tangan_siswa))
 
         return {
             "id": self.id,
@@ -350,6 +361,7 @@ class PelanggaranSiswa(db.Model):
             "semester": self.semester or "Ganjil",
             "nama_penanggung_jawab": self.nama_penanggung_jawab,
             "tanda_tangan_siswa": ttd,
+            "has_signature": has_sig,
             "status_verifikasi": self.status_verifikasi or "Disetujui",
             "keterangan": self.keterangan,
             "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")

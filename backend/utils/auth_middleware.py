@@ -120,6 +120,36 @@ def token_required(f):
                         'error_code': 'SESSION_TERMINATED',
                         'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
                     }), 401
+
+            # ================= FORCE PASSWORD CHANGE ENFORCEMENT =================
+            # Jika akun wajib mengganti kata sandi bawaan, blokir rute operasional
+            # kecuali endpoint ganti password, logout, verify_session, dan simpan tanda tangan digital
+            EXEMPT_ENDPOINTS = {
+                'auth.change_password',
+                'auth.logout',
+                'auth.verify_session',
+                'auth.save_signature',
+                'auth.save_foto_profil',
+                'auth.delete_foto_profil'
+            }
+            EXEMPT_PATHS = {
+                '/api/auth/change_password',
+                '/api/auth/logout',
+                '/api/auth/verify_session',
+                '/api/auth/signature',
+                '/api/auth/foto_profil'
+            }
+            if user_account:
+                from utils.passwords import needs_password_change
+                if needs_password_change(user_account):
+                    curr_ep = request.endpoint or ''
+                    curr_path = request.path or ''
+                    if curr_ep not in EXEMPT_ENDPOINTS and curr_path not in EXEMPT_PATHS:
+                        return jsonify({
+                            'status': 'error',
+                            'error_code': 'PASSWORD_CHANGE_REQUIRED',
+                            'message': 'Akun Anda wajib memperbarui kata sandi default sebelum dapat mengakses sistem.'
+                        }), 403
         except Exception as db_err:
             # Jika terjadi error koneksi database, log dan izinkan payload yang valid tetap berjalan agar tidak memblokir sementara
             current_app.logger.warning(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")

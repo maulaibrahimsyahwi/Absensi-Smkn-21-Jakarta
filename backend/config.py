@@ -53,14 +53,36 @@ else:
     }
 
 
-# Kunci Rahasia Keamanan Aplikasi & JWT Signing
-# Jika tidak ada di .env, generate random token dinamis untuk sesi berjalan
-_DEFAULT_FALLBACK_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
-SECRET_KEY = _DEFAULT_FALLBACK_KEY
-JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
+# Pastikan zona waktu proses backend berjalan di Asia/Jakarta (WIB) jika didukung OS
+try:
+    import time as _py_time
+    if hasattr(_py_time, 'tzset'):
+        os.environ['TZ'] = 'Asia/Jakarta'
+        _py_time.tzset()
+except Exception:
+    pass
 
-# Konfigurasi Keamanan CORS (Hanya izinkan frontend dev server)
-CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+# Kunci Rahasia Keamanan Aplikasi & JWT Signing
+_FLASK_ENV = os.environ.get('FLASK_ENV', 'development').lower()
+_IS_PROD = _FLASK_ENV == 'production' or os.environ.get('PRODUCTION', '0') == '1'
+
+if _IS_PROD:
+    _sec = os.environ.get('SECRET_KEY')
+    _jwt_sec = os.environ.get('JWT_SECRET_KEY')
+    if not _sec or len(_sec) < 32:
+        raise RuntimeError("CRITICAL SECURITY ERROR: SECRET_KEY environment variable (min 32 chars) MUST be set in production mode!")
+    if not _jwt_sec or len(_jwt_sec) < 32:
+        raise RuntimeError("CRITICAL SECURITY ERROR: JWT_SECRET_KEY environment variable (min 32 chars) MUST be set in production mode!")
+    SECRET_KEY = _sec
+    JWT_SECRET_KEY = _jwt_sec
+else:
+    # Mode development / testing lokal
+    SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
+
+# Konfigurasi Keamanan CORS (Izinkan domain yang ditentukan di .env atau dev server lokal)
+_cors_env = os.environ.get('CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173')
+CORS_ORIGINS = [orig.strip() for orig in _cors_env.split(',') if orig.strip()]
 
 # Titik Koordinat Resmi SMKN 21 Jakarta & Batas Geofencing
 SEKOLAH_LATITUDE = -6.1587

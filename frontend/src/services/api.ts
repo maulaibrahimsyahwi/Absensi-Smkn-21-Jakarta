@@ -75,6 +75,16 @@ let conflictShown = false;
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response && error.response.status === 403) {
+      const errorCode: string = error.response.data?.error_code || "";
+      if (errorCode === "PASSWORD_CHANGE_REQUIRED") {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("smkn21_password_required"));
+        }
+      }
+      return Promise.reject(error);
+    }
+
     if (error.response && error.response.status === 401) {
       if (isRedirecting) {
         return Promise.reject(error);

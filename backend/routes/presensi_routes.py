@@ -32,7 +32,13 @@ def get_status_today():
     Memeriksa apakah siswa sudah melakukan presensi harian pada hari ini.
     Menyertakan server_timestamp untuk sinkronisasi Anti-NTP serta info Tahun Ajaran dan Semester aktif.
     """
-    siswa_id = request.args.get('siswa_id')
+    user_role = getattr(request, 'user_role', None)
+    user_id = getattr(request, 'user_id', None)
+    if user_role == 'siswa':
+        siswa_id = user_id
+    else:
+        siswa_id = request.args.get('siswa_id')
+
     now_dt = datetime.now()
     h_status = get_holiday_status(now_dt)
     nama_hari = h_status["nama_hari"]
@@ -601,18 +607,24 @@ def sync_offline():
     """
     Endpoint Buffer Darurat Pemadaman Internet & Listrik Total (Offline Emergency Kiosk/Client Sync).
     Menerima batch bukti transaksi presensi lokal yang tersimpan di browser kiosk/klien saat offline.
-    Server memverifikasi biometrik wajah, menghitung waktu WIB, menentukan status kehadiran, dan mengembalikan hasil per-item.
+    Server memverifikasi biometrik wajah, menghitung waktu WIB, memvalidasi geofence & jadwal,
+    menentukan status kehadiran, dan mengembalikan hasil per-item.
     """
     data = request.json or {}
     records = data.get('records', [])
     if not isinstance(records, list) or len(records) == 0:
         return jsonify({"success": False, "message": "Tidak ada data antrean presensi offline yang dikirim."}), 400
 
+    current_u = getattr(request, 'current_user', {})
+    user_role = str(getattr(request, 'user_role', current_u.get('role', ''))).lower()
+    user_id = getattr(request, 'user_id', current_u.get('user_id'))
+
     cfg = PengaturanJadwal.query.first()
     curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
     curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
     wib_tz = timezone(timedelta(hours=7))
+    now_wib = datetime.now()
     synced_count = 0
     duplicate_count = 0
     failed_count = 0
@@ -625,39 +637,100 @@ def sync_offline():
     for item in records:
         item_id = item.get('id')
         try:
-            mode = item.get('mode', 'kiosk')
-            image_data = item.get('image')
-            expected_siswa_id = item.get('expected_siswa_id') or item.get('siswa_id')
-            device_id = item.get('device_id')
-            latitude = item.get('latitude')
-            longitude = item.get('longitude')
-            raw_waktu = item.get('captured_at') or item.get('waktu')
+            with db.session.begin_nested():
+                mode = item.get('mode', 'kiosk')
+                image_data = item.get('image')
+                expected_siswa_id = item.get('expected_siswa_id') or item.get('siswa_id')
+                device_id = item.get('device_id')
+                latitude = item.get('latitude')
+                longitude = item.get('longitude')
+                raw_waktu = item.get('captured_at') or item.get('waktu')
 
-            # Konversi waktu captured_at (UTC ISO / String) ke WIB
-            record_dt = None
-            if raw_waktu:
-                try:
-                    if isinstance(raw_waktu, str) and (raw_waktu.endswith('Z') or '+' in raw_waktu or 'T' in raw_waktu):
-                        parsed_utc = datetime.fromisoformat(raw_waktu.replace('Z', '+00:00'))
-                        if parsed_utc.tzinfo is not None:
-                            record_dt = parsed_utc.astimezone(wib_tz).replace(tzinfo=None)
-                        else:
-                            record_dt = parsed_utc
-                    elif isinstance(raw_waktu, str):
-                        record_dt = datetime.strptime(raw_waktu, "%Y-%m-%d %H:%M:%S")
-                except Exception:
-                    pass
+                # Otorisasi peran: Siswa hanya boleh menyinkronkan rekaman mandiri untuk dirinya sendiri
+                if user_role == 'siswa':
+                    if mode != 'mandiri' or str(expected_siswa_id) != str(user_id):
+                        failed_count += 1
+                        results.append({
+                            "id": item_id,
+                            "status": "rejected",
+                            "reason": "Siswa hanya diizinkan menyinkronkan presensi mandiri akun sendiri."
+                        })
+                        continue
 
-            if not record_dt:
-                record_dt = datetime.now()
+                # Konversi waktu captured_at (UTC ISO / String) ke WIB
+                record_dt = None
+                if raw_waktu:
+                    try:
+                        if isinstance(raw_waktu, str) and (raw_waktu.endswith('Z') or '+' in raw_waktu or 'T' in raw_waktu):
+                            parsed_utc = datetime.fromisoformat(raw_waktu.replace('Z', '+00:00'))
+                            if parsed_utc.tzinfo is not None:
+                                record_dt = parsed_utc.astimezone(wib_tz).replace(tzinfo=None)
+                            else:
+                                record_dt = parsed_utc
+                        elif isinstance(raw_waktu, str):
+                            record_dt = datetime.strptime(raw_waktu, "%Y-%m-%d %H:%M:%S")
+                    except Exception:
+                        pass
 
-            rec_date = record_dt.date()
-            t_start = datetime.combine(rec_date, time.min)
-            t_end = datetime.combine(rec_date, time.max)
+                if not record_dt:
+                    record_dt = now_wib
 
-            siswa = None
-            # 1. Verifikasi Biometrik Wajah Server-Side
-            if image_data:
+                # Batas umur rekaman: maksimal 48 jam dan tidak boleh di masa depan (> 5 menit toleransi drift)
+                if record_dt > now_wib + timedelta(minutes=5):
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": "Waktu rekaman berada di masa depan (indikasi manipulasi jam perangkat)."
+                    })
+                    continue
+
+                if now_wib - record_dt > timedelta(hours=48):
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": "Catatan presensi offline telah kedaluwarsa (> 48 jam). Harap laporkan ke Guru Piket."
+                    })
+                    continue
+
+                # Validasi hari sekolah resmi
+                h_status = get_holiday_status(record_dt)
+                if not h_status.get("is_school_day", True):
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": f"Hari tersebut bukan hari sekolah resmi ({h_status.get('message', 'Hari Libur')})."
+                    })
+                    continue
+
+                # Validasi jam operasional sekolah dibuka
+                active_sched = get_active_schedule(record_dt)
+                if record_dt.time() < active_sched['jam_buka']:
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": f"Presensi offline tercatat sebelum jam operasional sekolah dibuka ({active_sched['jam_buka'].strftime('%H:%M')} WIB)."
+                    })
+                    continue
+
+                rec_date = record_dt.date()
+                t_start = datetime.combine(rec_date, time.min)
+                t_end = datetime.combine(rec_date, time.max)
+
+                siswa = None
+                # 1. Verifikasi Biometrik Wajah Server-Side (WAJIB ADA FOTO)
+                if not image_data:
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": "Bukti foto biometrik wajah wajib disertakan pada sinkronisasi offline."
+                    })
+                    continue
+
                 if mode == 'mandiri' and expected_siswa_id:
                     target = Siswa.query.get(expected_siswa_id)
                     if target and target.face_encoding:
@@ -682,90 +755,122 @@ def sync_offline():
                         if match.get('success'):
                             siswa = Siswa.query.get(match.get('siswa_id'))
 
-            # Fallback jika presensi dicatat tanpa foto (legacy record)
-            if not siswa:
-                if expected_siswa_id:
-                    siswa = Siswa.query.get(expected_siswa_id)
-                elif item.get('nis'):
-                    siswa = Siswa.query.filter_by(nis=str(item.get('nis')).strip()).first()
+                if not siswa:
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": "Siswa tidak ditemukan atau biometrik wajah tidak cocok."
+                    })
+                    continue
 
-            if not siswa:
-                failed_count += 1
+                if getattr(siswa, 'status', 'Aktif') != 'Aktif':
+                    failed_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "rejected",
+                        "reason": f"Siswa {siswa.nama} berstatus {siswa.status} dan tidak dapat melakukan presensi."
+                    })
+                    continue
+
+                # 2. Validasi Geofencing untuk Presensi Mandiri (Bypass jika PJJ / PKL)
+                pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, record_dt)
+                if mode == 'mandiri' and not pjj_active:
+                    if latitude is None or longitude is None:
+                        failed_count += 1
+                        results.append({
+                            "id": item_id,
+                            "status": "rejected",
+                            "reason": "Koordinat GPS lokasi wajib disertakan untuk presensi mandiri."
+                        })
+                        continue
+
+                    in_polygon = is_point_in_polygon(latitude, longitude, SEKOLAH_POLYGON)
+                    dist = calculate_distance_meters(latitude, longitude, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+                    is_valid_loc = in_polygon or (dist is not None and dist <= MAX_RADIUS_SEKOLAH)
+                    if not is_valid_loc:
+                        failed_count += 1
+                        results.append({
+                            "id": item_id,
+                            "status": "rejected",
+                            "reason": f"Lokasi presensi berada di luar kawasan sekolah ({int(dist) if dist else '?'}m dari pusat SMKN 21)."
+                        })
+                        continue
+
+                # 3. Cek Duplikasi Presensi pada Tanggal Kejadian
+                existing = AbsensiHarian.query.filter(
+                    AbsensiHarian.siswa_id == siswa.id,
+                    AbsensiHarian.waktu >= t_start,
+                    AbsensiHarian.waktu <= t_end
+                ).first()
+
+                if existing:
+                    duplicate_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "duplicate",
+                        "siswa_id": siswa.id,
+                        "nama": siswa.nama,
+                        "message": f"{siswa.nama} sudah tercatat presensi pada {existing.waktu.strftime('%H:%M:%S')} WIB."
+                    })
+                    continue
+
+                # 4. Hitung status kehadiran resmi (Tepat Waktu / Terlambat) oleh server berbasis waktu kejadian WIB
+                base_status = check_status_kehadiran(record_dt)
+                if pjj_active and "PKL" in (pjj_info or "").upper():
+                    clean_status = f"{base_status} (PKL)"
+                elif pjj_active:
+                    clean_status = f"{base_status} (PJJ)"
+                else:
+                    clean_status = base_status
+
+                sumber_label = "offline_kiosk" if mode == "kiosk" else "offline_mandiri"
+                proxy_label = "(Sync Offline Kiosk)" if mode == "kiosk" else "(Sync Offline Mandiri)"
+
+                absen = AbsensiHarian(
+                    siswa_id=siswa.id,
+                    status=clean_status,
+                    waktu=record_dt,
+                    latitude=latitude,
+                    longitude=longitude,
+                    sumber=sumber_label,
+                    device_id=device_id or None,
+                    is_flagged_proxy=False,
+                    proxy_note=proxy_label,
+                    tahun_ajaran=curr_ta,
+                    semester=curr_sem
+                )
+                db.session.add(absen)
+
+                if "Terlambat" in clean_status:
+                    catat_pelanggaran_terlambat(
+                        siswa=siswa,
+                        waktu=record_dt,
+                        sumber="Sync Offline",
+                        petugas=f"Sistem {'Kiosk' if mode == 'kiosk' else 'Mandiri'} Offline SMKN 21",
+                        alasan=f"Presensi offline tersinkronisasi ({record_dt.strftime('%H:%M:%S')} WIB)"
+                    )
+
+                synced_count += 1
                 results.append({
                     "id": item_id,
-                    "status": "rejected",
-                    "reason": "Siswa tidak ditemukan atau biometrik wajah tidak cocok."
-                })
-                continue
-
-            # Cek apakah sudah pernah presensi pada tanggal tersebut
-            existing = AbsensiHarian.query.filter(
-                AbsensiHarian.siswa_id == siswa.id,
-                AbsensiHarian.waktu >= t_start,
-                AbsensiHarian.waktu <= t_end
-            ).first()
-
-            if existing:
-                duplicate_count += 1
-                results.append({
-                    "id": item_id,
-                    "status": "duplicate",
+                    "status": "synced",
                     "siswa_id": siswa.id,
                     "nama": siswa.nama,
-                    "message": f"{siswa.nama} sudah tercatat presensi pada {existing.waktu.strftime('%H:%M:%S')} WIB."
+                    "status_kehadiran": clean_status
                 })
-                continue
-
-            # Hitung status kehadiran resmi (Tepat Waktu / Terlambat) oleh server berbasis waktu kejadian WIB
-            base_status = check_status_kehadiran(record_dt)
-            pjj_active, pjj_info = is_kelas_pjj(siswa.kelas, record_dt)
-            if pjj_active and "PKL" in (pjj_info or "").upper():
-                clean_status = f"{base_status} (PKL)"
-            else:
-                clean_status = base_status
-
-            absen = AbsensiHarian(
-                siswa_id=siswa.id,
-                status=clean_status,
-                waktu=record_dt,
-                latitude=latitude,
-                longitude=longitude,
-                device_id=device_id or None,
-                is_flagged_proxy=False,
-                proxy_note="(Sync Offline)",
-                tahun_ajaran=curr_ta,
-                semester=curr_sem
-            )
-            db.session.add(absen)
-
-            if "Terlambat" in clean_status:
-                catat_pelanggaran_terlambat(
-                    siswa=siswa,
-                    waktu=record_dt,
-                    sumber="Sync Offline",
-                    petugas="Sistem Kiosk/Buffer Offline SMKN 21",
-                    alasan=f"Presensi offline tersinkronisasi ({record_dt.strftime('%H:%M:%S')} WIB)"
-                )
-
-            synced_count += 1
-            results.append({
-                "id": item_id,
-                "status": "synced",
-                "siswa_id": siswa.id,
-                "nama": siswa.nama,
-                "status_kehadiran": clean_status
-            })
-        except Exception as e:
+        except Exception:
             failed_count += 1
             results.append({
                 "id": item_id,
                 "status": "error",
-                "message": str(e)
+                "message": "Terjadi kendala saat memproses entri presensi ini."
             })
 
     try:
         db.session.commit()
-        notify_data_changed("presensi")
+        if synced_count > 0:
+            notify_data_changed("presensi")
         return jsonify({
             "success": True,
             "synced": synced_count,
@@ -774,7 +879,7 @@ def sync_offline():
             "results": results,
             "message": f"Sinkronisasi Buffer Selesai: {synced_count} berhasil disimpan, {duplicate_count} sudah ada (duplikat), {failed_count} gagal."
         })
-    except Exception as e:
+    except Exception:
         db.session.rollback()
-        return jsonify({"success": False, "message": f"Gagal memproses sinkronisasi offline: {str(e)}"}), 500
+        return jsonify({"success": False, "message": "Gagal menyimpan transaksi sinkronisasi offline ke basis data."}), 500
 

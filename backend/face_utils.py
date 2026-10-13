@@ -53,8 +53,12 @@ except Exception as e:
     print("ERROR loading YuNet/SFace:", e)
 
 
+MAX_IMAGE_B64_LEN = 3 * 1024 * 1024  # Batas maksimal 3 MB string base64 untuk mencegah DoS
+
 def decode_base64_image(base64_string):
-    if not base64_string:
+    if not base64_string or not isinstance(base64_string, str):
+        return None
+    if len(base64_string) > MAX_IMAGE_B64_LEN:
         return None
     if ',' in base64_string:
         base64_string = base64_string.split(',')[1]
@@ -112,7 +116,7 @@ def get_face_encoding(base64_image):
 def verify_face(base64_image, known_encodings_list, siswa_ids):
     """
     Mencocokkan wajah dari kamera secara real-time dengan database biometrik siswa.
-    Menggunakan Cosine Similarity pada embedding SFace.
+    Menggunakan operasi perkalian matriks vektorisasi NumPy (BLAS) berkecepatan tinggi (<1ms).
     """
     img = decode_base64_image(base64_image)
     if img is None:
@@ -143,32 +147,55 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
                 "message": "Wajah tidak terdeteksi di kamera. Posisikan wajah tegak di depan kamera"
             }
 
-        # Ambil wajah paling dominan
-        best_face = faces[0]
+        # Anti-proxy: Tolak jika terdeteksi lebih dari satu wajah signifikan di depan kamera
         if len(faces) > 1:
-            best_idx = np.argmax(faces[:, 14])
-            best_face = faces[best_idx]
+            areas = faces[:, 2] * faces[:, 3]
+            max_idx = int(np.argmax(areas))
+            max_area = float(areas[max_idx])
+            significant_other_faces = [a for idx, a in enumerate(areas) if idx != max_idx and a >= 0.35 * max_area]
+            if len(significant_other_faces) > 0:
+                return {
+                    "success": False,
+                    "message": "Terdeteksi lebih dari satu wajah di depan kamera. Pastikan hanya ada satu siswa di dalam frame."
+                }
+            best_face = faces[max_idx]
+        else:
+            best_face = faces[0]
 
         aligned_face = recognizer.alignCrop(img, best_face)
         unknown_feature = recognizer.feature(aligned_face)
 
         # Ambang batas Cosine Similarity SFace standar resmi OpenCV: 0.363
-        # Skor > 0.363 menyatakan orang yang sama (identik).
         COSINE_THRESHOLD = 0.363
 
-        best_score = -1.0
-        best_siswa_id = None
+        # Vektorisasi Matriks Cosine Similarity untuk 1:N Super Cepat
+        q = unknown_feature.flatten().astype(np.float32)
+        norm_q = np.linalg.norm(q)
+        if norm_q > 0:
+            q = q / norm_q
 
-        for idx, enc in enumerate(known_encodings_list):
-            if not enc or len(enc) != 128:
-                continue
-            enc_np = np.array(enc, dtype=np.float32).reshape(1, 128)
-            score = recognizer.match(enc_np, unknown_feature, cv2.FaceRecognizerSF_FR_COSINE)
-            if score > best_score:
-                best_score = score
-                best_siswa_id = siswa_ids[idx]
+        known_mat = np.array(known_encodings_list, dtype=np.float32)
+        norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        known_mat = known_mat / norms
 
-        if best_siswa_id is not None and best_score >= COSINE_THRESHOLD:
+        scores = np.dot(known_mat, q)
+        best_idx = int(np.argmax(scores))
+        best_score = float(scores[best_idx])
+        best_siswa_id = siswa_ids[best_idx]
+
+        # Hitung margin pemisahan terhadap siswa lain untuk mencegah false positive ambigu
+        other_scores = [float(scores[i]) for i in range(len(scores)) if siswa_ids[i] != best_siswa_id]
+        second_best_score = max(other_scores) if other_scores else -1.0
+        margin = best_score - second_best_score
+
+        if best_score >= COSINE_THRESHOLD:
+            if second_best_score >= COSINE_THRESHOLD and margin < 0.04:
+                return {
+                    "success": False,
+                    "message": "Wajah terdeteksi memiliki kemiripan tinggi dengan dua siswa berbeda. Posisikan wajah lebih dekat ke kamera."
+                }
+
             # Konversi skor cosine ke persentase akurasi (80% - 99.5%)
             norm_conf = (best_score - COSINE_THRESHOLD) / (1.0 - COSINE_THRESHOLD)
             confidence = round(min(99.5, max(80.0, 80.0 + norm_conf * 19.5)), 1)
@@ -177,7 +204,7 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
                 "success": True,
                 "siswa_id": best_siswa_id,
                 "confidence": confidence,
-                "score": round(float(best_score), 4),
+                "score": round(best_score, 4),
                 "message": f"Wajah terverifikasi cocok ({confidence}%)"
             }
         else:

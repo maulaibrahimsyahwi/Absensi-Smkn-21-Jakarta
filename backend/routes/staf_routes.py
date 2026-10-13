@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash
 from models import db, User
 from utils.auth_middleware import token_required, role_required
+from utils.passwords import generate_initial_password, validate_new_password
+from utils.audit_trail import record_audit_log
 
 staf_bp = Blueprint('staf', __name__)
 
@@ -11,6 +13,7 @@ staf_bp = Blueprint('staf', __name__)
 def get_all_staf():
     """
     Mengambil seluruh data akun staf (Guru Piket & Admin) untuk manajemen oleh Admin.
+    Mengirim ringkasan profil tanpa memuat data gambar tanda tangan base64 besar.
     """
     try:
         users = User.query.order_by(User.role.asc(), User.nama.asc()).all()
@@ -22,8 +25,8 @@ def get_all_staf():
                 "nama": u.nama,
                 "role": u.role,
                 "has_signature": bool(u.tanda_tangan),
-                "tanda_tangan": u.tanda_tangan,
                 "foto_profil": u.foto_profil,
+                "must_change_password": bool(getattr(u, 'must_change_password', False)),
                 "created_at": u.created_at.strftime("%Y-%m-%d %H:%M:%S") if u.created_at else None
             })
         return jsonify({
@@ -40,8 +43,8 @@ def get_all_staf():
 @role_required(['admin'])
 def create_staf():
     """
-    Admin mendaftarkan akun Guru Piket baru menggunakan NIP.
-    Kata sandi awal otomatis sama dengan NIP guru jika tidak diisi secara manual.
+    Admin mendaftarkan akun Guru Piket atau Admin baru menggunakan NIP/Username.
+    Kata sandi awal otomatis ditandai must_change_password = True.
     """
     data = request.json or {}
     nama = str(data.get('nama', '')).strip()
@@ -50,11 +53,13 @@ def create_staf():
     role = str(data.get('role', 'piket')).strip().lower()
 
     if not nama:
-        return jsonify({"success": False, "message": "Nama lengkap guru wajib diisi."}), 400
+        return jsonify({"success": False, "message": "Nama lengkap guru/staf wajib diisi."}), 400
     if not username:
-        return jsonify({"success": False, "message": "NIP guru piket wajib diisi."}), 400
+        return jsonify({"success": False, "message": "NIP / Username staf wajib diisi."}), 400
+    if role not in ('admin', 'piket'):
+        return jsonify({"success": False, "message": "Role staf tidak valid (pilihan: admin atau piket)."}), 400
 
-    # Kata sandi awal otomatis sama dengan NIP jika kosong
+    # Kata sandi awal otomatis sama dengan NIP/Username jika kosong
     if not password:
         password = username
 
@@ -70,13 +75,26 @@ def create_staf():
             username=username,
             password=generate_password_hash(password, method='scrypt'),
             nama=nama,
-            role=role
+            role=role,
+            must_change_password=True
         )
         db.session.add(new_user)
         db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='CREATE_STAF',
+            target_type='User',
+            target_id=new_user.id,
+            keterangan=f"Membuat akun staf baru: {new_user.nama} ({new_user.username}, role: {role})"
+        )
+
         return jsonify({
             "success": True,
-            "message": f"Akun Guru Piket {new_user.nama} (NIP: {username}) berhasil dibuat dengan kata sandi awal sama dengan NIP.",
+            "message": f"Akun {new_user.role.upper()} {new_user.nama} ({username}) berhasil dibuat dengan kata sandi awal.",
             "user": new_user.to_dict()
         }), 201
     except Exception as e:
@@ -89,7 +107,8 @@ def create_staf():
 @role_required(['admin'])
 def update_staf(id):
     """
-    Admin memperbarui profil akun Guru Piket.
+    Admin memperbarui profil akun Guru Piket atau Admin.
+    Jika kata sandi diubah oleh Admin, sesi aktif lama dicabut dan wajib ganti kata sandi.
     """
     user = User.query.get(id)
     if not user:
@@ -99,17 +118,25 @@ def update_staf(id):
     nama = str(data.get('nama', '')).strip()
     username = str(data.get('username', '')).strip().lower()
     password = str(data.get('password', '')).strip()
+    role = str(data.get('role', '')).strip().lower()
 
     if nama:
         user.nama = nama
+    if role and role in ('admin', 'piket'):
+        # Lindungi akun admin utama agar tidak berubah role secara tidak sengaja
+        if user.username == 'admin' and role != 'admin':
+            return jsonify({"success": False, "message": "Role akun Administrator utama tidak dapat diubah."}), 403
+        user.role = role
     if username and username != user.username:
         if User.query.filter_by(username=username).first():
             return jsonify({"success": False, "message": f"Username '{username}' sudah digunakan akun lain."}), 400
         user.username = username
     if password:
-        if len(password) < 4:
-            return jsonify({"success": False, "message": "Kata sandi baru minimal 4 karakter."}), 400
+        if len(password) < 8:
+            return jsonify({"success": False, "message": "Kata sandi baru minimal 8 karakter."}), 400
         user.password = generate_password_hash(password, method='scrypt')
+        user.must_change_password = True
+        user.active_session_token = None  # Invalidate sesi yang sedang berjalan
 
     try:
         db.session.commit()
@@ -155,21 +182,38 @@ def delete_staf(id):
 @role_required(['admin'])
 def reset_staf_password(id):
     """
-    Admin mereset kata sandi akun Guru Piket dengan enkripsi scrypt.
+    Admin mereset kata sandi akun Guru Piket / Admin dengan kata sandi acak yang aman.
+    Menandai akun wajib mengganti kata sandi pada login pertama dan mencabut sesi aktif lama.
     """
     user = User.query.get(id)
     if not user:
         return jsonify({"success": False, "message": "Data akun tidak ditemukan."}), 404
 
     data = request.json or {}
-    new_password = str(data.get('new_password', '')).strip() or "piket123"
+    new_password = str(data.get('new_password', '')).strip()
+    if not new_password:
+        new_password = generate_initial_password(10)
 
     try:
         user.password = generate_password_hash(new_password, method='scrypt')
+        user.must_change_password = True
+        user.active_session_token = None  # Cabut sesi aktif lama
         db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_PASSWORD_STAF',
+            target_type='User',
+            target_id=user.id,
+            keterangan=f"Mereset kata sandi staf {user.nama} ({user.username})"
+        )
+
         return jsonify({
             "success": True,
-            "message": f"Kata sandi {user.nama} berhasil direset ke default.",
+            "message": f"Kata sandi untuk {user.nama} berhasil direset.",
             "default_password": new_password
         })
     except Exception as e:
@@ -191,6 +235,18 @@ def reset_staf_signature(id):
     try:
         user.tanda_tangan = None
         db.session.commit()
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESET_SIGNATURE_STAF',
+            target_type='User',
+            target_id=user.id,
+            keterangan=f"Mereset tanda tangan digital staf {user.nama} ({user.username})"
+        )
+
         return jsonify({
             "success": True,
             "message": f"Tanda tangan digital untuk {user.nama} berhasil direset. Guru dapat menggambar tanda tangan baru saat login."
@@ -198,4 +254,5 @@ def reset_staf_signature(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
 

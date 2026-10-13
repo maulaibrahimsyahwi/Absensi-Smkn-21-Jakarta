@@ -72,7 +72,7 @@ export default function Login() {
     } else if (params.get("conflict") === "1") {
       logout();
       setErrorMessage(
-        "Akun Anda masuk di perangkat lain, sehingga sesi di perangkat ini diakhiri. Silakan masuk kembali.",
+        "Akun Anda masuk di perangkat lain, sesi di perangkat ini diakhiri. Silakan masuk kembali.",
       );
     }
   }, [location.search]);

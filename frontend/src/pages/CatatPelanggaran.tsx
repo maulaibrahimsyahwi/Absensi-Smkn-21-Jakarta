@@ -492,22 +492,20 @@ export default function CatatPelanggaran(): React.JSX.Element {
         <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
           {/* Header Card Form */}
           <div className="p-4 sm:p-6 border-b border-slate-200/80 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <Link
-                  to={backTarget}
-                  className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
-                >
-                  <ArrowLeft className="w-5 h-5" />
-                </Link>
-              </div>
-              <div>
-                <h1 className="text-lg sm:text-xl font-bold text-slate-900">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <Link
+                to={backTarget}
+                className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs text-slate-600 flex-shrink-0"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-base sm:text-xl font-bold text-slate-900 break-words">
                   {kategoriForm === "Prestasi"
                     ? "Catat Prestasi & Penghargaan Siswa/i"
                     : "Catat Pelanggaran Siswa/i"}
                 </h1>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 break-words">
                   {kategoriForm === "Prestasi"
                     ? "Pencatatan prestasi, kejuaraan, atau keteladanan siswa"
                     : isSiswa
@@ -519,7 +517,7 @@ export default function CatatPelanggaran(): React.JSX.Element {
 
             {/* Tab Switcher: Pelanggaran vs Prestasi (Hanya untuk Piket & Admin) */}
             {!isSiswa && (
-              <div className="flex items-center bg-slate-200/80 p-1 rounded-xl self-start sm:self-auto">
+              <div className="grid grid-cols-2 sm:flex items-center bg-slate-200/80 p-1 rounded-xl w-full sm:w-auto shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -527,7 +525,7 @@ export default function CatatPelanggaran(): React.JSX.Element {
                     setJenisPelanggaran("");
                     setPoin("");
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     kategoriForm === "Pelanggaran"
                       ? "bg-rose-600 text-white shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
@@ -542,7 +540,7 @@ export default function CatatPelanggaran(): React.JSX.Element {
                     setJenisPelanggaran("");
                     setPoin("");
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     kategoriForm === "Prestasi"
                       ? "bg-emerald-600 text-white shadow-xs"
                       : "text-slate-600 hover:text-slate-900"
@@ -935,7 +933,7 @@ export default function CatatPelanggaran(): React.JSX.Element {
               </div>
 
               {useSavedSig && savedSignature ? (
-                <div className="flex items-center justify-between gap-3 p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-blue-50/70 border border-blue-200 rounded-2xl">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="h-16 w-32 bg-white rounded-xl border border-blue-200 p-1 flex items-center justify-center overflow-hidden flex-shrink-0">
                       <img
@@ -957,14 +955,14 @@ export default function CatatPelanggaran(): React.JSX.Element {
                   <button
                     type="button"
                     onClick={() => setUseSavedSig(false)}
-                    className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex-shrink-0"
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer self-start sm:self-auto flex-shrink-0"
                   >
                     Tanda Tangan Ulang
                   </button>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-slate-500">
                       Goreskan tanda tangan digital siswa pada area kotak di bawah
                     </p>

@@ -32,7 +32,7 @@ import PwaInstallPrompt from "./components/common/PwaInstallPrompt";
 import BottomNav from "./components/BottomNav";
 import IdleLockScreen from "./components/common/IdleLockScreen";
 import ModalSessionConflict from "./components/common/ModalSessionConflict";
-import ForcePasswordChange from "./components/common/ForcePasswordChange";
+import OnboardingGate from "./components/OnboardingGate";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import { FULLSCREEN_ROUTES, NO_BOTTOM_NAV_ROUTES } from "./utils/navVisibility";
 import { useAuth } from "./context/AuthContext";
@@ -52,7 +52,7 @@ function AppLayout() {
           : "flex min-h-dvh w-full max-w-full flex-col overflow-x-clip bg-slate-50 text-slate-800"
       }`}
     >
-      <ForcePasswordChange />
+      <OnboardingGate />
       <IdleLockScreen />
       <ModalSessionConflict />
       <OfflineBanner />

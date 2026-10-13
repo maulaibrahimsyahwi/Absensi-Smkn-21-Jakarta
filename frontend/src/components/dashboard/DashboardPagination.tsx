@@ -44,7 +44,7 @@ export default function DashboardPagination({
       : `${startIndex + 1}-${endIndex} dari ${totalItems.toLocaleString("id-ID")}`;
 
   const arrow =
-    "press grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed sm:h-9 sm:w-9 cursor-pointer select-none";
+    "press grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer select-none";
 
   const pager = totalPages > 1 && (
     <nav aria-label="Navigasi halaman" className="flex items-center gap-1.5 select-none">
@@ -59,7 +59,7 @@ export default function DashboardPagination({
       </button>
       <span
         aria-live="polite"
-        className="min-w-[4.5rem] text-center text-xs font-semibold tabular-nums text-slate-700"
+        className="min-w-[3.5rem] sm:min-w-[4.5rem] text-center text-xs font-semibold tabular-nums text-slate-700"
       >
         {safeCurrentPage} / {totalPages}
       </span>
@@ -77,7 +77,7 @@ export default function DashboardPagination({
 
   if (variant === "footer") {
     return (
-      <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
         <p className="text-xs text-slate-500 font-medium">{range}</p>
         {pager}
       </div>
@@ -111,7 +111,7 @@ export default function DashboardPagination({
       </div>
       <div className="ml-auto flex items-center gap-3">
         <p className="text-xs text-slate-500 font-medium">{range}</p>
-        <div className="hidden sm:block">{pager}</div>
+        <div>{pager}</div>
       </div>
     </div>
   );

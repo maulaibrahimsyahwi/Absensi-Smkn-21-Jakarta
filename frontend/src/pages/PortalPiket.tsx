@@ -348,7 +348,7 @@ export default function PortalPiket() {
         }`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
+          <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
             <div
               className={`p-2.5 rounded-2xl flex-shrink-0 shadow-md ${
                 modeDarurat
@@ -362,13 +362,13 @@ export default function PortalPiket() {
                 <Wifi className="w-5 h-5 sm:w-6 sm:h-6" />
               )}
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
-                <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 break-words">
                   Mode Darurat Jaringan & Toleransi Presensi
                 </h3>
               </div>
-              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-words">
                 {modeDarurat
                   ? `Sinyal gerbang sekolah sedang bermasalah. Siswa diberikan toleransi tambahan +${toleransiMenit} menit agar tidak langsung terkena sanksi keterlambatan.`
                   : "Aktifkan jika sinyal internet operator / WiFi di gerbang sekolah mengalami gangguan mendadak sehingga siswa kesulitan presensi."}
@@ -379,7 +379,7 @@ export default function PortalPiket() {
             type="button"
             disabled={togglingDarurat}
             onClick={handleToggleModeDarurat}
-            className={`w-full sm:w-auto px-4 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+            className={`w-full sm:w-auto px-4 py-2.5 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0 ${
               modeDarurat
                 ? "bg-rose-600 hover:bg-rose-700 text-white"
                 : "bg-amber-600 hover:bg-amber-700 text-white"
@@ -403,20 +403,20 @@ export default function PortalPiket() {
       {/* Banner Peringatan Tanda Tangan Digital Guru Piket */}
       {!user?.tanda_tangan && (
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in shadow-xs">
-          <div className="flex items-start sm:items-center gap-3.5">
+          <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
             <div className="p-2.5 rounded-2xl bg-amber-500 text-white flex-shrink-0 shadow-md shadow-amber-500/20">
               <PenLine className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
-                <h3 className="text-sm font-bold text-slate-900">
+                <h3 className="text-sm font-bold text-slate-900 break-words">
                   Tanda Tangan Digital Petugas Belum Tersedia
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 uppercase">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-700 border border-rose-200 uppercase shrink-0">
                   Wajib
                 </span>
               </div>
-              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+              <p className="text-xs text-slate-600 max-w-2xl leading-relaxed break-words">
                 Setiap lembar Surat Izin Masuk dan Izin Meninggalkan Kelas wajib
                 dibubuhi tanda tangan digital Guru Piket. Harap buat tanda
                 tangan sekarang agar penerbitan surat izin berjalan lancar
@@ -426,7 +426,7 @@ export default function PortalPiket() {
           <button
             type="button"
             onClick={() => setIsSignatureModalOpen(true)}
-            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95 shrink-0"
           >
             <span> TTD Sekarang</span>
           </button>
@@ -598,8 +598,8 @@ export default function PortalPiket() {
         </div>
       </div>
 
-      {/* Tombol Aksi Cepat Guru Piket (Hanya tampil di Tablet & Desktop >= 768px, karena di Smartphone sudah diadaptasikan ke Bottom Navigation) */}
-      <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {/* Tombol Aksi Cepat Guru Piket (Tampil di Smartphone, Tablet, & Desktop) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Link
           to="/piket"
           className="group bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"

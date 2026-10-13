@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from datetime import datetime, time, date
+from datetime import datetime, time, date, timedelta
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket, PelanggaranSiswa, PengaturanPJJ
 from utils.helpers import validate_siswa_input, invalidate_face_cache, is_kelas_pjj, is_school_day, is_presensi_open
 from utils.auth_middleware import token_required, role_required
@@ -286,11 +286,13 @@ def bulk_update_siswa_status():
 def luluskan_tingkat():
     data = request.json or {}
     tingkat = str(data.get('tingkat', 'XII')).strip().upper()
+    if tingkat not in ('X', 'XI', 'XII'):
+        return jsonify({"success": False, "message": "Tingkat tidak valid (pilihan: X, XI, atau XII)."}), 400
     
     try:
-        # Cari semua siswa aktif di tingkat tertentu (misal kelas berawalan 'XII ')
+        # Cari semua siswa aktif di tingkat tertentu (misal 'XII ' atau 'XII-')
         query = Siswa.query.filter(
-            Siswa.kelas.like(f"{tingkat}%"),
+            (Siswa.kelas.like(f"{tingkat} %")) | (Siswa.kelas.like(f"{tingkat}-%")),
             (Siswa.status == 'Aktif') | (Siswa.status == None)
         )
         target_siswa = query.all()
@@ -379,6 +381,13 @@ def delete_siswa(id):
 @token_required
 def cek_siswa_nis(nis):
     nis = str(nis or '').strip()
+    current_u = getattr(request, 'current_user', {})
+    if current_u.get('role') == 'siswa' and str(current_u.get('identifier')) != str(nis):
+        return jsonify({
+            "success": False,
+            "message": "Akses ditolak: Anda hanya memiliki wewenang untuk memeriksa data akun Anda sendiri."
+        }), 403
+
     siswa = Siswa.query.filter_by(nis=nis).first()
     if not siswa or siswa.is_deleted:
         return jsonify({"success": False, "message": f"Siswa dengan NIS '{nis}' tidak ditemukan atau sudah dimutasi."}), 404
@@ -447,7 +456,7 @@ def get_siswa_notifikasi():
                 "pesan": f"Kelas Anda ({siswa.kelas}) terjadwal PJJ ({pjj_info or 'Belajar Dari Rumah'}). Anda diizinkan melakukan presensi mandiri dari rumah tanpa batasan radius sekolah.",
                 "waktu": waktu_pjj,
                 "badge": "PJJ Aktif",
-                "action_url": "/absensi-harian",
+                "action_url": "/harian",
                 "action_label": "Buka Presensi"
             })
     except Exception:
@@ -474,7 +483,7 @@ def get_siswa_notifikasi():
                     "pesan": "Gerbang batas tepat waktu telah ditutup pukul 06:30 WIB. Segera lakukan presensi kehadiran sekarang." if is_past_gate else "Presensi kehadiran pagi telah dibuka (05:00 - 06:30 WIB). Segera scan wajah sebelum pukul 06:30 WIB agar tidak tercatat terlambat.",
                     "waktu": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
                     "badge": "Terlambat" if is_past_gate else "Presensi Pagi",
-                    "action_url": "/absensi-harian",
+                    "action_url": "/harian",
                     "action_label": "Absen Sekarang"
                 })
     except Exception:

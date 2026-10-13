@@ -7,7 +7,9 @@ import {
   Loader2,
 } from "lucide-react";
 import api from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import { AuthUser } from "../../types/auth";
+import { passwordChecks, PASSWORD_MIN } from "../../utils/passwordPolicy";
 
 export interface TabUbahPasswordProps {
   user: AuthUser | null;
@@ -20,6 +22,7 @@ export default function TabUbahPassword({
   onSuccess,
   onCancel,
 }: TabUbahPasswordProps): React.JSX.Element {
+  const { changePassword } = useAuth();
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -30,39 +33,33 @@ export default function TabUbahPassword({
   const [passError, setPassError] = useState("");
   const [passSuccess, setPassSuccess] = useState("");
 
+  const checkResult = passwordChecks(newPassword, {
+    oldPassword,
+    username: user?.username,
+    nis: user?.nis,
+    confirmPassword,
+  });
+
   const handleChangePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPassError("");
     setPassSuccess("");
 
     if (!oldPassword.trim()) {
-      setPassError("Kata sandi saat ini wajib diisi");
+      setPassError("Kata sandi saat ini wajib diisi.");
       return;
     }
-    if (!newPassword.trim()) {
-      setPassError("Kata sandi baru wajib diisi");
-      return;
-    }
-    if (newPassword.length < 6) {
-      setPassError("Kata sandi baru minimal 6 karakter");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setPassError("Konfirmasi kata sandi tidak cocok dengan kata sandi baru.");
+
+    if (!checkResult.valid) {
+      setPassError(checkResult.error || "Kata sandi belum memenuhi kriteria keamanan.");
       return;
     }
 
     setPassLoading(true);
     try {
-      const payload = {
-        role: user?.role,
-        id: user?.id,
-        old_password: oldPassword.trim(),
-        new_password: newPassword.trim(),
-      };
-      const res = await api.post("/auth/change_password", payload);
-      if (res.data && res.data.success) {
-        setPassSuccess(res.data.message || "Kata sandi berhasil diperbarui!");
+      const res = await changePassword(oldPassword.trim(), newPassword.trim());
+      if (res.success) {
+        setPassSuccess(res.message || "Kata sandi berhasil diperbarui!");
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -71,12 +68,11 @@ export default function TabUbahPassword({
             onSuccess();
           }, 1500);
         }
+      } else {
+        setPassError(res.message || "Gagal mengubah kata sandi.");
       }
-    } catch (err: any) {
-      const errMsg =
-        err.response?.data?.message ||
-        "Gagal mengubah kata sandi. Pastikan kata sandi saat ini benar.";
-      setPassError(errMsg);
+    } catch {
+      setPassError("Terjadi kesalahan saat memperbarui kata sandi.");
     } finally {
       setPassLoading(false);
     }
@@ -130,14 +126,14 @@ export default function TabUbahPassword({
       {/* Sandi Baru */}
       <div>
         <label className="block text-xs font-bold text-slate-700 mb-1.5">
-          Kata Sandi Baru (Min. 6 Karakter)
+          Kata Sandi Baru (Min. {PASSWORD_MIN} Karakter)
         </label>
         <div className="relative">
           <input
             type={showNewPass ? "text" : "password"}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="Buat kata sandi baru yang kuat"
+            placeholder={`Minimal ${PASSWORD_MIN} karakter (huruf besar, kecil, angka)`}
             className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-xs sm:text-sm transition pr-10"
           />
           <button
@@ -152,6 +148,25 @@ export default function TabUbahPassword({
             )}
           </button>
         </div>
+
+        {/* Indikator Persyaratan Keamanan */}
+        {newPassword.length > 0 && (
+          <div className="mt-2.5 rounded-xl border border-slate-100 bg-slate-50 p-2.5 space-y-1">
+            {checkResult.rules.map((rule) => (
+              <div
+                key={rule.id}
+                className={`flex items-center gap-2 text-[11px] ${
+                  rule.passed ? "text-emerald-600 font-medium" : "text-slate-500"
+                }`}
+              >
+                <span className={`inline-block w-3.5 text-center ${rule.passed ? "text-emerald-600 font-bold" : "text-slate-400"}`}>
+                  {rule.passed ? "✓" : "•"}
+                </span>
+                <span>{rule.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Konfirmasi Sandi Baru */}

@@ -9,6 +9,10 @@ import React, {
 import api from "../services/api";
 import { liburService } from "../services/liburService";
 import { User, UserRole, normalizeUser } from "../types";
+import {
+  stashFirstLoginSecret,
+  clearFirstLoginSecret,
+} from "../utils/firstLoginSecret";
 
 export interface LoginResult {
   success: boolean;
@@ -39,6 +43,7 @@ export interface AuthContextType {
     hpField?: string
   ) => Promise<LoginResult>;
   logout: () => void;
+  changePassword: (oldPassword: string, newPassword: string) => Promise<ServiceResult>;
   saveSignature: (signatureBase64: string, password?: string) => Promise<ServiceResult>;
   updateFotoProfil: (fotoBase64: string) => Promise<ServiceResult>;
   deleteFotoProfil: () => Promise<ServiceResult>;
@@ -227,6 +232,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       "role",
       "foto_profil",
       "terdaftar",
+      "has_signature",
       "tanda_tangan",
       "two_factor_enabled",
       "must_change_password",
@@ -294,6 +300,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
           localStorage.setItem(TOKEN_KEY, res.data.token);
         }
         const normalized = normalizeUser(res.data.user);
+        if (res.data.must_change_password || normalized.must_change_password) {
+          stashFirstLoginSecret(password);
+        } else {
+          clearFirstLoginSecret();
+        }
         setUser(normalized);
         return {
           success: true,
@@ -340,6 +351,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         })
         .catch(() => {});
     }
+    clearFirstLoginSecret();
     SESSION_KEYS.forEach((k) => {
       try {
         localStorage.removeItem(k);
@@ -370,7 +382,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         if (res.data && res.data.success) {
           setUser((prev) =>
-            prev ? { ...prev, tanda_tangan: signatureBase64 } : prev,
+            prev
+              ? {
+                  ...prev,
+                  tanda_tangan: signatureBase64,
+                  has_signature: true,
+                }
+              : prev,
           );
           return { success: true, message: res.data.message };
         }
@@ -388,6 +406,52 @@ export function AuthProvider({ children }: AuthProviderProps) {
     },
     [user?.id, user?.role],
   );
+
+  /**
+   * Mengubah kata sandi mandiri pengguna aktif
+   */
+  const changePassword = useCallback(
+    async (oldPassword: string, newPassword: string): Promise<ServiceResult> => {
+      try {
+        const res = await api.post("/auth/change_password", {
+          old_password: oldPassword.trim(),
+          new_password: newPassword.trim(),
+        });
+        if (res.data && res.data.success) {
+          if (res.data.token) {
+            localStorage.setItem(TOKEN_KEY, res.data.token);
+          }
+          clearFirstLoginSecret();
+          setUser((prev) =>
+            prev ? { ...prev, must_change_password: false } : prev
+          );
+          return { success: true, message: res.data.message };
+        }
+        return {
+          success: false,
+          message: res.data?.message || "Gagal mengubah kata sandi.",
+        };
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: { message?: string } } };
+        const msg =
+          axiosErr.response?.data?.message ||
+          "Gagal mengubah kata sandi. Pastikan kata sandi saat ini benar.";
+        return { success: false, message: msg };
+      }
+    },
+    [],
+  );
+
+  // Tangkap event saat server menolak request dengan status 403 PASSWORD_CHANGE_REQUIRED
+  useEffect(() => {
+    const handlePwRequired = () => {
+      setUser((prev) => (prev ? { ...prev, must_change_password: true } : prev));
+    };
+    window.addEventListener("smkn21_password_required", handlePwRequired);
+    return () => {
+      window.removeEventListener("smkn21_password_required", handlePwRequired);
+    };
+  }, []);
 
   /**
    * Simpan atau perbarui foto profil pengguna aktif
@@ -495,6 +559,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       initializing,
       login,
       logout,
+      changePassword,
       saveSignature,
       updateFotoProfil,
       deleteFotoProfil,
@@ -510,6 +575,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       initializing,
       login,
       logout,
+      changePassword,
       saveSignature,
       updateFotoProfil,
       deleteFotoProfil,

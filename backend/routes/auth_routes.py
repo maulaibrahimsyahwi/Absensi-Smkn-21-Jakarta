@@ -17,6 +17,12 @@ from utils.auth_security import (
     clear_login_attempts as _clear_attempts,
     verify_and_upgrade_password
 )
+from utils.passwords import (
+    validate_new_password,
+    validate_signature_png,
+    generate_initial_password,
+    needs_password_change
+)
 from utils.audit_trail import record_audit_log
 
 
@@ -37,6 +43,15 @@ def login():
     if not password:
         return jsonify({"success": False, "message": "Password wajib diisi."}), 400
 
+    # Pengecekan lockout akun (brute-force protection)
+    is_locked, remaining = _check_account_locked(username)
+    if is_locked:
+        minutes = max(1, (remaining + 59) // 60)
+        return jsonify({
+            "success": False,
+            "message": f"Akun terkunci sementara karena terlalu banyak percobaan login gagal. Silakan coba kembali dalam {minutes} menit."
+        }), 429
+
     def handle_siswa_login(siswa):
         if getattr(siswa, 'status', 'Aktif') == 'Alumni':
             # Cek apakah masa tenggang akun alumni telah lewat 1 tahun (365 hari)
@@ -48,9 +63,10 @@ def login():
 
         # Validasi password siswa dengan auto-migrasi hash
         if not verify_and_upgrade_password(siswa, password, is_siswa=True):
+            _record_failed_attempt(username)
             return jsonify({
                 "success": False, 
-                "message": "Password siswa salah." if siswa.password else "Password siswa salah. (Default password: NIS Anda)"
+                "message": "NIS atau kata sandi yang Anda masukkan salah."
             }), 401
 
         # Cek jika 2FA aktif pada akun siswa
@@ -63,11 +79,14 @@ def login():
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
             if not verify_totp(siswa.two_factor_secret, totp_code):
+                _record_failed_attempt(username)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
+
+        _clear_attempts(username)
 
         is_alumni_user = getattr(siswa, 'status', 'Aktif') == 'Alumni'
         welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
@@ -91,6 +110,7 @@ def login():
             "token": token,
             "session_token": new_session,
             "must_change_password": must_change_pass,
+            "has_signature": bool(siswa.tanda_tangan),
             "user": {
                 "id": siswa.id,
                 "role": "siswa",
@@ -102,7 +122,7 @@ def login():
                 "jenis_kelamin": getattr(siswa, 'jenis_kelamin', 'Laki-laki') or 'Laki-laki',
                 "status": siswa.status or "Aktif",
                 "tanggal_lulus": siswa.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if siswa.tanggal_lulus else None,
-                "tanda_tangan": siswa.tanda_tangan,
+                "has_signature": bool(siswa.tanda_tangan),
                 "foto_profil": siswa.foto_profil,
                 "two_factor_enabled": bool(siswa.two_factor_enabled),
                 "must_change_password": must_change_pass,
@@ -112,7 +132,8 @@ def login():
 
     def handle_user_login(user):
         if not verify_and_upgrade_password(user, password, is_siswa=False):
-            return jsonify({"success": False, "message": "Password yang dimasukkan salah."}), 401
+            _record_failed_attempt(username)
+            return jsonify({"success": False, "message": "Username atau kata sandi yang Anda masukkan salah."}), 401
         
         if role_requested in ['admin', 'piket'] and role_requested != user.role:
             return jsonify({
@@ -130,17 +151,21 @@ def login():
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
             if not verify_totp(user.two_factor_secret, totp_code):
+                _record_failed_attempt(username)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
 
+        _clear_attempts(username)
+
         role_label = "Administrator" if user.role == "admin" else "Guru Piket"
 
         # Multi-Device / Single Active Session: Terbitkan session_token baru & invalidasi sesi HP lain
         new_session = secrets.token_hex(16)
         user.active_session_token = new_session
+        must_change_pass = bool(getattr(user, 'must_change_password', False))
         db.session.commit()
 
         token = generate_token(user_id=user.id, role=user.role, identifier=user.username, session_token=new_session)
@@ -150,14 +175,17 @@ def login():
             "message": f"Login berhasil sebagai {role_label} ({user.nama}).",
             "token": token,
             "session_token": new_session,
+            "must_change_password": must_change_pass,
+            "has_signature": bool(user.tanda_tangan),
             "user": {
                 "id": user.id,
                 "role": user.role,
                 "username": user.username,
                 "nama": user.nama,
-                "tanda_tangan": user.tanda_tangan,
+                "has_signature": bool(user.tanda_tangan),
                 "foto_profil": user.foto_profil,
-                "two_factor_enabled": bool(user.two_factor_enabled)
+                "two_factor_enabled": bool(user.two_factor_enabled),
+                "must_change_password": must_change_pass
             }
         })
 
@@ -171,6 +199,7 @@ def login():
                     "success": False, 
                     "message": f"Akun '{username}' terdaftar sebagai Guru Piket / Admin. Silakan pilih tab 'Guru Piket & Admin' di atas."
                 }), 400
+            _record_failed_attempt(username)
             return jsonify({
                 "success": False, 
                 "message": "Akun siswa dengan NIS tersebut tidak ditemukan."
@@ -187,6 +216,7 @@ def login():
                     "success": False, 
                     "message": f"NIS '{username}' terdaftar sebagai Siswa ({siswa.nama}). Silakan pilih tab 'Siswa' di atas."
                 }), 400
+            _record_failed_attempt(username)
             return jsonify({
                 "success": False, 
                 "message": "Akun Guru Piket / Admin dengan username tersebut tidak ditemukan."
@@ -207,6 +237,7 @@ def login():
     if siswa:
         return handle_siswa_login(siswa)
 
+    _record_failed_attempt(username)
     return jsonify({"success": False, "message": "Akun tidak ditemukan. Periksa kembali Username atau NIS Anda."}), 404
 
 
@@ -227,7 +258,7 @@ def verify_session():
 
     return jsonify({
         "success": True,
-        "user": user_account.to_dict(),
+        "user": user_account.to_dict(include_signature=False),
         "message": "Sesi aktif dan valid."
     })
 
@@ -256,6 +287,11 @@ def save_signature():
                 "success": False,
                 "message": "Akses ditolak: Anda hanya dapat memperbarui tanda tangan digital untuk akun Anda sendiri."
             }), 403
+
+    # Validasi format PNG dan ukuran (<= 200 KB) dengan magic bytes
+    valid_sig, sig_err, _ = validate_signature_png(signature)
+    if not valid_sig:
+        return jsonify({"success": False, "message": sig_err}), 400
 
     try:
         if role == 'siswa':
@@ -286,6 +322,7 @@ def save_signature():
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {siswa.nama} berhasil disimpan.",
+                "has_signature": True,
                 "tanda_tangan": signature
             })
         else:
@@ -297,6 +334,7 @@ def save_signature():
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {user.nama} berhasil disimpan.",
+                "has_signature": True,
                 "tanda_tangan": signature
             })
     except Exception as e:
@@ -535,6 +573,7 @@ def change_password():
     """
     Mengubah kata sandi mandiri untuk pengguna yang sedang aktif (Siswa, Guru Piket, atau Admin).
     ID dan role diambil dari JWT token untuk mencegah IDOR.
+    Menerapkan rotasi session token dan mengembalikan JWT token baru.
     """
     data = request.json or {}
     current_user = getattr(request, 'current_user', {})
@@ -546,46 +585,67 @@ def change_password():
     if not user_id or not role:
         return jsonify({"success": False, "message": "Sesi autentikasi tidak valid. Silakan login ulang."}), 401
     if not old_password:
-        return jsonify({"success": False, "message": "Kata sandi saat ini wajib diisi"}), 400
+        return jsonify({"success": False, "message": "Kata sandi saat ini wajib diisi."}), 400
     if not new_password:
-        return jsonify({"success": False, "message": "Kata sandi baru wajib diisi"}), 400
-    if len(new_password) < 8:
-        return jsonify({"success": False, "message": "Kata sandi baru minimal 8 karakter"}), 400
+        return jsonify({"success": False, "message": "Kata sandi baru wajib diisi."}), 400
 
     try:
+        account = None
+        identifier = None
         if role == 'siswa':
             siswa = Siswa.query.get(user_id)
             if not siswa:
                 return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
             
-            # Cek password lama
+            valid, err_msg = validate_new_password(new_password, old_pw=old_password, nis=siswa.nis)
+            if not valid:
+                return jsonify({"success": False, "message": err_msg}), 400
+
             if not verify_and_upgrade_password(siswa, old_password, is_siswa=True):
                 return jsonify({"success": False, "message": "Kata sandi saat ini tidak cocok."}), 400
-            
-            siswa.password = generate_password_hash(new_password, method='scrypt')
-            siswa.must_change_password = False
-            db.session.commit()
-            return jsonify({
-                "success": True,
-                "message": f"Kata sandi untuk siswa {siswa.nama} berhasil diperbarui!"
-            })
+
+            account = siswa
+            identifier = siswa.nis
         else:
             user = User.query.get(user_id)
             if not user:
                 return jsonify({"success": False, "message": "Data pengguna staf tidak ditemukan."}), 404
             
+            valid, err_msg = validate_new_password(new_password, old_pw=old_password, username=user.username)
+            if not valid:
+                return jsonify({"success": False, "message": err_msg}), 400
+
             if not verify_and_upgrade_password(user, old_password, is_siswa=False):
                 return jsonify({"success": False, "message": "Kata sandi saat ini tidak cocok."}), 400
-            
-            user.password = generate_password_hash(new_password, method='scrypt')
-            db.session.commit()
-            return jsonify({
-                "success": True,
-                "message": f"Kata sandi untuk {user.nama} berhasil diperbarui!"
-            })
+
+            account = user
+            identifier = user.username
+
+        account.password = generate_password_hash(new_password, method='scrypt')
+        account.must_change_password = False
+
+        # Multi-Device / Single Active Session: Terbitkan session_token baru & perbarui token JWT
+        new_session = secrets.token_hex(16)
+        account.active_session_token = new_session
+        db.session.commit()
+
+        new_jwt = generate_token(
+            user_id=account.id,
+            role=role,
+            identifier=identifier,
+            session_token=new_session
+        )
+
+        return jsonify({
+            "success": True,
+            "message": f"Kata sandi untuk {account.nama} berhasil diperbarui!",
+            "token": new_jwt,
+            "session_token": new_session,
+            "must_change_password": False
+        })
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": "Gagal memperbarui kata sandi. Silakan coba lagi."}), 500
+        return jsonify({"success": False, "message": f"Gagal memperbarui kata sandi: {str(e)}"}), 500
 
 
 @auth_bp.route('/api/siswa/<int:id>/reset_password', methods=['POST'])
@@ -594,6 +654,7 @@ def change_password():
 def reset_siswa_password(id):
     """
     Fitur khusus Admin: Mereset kata sandi siswa kembali ke default (NIS siswa).
+    Menandai akun siswa wajib mengganti kata sandi pada login berikutnya.
     """
     try:
         siswa = Siswa.query.get(id)
@@ -601,6 +662,8 @@ def reset_siswa_password(id):
             return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
 
         siswa.password = None  # Reset ke None agar login menggunakan NIS sebagai default
+        siswa.must_change_password = True
+        siswa.active_session_token = None  # Invalidate sesi aktif siswa
         db.session.commit()
 
         current_u = getattr(request, 'current_user', {})
@@ -769,6 +832,12 @@ def setup_2fa():
         if not account:
             return jsonify({"success": False, "message": "Akun staf tidak ditemukan."}), 404
         account_name = f"{account.username} ({account.nama})"
+
+    if account.two_factor_enabled:
+        return jsonify({
+            "success": False,
+            "message": "Autentikasi Dua Faktor (2FA) sudah aktif pada akun ini. Nonaktifkan terlebih dahulu jika Anda ingin mengatur ulang."
+        }), 400
 
     # Buat secret baru
     secret = generate_totp_secret()
