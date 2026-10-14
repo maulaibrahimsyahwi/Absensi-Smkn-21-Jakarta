@@ -613,7 +613,7 @@ export default function PortalPiket() {
       </div>
 
       {/* Tombol Aksi Cepat Guru Piket (Tampil di Smartphone, Tablet, & Desktop) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="hidden lg:grid lg:grid-cols-4 gap-4">
         <Link
           to="/piket"
           className="group bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 sm:p-5 rounded-2xl shadow-md transition-all flex items-center justify-between"
@@ -1050,11 +1050,7 @@ export default function PortalPiket() {
             ? "Jadwal dan toleransi presensi akan kembali normal."
             : "Beri kompensasi waktu toleransi keterlambatan presensi siswa."
         }
-        confirmLabel={
-          modeDarurat
-            ? "Ya, Kembalikan Normal"
-            : `Aktifkan (+${selectedToleransi} Menit)`
-        }
+        confirmLabel={modeDarurat ? "Ya, Kembalikan Normal" : `Aktifkan`}
         cancelLabel="Batal"
         danger={modeDarurat}
       >
@@ -1083,7 +1079,7 @@ export default function PortalPiket() {
                       : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
                   }`}
                 >
-                  +{m} Menit
+                  {m} Menit
                 </button>
               ))}
             </div>

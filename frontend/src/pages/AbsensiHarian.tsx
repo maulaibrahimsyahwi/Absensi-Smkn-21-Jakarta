@@ -42,6 +42,7 @@ import {
   enqueueOfflineAttendance,
   getOfflineQueue,
   syncOfflineQueueToServer,
+  setServerTimeAnchor,
 } from "../services/offlineQueue";
 import OfflineQueueModal from "../components/common/OfflineQueueModal";
 import BiometricPrivacyModal from "../components/common/BiometricPrivacyModal";
@@ -54,6 +55,10 @@ interface AttendanceResult {
   proxy_note?: string;
   is_medical_exempt?: boolean;
   isOfflineBuffer?: boolean;
+  nama?: string;
+  kelas?: string;
+  statusKehadiran?: string;
+  waktuAbsen?: string;
 }
 
 export default function AbsensiHarian(): React.JSX.Element {
@@ -116,6 +121,7 @@ export default function AbsensiHarian(): React.JSX.Element {
         if (res.data) {
           setAttendanceToday(res.data);
           if (res.data.server_timestamp) {
+            setServerTimeAnchor(res.data.server_timestamp);
             const serverMs = new Date(res.data.server_timestamp).getTime();
             const localMs = Date.now();
             const driftSec = Math.abs(localMs - serverMs) / 1000;
@@ -206,6 +212,7 @@ export default function AbsensiHarian(): React.JSX.Element {
     eyeState,
     isLiveVerified,
     livenessToken,
+    isOfflineFallback,
     resetLiveness,
   } = useLivenessDetector({
     webcamRef,
@@ -223,10 +230,10 @@ export default function AbsensiHarian(): React.JSX.Element {
         captureRef.current();
       }, 50);
     },
-    pollIntervalMs: 750,
+    pollIntervalMs: 250,
   });
 
-  const isReadyForCapture = isLiveVerified || isMedicalExempt;
+  const isReadyForCapture = isLiveVerified || isMedicalExempt || isOfflineFallback;
 
   const captureAndVerify = useCallback(async () => {
     if (isAttendanceClosed) return;
@@ -241,6 +248,7 @@ export default function AbsensiHarian(): React.JSX.Element {
       return;
     }
     if (!webcamRef.current) return;
+    playSound("shutter");
     const imageSrc = webcamRef.current.getScreenshot();
     if (!imageSrc) {
       setResult({
@@ -258,6 +266,7 @@ export default function AbsensiHarian(): React.JSX.Element {
         longitude: geoState.longitude,
         accuracy: geoState.accuracy,
         is_mock: geoState.isMock,
+        gps_samples: geoState.gpsSamples || null,
         expected_siswa_id: isSiswa ? user?.id : null,
         liveness_token: verifiedTokenRef.current || livenessToken,
         device_id: getDeviceId(),
@@ -265,28 +274,42 @@ export default function AbsensiHarian(): React.JSX.Element {
       };
 
       const res = await api.post("/verify_harian", payload);
-      playSound("success");
-      if ("vibrate" in navigator) navigator.vibrate(40);
-
       const studentName =
         res.data?.siswa?.nama || res.data?.nama || user?.nama || "Siswa";
-      const studentKelas = res.data?.siswa?.kelas
-        ? `(${res.data.siswa.kelas})`
-        : "";
+      const studentKelas = res.data?.siswa?.kelas || user?.kelas || "";
+      const status = res.data?.status || "Tepat Waktu";
+      const isLate = status.toLowerCase().includes("terlambat");
+
+      if (isLate) {
+        playSound("late");
+      } else {
+        playSound("success");
+      }
+      if ("vibrate" in navigator) navigator.vibrate(40);
 
       if (res.data?.is_flagged_proxy) {
         speakProxyWarning();
       } else {
-        speakAttendanceSuccess(studentName, res.data?.status || "Tepat Waktu");
+        speakAttendanceSuccess(studentName, status);
       }
+
+      const waktuFormatted = new Date().toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
 
       setResult({
         success: true,
         is_flagged_proxy: res.data?.is_flagged_proxy,
         proxy_note: res.data?.proxy_note,
         is_medical_exempt: res.data?.is_medical_exempt,
+        nama: studentName,
+        kelas: studentKelas,
+        statusKehadiran: status,
+        waktuAbsen: waktuFormatted,
         message: !isSiswa
-          ? `Presensi Berhasil: ${studentName} ${studentKelas}. Silakan siswa berikutnya.`
+          ? `Presensi Berhasil: ${studentName} ${studentKelas ? `(${studentKelas})` : ""}. Silakan siswa berikutnya.`
           : res.data?.message || "Presensi berhasil dicatat!",
       });
 
@@ -294,20 +317,21 @@ export default function AbsensiHarian(): React.JSX.Element {
         setAttendanceToday({
           already_attended: true,
           data: {
-            waktu: new Date().toLocaleTimeString("id-ID"),
-            status: res.data?.status || "Hadir",
+            waktu: waktuFormatted,
+            status: status,
             nama: user?.nama,
           },
         });
       }
 
-      // Kiosk auto-reset: Siap untuk antrean siswa berikutnya setelah 3.5 detik
+      // Kiosk auto-reset: Pangkas ke 1.6 detik untuk mode Kiosk/Piket agar antrean 1.000 siswa bergerak cepat tanpa jeda panjang
+      const resetDelayMs = !isSiswa ? 1600 : 3200;
       setTimeout(() => {
         setResult(null);
         setCountdown(3);
         verifiedTokenRef.current = null;
         resetLiveness();
-      }, 3500);
+      }, resetDelayMs);
     } catch (err: any) {
       playSound("error");
       if ("vibrate" in navigator) navigator.vibrate([60, 40, 60]);
@@ -337,17 +361,27 @@ export default function AbsensiHarian(): React.JSX.Element {
         speakIndonesian(
           "Koneksi terputus. Presensi dan foto tersimpan di buffer lokal kiosk.",
         );
+        const waktuFormatted = new Date().toLocaleTimeString("id-ID", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
         setResult({
           success: true,
           isOfflineBuffer: true,
+          nama: isSiswa ? (user?.nama || "Siswa") : "Mode Kiosk Siswa",
+          kelas: isSiswa ? (user?.kelas || "-") : "Offline Buffer",
+          statusKehadiran: "Buffer Offline",
+          waktuAbsen: waktuFormatted,
           message:
             "Jaringan Terputus: Bukti foto tersimpan di Buffer Darurat. Verifikasi pengenalan wajah akan otomatis dijalankan ke server saat jaringan pulih.",
         });
+        const resetDelayMs = !isSiswa ? 1600 : 3200;
         setTimeout(() => {
           setResult(null);
           setCountdown(3);
           resetLiveness();
-        }, 3500);
+        }, resetDelayMs);
         return;
       }
 
@@ -607,6 +641,7 @@ export default function AbsensiHarian(): React.JSX.Element {
           <Webcam
             audio={false}
             ref={webcamRef}
+            mirrored={true}
             screenshotFormat="image/jpeg"
             onUserMediaError={(err) =>
               setCamError(
@@ -635,20 +670,21 @@ export default function AbsensiHarian(): React.JSX.Element {
             loading={loading}
             isLiveVerified={isLiveVerified}
             eyeState={eyeState}
+            isOfflineFallback={isOfflineFallback}
           />
         </>
       )}
 
-      {/* 4. Top Floating Bar */}
+      {/* 4. Top Floating Bar (WCAG 2.1 SC 2.5.5 >= 48x48px Touch Targets) */}
       <div className="absolute top-2 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
         <Link
           to={backTarget}
           title="Kembali ke Beranda"
           aria-label="Kembali ke Beranda"
-          className="inline-flex items-center gap-1.5 px-3 py-2 min-h-[40px] rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] min-w-[48px] rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs sm:text-sm font-bold"
         >
           <ArrowLeft
-            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-0.5"
+            className="w-5 h-5 transition-transform group-hover:-translate-x-0.5"
             strokeWidth={2.5}
           />
           <span className="hidden sm:inline">Kembali</span>
@@ -667,16 +703,16 @@ export default function AbsensiHarian(): React.JSX.Element {
                 ? "Suara konfirmasi dimatikan (Klik untuk aktifkan)"
                 : "Suara konfirmasi gerbang aktif (Klik untuk matikan)"
             }
-            className={`p-2 rounded-xl sm:rounded-2xl border backdrop-blur-md transition-all shadow-md active:scale-95 text-xs font-bold ${
+            className={`p-3 min-h-[48px] min-w-[48px] flex items-center justify-center rounded-xl sm:rounded-2xl border backdrop-blur-md transition-all shadow-md active:scale-95 text-xs font-bold ${
               mutedVoice
                 ? "bg-rose-950/70 border-rose-500/40 text-rose-300"
                 : "bg-blue-950/70 border-blue-500/40 text-blue-300"
             }`}
           >
             {mutedVoice ? (
-              <VolumeX className="w-4 h-4" />
+              <VolumeX className="w-5 h-5" />
             ) : (
-              <Volume2 className="w-4 h-4 animate-pulse" />
+              <Volume2 className="w-5 h-5 animate-pulse" />
             )}
           </button>
 
@@ -686,25 +722,25 @@ export default function AbsensiHarian(): React.JSX.Element {
               type="button"
               onClick={() => setShowOfflineModal(true)}
               title="Ada presensi darurat tersimpan di buffer lokal kiosk. Klik untuk melihat & menyinkronkan."
-              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse cursor-pointer shrink-0"
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 min-h-[48px] rounded-xl sm:rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 animate-pulse cursor-pointer shrink-0"
             >
-              <CloudOff className="w-3.5 h-3.5 shrink-0" />
+              <CloudOff className="w-4 h-4 shrink-0" />
               <span>
                 <span className="hidden sm:inline">Buffer </span>Offline ({offlineQueueCount})
               </span>
             </button>
           )}
 
-          <div className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
-            <Clock className="w-3.5 h-3.5 text-blue-400" />
+          <div className="hidden md:inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-slate-300 text-xs font-semibold shadow-lg">
+            <Clock className="w-4 h-4 text-blue-400" />
             <span>
               {attendanceToday?.jam_buka || "05:00"} - {attendanceToday?.jam_batas || "06:30"} WIB
               {attendanceToday?.mode_darurat ? " (Darurat)" : ""}
             </span>
           </div>
-          <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-            <span className="font-bold text-[11px] sm:text-xs text-blue-300">
+          <div className="inline-flex items-center gap-2 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+            <span className="font-bold text-xs sm:text-sm text-blue-300">
               {currentTime || "00:00:00 WIB"}
             </span>
           </div>
@@ -759,52 +795,79 @@ export default function AbsensiHarian(): React.JSX.Element {
         </div>
       )}
 
-      {/* 6. Floating Result Banner */}
+      {/* 6. High-Contrast Kiosk Result Card (Terbaca Jelas dari Jarak 3–5 Meter) */}
       {result && (
-        <div className="absolute top-16 sm:top-20 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-[500px] z-30 animate-in fade-in zoom-in-95 duration-200">
+        <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4 sm:p-6 z-30 animate-in fade-in zoom-in-95 duration-150">
           <div
-            className={`p-3.5 sm:p-4 rounded-2xl border backdrop-blur-md shadow-2xl flex items-start gap-3 ${
+            className={`w-full max-w-xl sm:max-w-2xl p-6 sm:p-8 rounded-3xl border-2 shadow-2xl text-center flex flex-col items-center gap-4 ${
               result.isOfflineBuffer
-                ? "bg-amber-950/90 border-amber-400/80 text-amber-100"
+                ? "bg-amber-950/95 border-amber-400 text-amber-50 shadow-amber-950/80"
                 : result.success
-                  ? "bg-emerald-950/90 border-emerald-400/80 text-emerald-100"
-                  : "bg-rose-950/90 border-rose-400/80 text-rose-100"
+                  ? (result.statusKehadiran || "").toLowerCase().includes("terlambat")
+                    ? "bg-amber-950/95 border-amber-400 text-amber-50 shadow-amber-950/80"
+                    : "bg-emerald-950/95 border-emerald-400 text-emerald-50 shadow-emerald-950/80"
+                  : "bg-rose-950/95 border-rose-400 text-rose-50 shadow-rose-950/80"
             }`}
           >
-            {result.isOfflineBuffer ? (
-              <CloudOff className="w-6 h-6 sm:w-7 sm:h-7 text-amber-400 flex-shrink-0 mt-0.5" />
-            ) : result.success ? (
-              <CheckCircle2 className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-400 flex-shrink-0 mt-0.5" />
-            ) : (
-              <AlertCircle className="w-6 h-6 sm:w-7 sm:h-7 text-rose-400 flex-shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="font-extrabold text-sm sm:text-base leading-snug">
-                {result.isOfflineBuffer
-                  ? "Tersimpan di Buffer Offline Kiosk"
-                  : result.success
-                    ? "Presensi Berhasil Terverifikasi!"
-                    : "Presensi Belum Berhasil"}
-              </p>
-              <p className="text-xs sm:text-sm mt-1 opacity-90 break-words">
-                {result.message}
-              </p>
-              {result.is_medical_exempt && (
-                <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
-                  <Stethoscope className="w-3.5 h-3.5 shrink-0" />
-                  <span>Pengecualian Medis Biometrik Aktif</span>
-                </div>
-              )}
-              {result.is_flagged_proxy && (
-                <div className="mt-2 inline-flex items-center gap-1.5 p-2 rounded-lg bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/40">
-                  <Flag className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    {result.proxy_note ||
-                      "Peringatan: 1 HP terdeteksi bergantian"}
-                  </span>
-                </div>
+            {/* Status Badge Ekstra Besar untuk Pemantauan Guru Piket */}
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm sm:text-base font-black tracking-wider uppercase border-2 shadow-lg">
+              {result.isOfflineBuffer ? (
+                <>
+                  <CloudOff className="w-5 h-5 text-amber-300" />
+                  <span className="text-amber-200">BUFFER OFFLINE KIOSK</span>
+                </>
+              ) : result.success ? (
+                <>
+                  <CheckCircle2 className="w-6 h-6 text-emerald-300" />
+                  <span>{result.statusKehadiran || "TEPAT WAKTU"}</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-6 h-6 text-rose-300" />
+                  <span>PRESENSI GAGAL</span>
+                </>
               )}
             </div>
+
+            {/* Nama Siswa Ekstra Besar (3-5 Meter) */}
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight max-w-full truncate px-2">
+              {result.nama || (result.success ? "Siswa SMKN 21" : "Tidak Teridentifikasi")}
+            </h1>
+
+            {/* Kelas & Waktu Absen */}
+            {(result.kelas || result.waktuAbsen) && (
+              <div className="flex flex-wrap items-center justify-center gap-3 text-sm sm:text-xl font-bold text-slate-200">
+                {result.kelas && (
+                  <span className="px-3.5 py-1 rounded-xl bg-white/15 border border-white/20">
+                    Kelas: {result.kelas}
+                  </span>
+                )}
+                {result.waktuAbsen && (
+                  <span className="px-3.5 py-1 rounded-xl bg-white/15 border border-white/20 font-mono">
+                    {result.waktuAbsen} WIB
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Pesan Keterangan */}
+            <p className="text-xs sm:text-base font-medium opacity-90 max-w-md mx-auto mt-1 leading-relaxed">
+              {result.message}
+            </p>
+
+            {result.is_medical_exempt && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-400/30">
+                <Stethoscope className="w-4 h-4 shrink-0" />
+                <span>Pengecualian Medis Biometrik Aktif</span>
+              </div>
+            )}
+
+            {result.is_flagged_proxy && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40">
+                <Flag className="w-4 h-4 shrink-0" />
+                <span>{result.proxy_note || "Peringatan: 1 HP terdeteksi bergantian"}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -993,11 +1056,11 @@ export default function AbsensiHarian(): React.JSX.Element {
       <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex flex-col items-center gap-2.5 z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
         <button
           onClick={() => {
-            if (!isLiveVerified) return;
+            if (!isReadyForCapture) return;
             setResult(null);
             captureAndVerify();
           }}
-          disabled={loading || !effectiveGpsValid || !isLiveVerified}
+          disabled={loading || !effectiveGpsValid || !isReadyForCapture}
           className="press px-6 py-3 min-h-[48px] rounded-2xl bg-blue-600 hover:bg-blue-500 font-bold text-white transition-all flex items-center justify-center gap-2.5 shadow-2xl shadow-blue-500/40 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed max-w-full text-center"
         >
           <Camera className="w-5 h-5 flex-shrink-0" />
@@ -1009,7 +1072,9 @@ export default function AbsensiHarian(): React.JSX.Element {
                 : !isFaceDetected
                   ? "Posisikan Wajah"
                   : !isLiveVerified
-                    ? "Kedipkan Mata"
+                    ? isOfflineFallback
+                      ? "Ambil Foto (Offline)"
+                      : "Kedipkan Mata"
                     : "Pindai Langsung"}
           </span>
         </button>

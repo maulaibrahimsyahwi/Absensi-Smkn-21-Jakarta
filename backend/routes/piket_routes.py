@@ -6,7 +6,7 @@ from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
 from config import SEKOLAH_POLYGON, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH
-from utils.helpers import is_point_in_polygon, calculate_distance_meters
+from utils.helpers import is_point_in_polygon, calculate_distance_meters, invalidate_school_config_cache
 from utils.realtime_bus import notify_data_changed
 from utils.file_storage import save_base64_file
 
@@ -461,6 +461,7 @@ def toggle_mode_darurat():
     current_u = getattr(request, 'current_user', {})
     cfg.updated_by = current_u.get('identifier', 'Guru Piket')
     db.session.commit()
+    invalidate_school_config_cache()
     notify_data_changed("piket")
     notify_data_changed("presensi")
 
@@ -525,6 +526,7 @@ def update_jadwal():
     current_u = getattr(request, 'current_user', {})
     cfg.updated_by = current_u.get('identifier', 'Admin')
     db.session.commit()
+    invalidate_school_config_cache()
     notify_data_changed("piket")
     notify_data_changed("presensi")
 

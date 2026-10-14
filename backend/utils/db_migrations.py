@@ -71,6 +71,20 @@ def migrate_postgres_columns(conn):
         # Anti-Duplikasi Presensi: Hapus duplikat harian lama lalu pasang Unique Index
         "DELETE FROM absensi_harian a USING absensi_harian b WHERE a.id > b.id AND a.siswa_id = b.siswa_id AND CAST(a.waktu AS DATE) = CAST(b.waktu AS DATE);",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_absensi_harian_siswa_tanggal ON absensi_harian (siswa_id, (CAST(waktu AS DATE)));",
+        # Optimasi Indeks Komposit & Parsial Rush Hour (1.000+ Siswa Konkuren):
+        # 1. Cek cepat 'sudah_absen' & filter riwayat per siswa (Index-Only Scan)
+        "CREATE INDEX IF NOT EXISTS idx_absensi_harian_siswa_waktu ON absensi_harian (siswa_id, waktu DESC);",
+        # 2. Deteksi cepat 1 HP bergantian / titip absen (10 menit terakhir)
+        "CREATE INDEX IF NOT EXISTS idx_absensi_harian_device_waktu ON absensi_harian (device_id, waktu DESC) WHERE device_id IS NOT NULL;",
+        # 3. Agregasi cepat dashboard rekapitulasi semester
+        "CREATE INDEX IF NOT EXISTS idx_absensi_harian_periode_siswa ON absensi_harian (tahun_ajaran, semester, siswa_id, status);",
+        # 4. Partial index pemuatan instan siswa aktif berbiometrik untuk _FACE_CACHE
+        "CREATE INDEX IF NOT EXISTS idx_siswa_aktif_biometrik ON siswa (id) WHERE (is_deleted = FALSE OR is_deleted IS NULL) AND (status = 'Aktif' OR status IS NULL) AND face_encoding IS NOT NULL;",
+        # 5. Cek anti-duplikasi catatan keterlambatan presensi
+        "CREATE INDEX IF NOT EXISTS idx_pelanggaran_siswa_jenis_waktu ON pelanggaran_siswa (siswa_id, jenis_pelanggaran, tanggal_waktu DESC);",
+        # 6. Anti-Duplikasi Keterlambatan: Hapus duplikat harian lama lalu pasang Unique Index parsial
+        "DELETE FROM pelanggaran_siswa a USING pelanggaran_siswa b WHERE a.id > b.id AND a.siswa_id = b.siswa_id AND a.jenis_pelanggaran = 'Terlambat masuk sekolah' AND b.jenis_pelanggaran = 'Terlambat masuk sekolah' AND CAST(a.tanggal_waktu AS DATE) = CAST(b.tanggal_waktu AS DATE);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_pelanggaran_terlambat_harian ON pelanggaran_siswa (siswa_id, (CAST(tanggal_waktu AS DATE))) WHERE jenis_pelanggaran = 'Terlambat masuk sekolah';",
     ]
     for cmd in pg_commands:
         try:

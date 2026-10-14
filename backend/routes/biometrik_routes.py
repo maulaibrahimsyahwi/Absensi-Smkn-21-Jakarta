@@ -8,6 +8,8 @@ from face_utils import get_face_encoding, check_face_present, analyze_liveness, 
 biometrik_bp = Blueprint('biometrik', __name__)
 
 from utils.auth_middleware import decode_token, token_required, role_required
+from utils.crypto_utils import decrypt_field
+from utils.audit_trail import record_audit_log
 
 def is_admin_caller():
     """
@@ -46,6 +48,16 @@ def register_face():
     siswa = Siswa.query.get(siswa_id)
     if not siswa:
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
+
+    # Validasi Hak Persetujuan Pemrosesan Biometrik (UU PDP No. 27/2022 Pasal 20, 22, & 25)
+    if not siswa.privacy_consent_at:
+        return jsonify({
+            "success": False,
+            "message": (
+                f"Registrasi biometrik ditolak: Siswa {siswa.nama} (dan Orang Tua/Wali) "
+                "belum menyetujui lembar persetujuan pemrosesan data biometrik (UU PDP Pasal 22 & 25)."
+            )
+        }), 403
         
     try:
         encodings = []
@@ -117,7 +129,20 @@ def register_face():
         # Simpan array multi-sample biometrik wajah ke database secara terenkripsi (UU PDP Pasal 35)
         siswa.set_encoding(encodings)
         db.session.commit()
-        invalidate_face_cache()
+        invalidate_face_cache(siswa.id)
+
+        # Audit Log: Rekam aktivitas pendaftaran biometrik spesifik (UU PDP & ISO 27001)
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='REGISTER_FACE_BIOMETRIC',
+            target_type='Siswa',
+            target_id=str(siswa.id),
+            keterangan=f"Merekam {len(encodings)} sampel vektor biometrik wajah untuk {siswa.nama} ({siswa.nis})"
+        )
+
         return jsonify({
             "success": True, 
             "message": f"Berhasil menyimpan {len(encodings)} sampel biometrik wajah untuk {siswa.nama}."
@@ -141,7 +166,7 @@ def reset_siswa_face(id):
         
         siswa.face_encoding = None
         db.session.commit()
-        invalidate_face_cache()
+        invalidate_face_cache(id)
         return jsonify({
             "success": True, 
             "message": f"Biometrik wajah {siswa.nama} ({siswa.kelas}) berhasil direset. Siswa kini dapat mendaftarkan ulang wajahnya."
@@ -169,18 +194,18 @@ _used_liveness_nonces = {}  # {nonce: timestamp}
 _last_nonce_cleanup = 0
 _last_tracker_cleanup = 0
 
-def create_liveness_token(user_id):
+def create_liveness_token(user_id, session_token=""):
     """
     Membuat token tantangan liveness sekali pakai (single-use) terenkripsi (HMAC-SHA256) berdurasi 60 detik.
-    Menyertakan nonce acak kriptografis untuk mencegah replay attack.
+    Menyertakan nonce acak kriptografis dan session_token aktif untuk mencegah replay attack lintas sesi (AUTH-02).
     """
     ts = int(time_module.time())
     nonce = secrets.token_hex(8)
-    raw = f"{user_id}:{ts}:{nonce}"
+    raw = f"liveness:{user_id}:{session_token}:{ts}:{nonce}"
     sig = hmac.new(SECRET_KEY.encode(), raw.encode(), hashlib.sha256).hexdigest()[:32]
     return f"{user_id}:{ts}:{nonce}:{sig}"
 
-def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=True):
+def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=True, session_token=""):
     """
     Memverifikasi keabsahan dan masa berlaku liveness token dari kamera serta mencegah replay attack.
     Thread-safe dan menggunakan pembersihan TTL parsial (tidak menghapus nonce aktif).
@@ -204,10 +229,14 @@ def verify_liveness_token(token, expected_user_id, max_age_seconds=60, consume=T
     if str(uid) != str(expected_user_id):
         return False, "Token liveness tidak cocok dengan identitas akun siswa."
 
-    expected_raw = f"{uid}:{ts}:{nonce}"
+    expected_raw = f"liveness:{uid}:{session_token}:{ts}:{nonce}"
     expected_sig = hmac.new(SECRET_KEY.encode(), expected_raw.encode(), hashlib.sha256).hexdigest()[:32]
     if not hmac.compare_digest(sig, expected_sig):
-        return False, "Tanda tangan token liveness tidak valid (terindikasi pemalsuan)."
+        # Fallback kompatibilitas jika format tanpa session_token/prefix
+        legacy_raw = f"{uid}:{ts}:{nonce}"
+        legacy_sig = hmac.new(SECRET_KEY.encode(), legacy_raw.encode(), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, legacy_sig):
+            return False, "Tanda tangan token liveness tidak valid (terindikasi pemalsuan)."
 
     with _liveness_lock:
         # Cegah penggunaan token berulang (Replay Attack)
@@ -252,9 +281,21 @@ def detect_liveness():
     user_id = current_user.get('user_id', 0)
     user_role = str(current_user.get('role', '')).lower()
 
-    result = analyze_liveness(image_data)
-    now_t = time_module.time()
+    # Ambil baseline openness sebelumnya (jika ada) untuk ambang relatif adaptif
+    with _liveness_lock:
+        prev_baseline = _liveness_tracker.get(user_id, {}).get('baseline_open')
 
+    result = analyze_liveness(image_data, baseline_open=prev_baseline)
+    now_t = time_module.time()
+    need_face_verification = False
+
+    # Jika terdeteksi spoofing layar / replika, segera batalkan sesi
+    if result.get('is_spoof'):
+        with _liveness_lock:
+            _liveness_tracker.pop(user_id, None)
+        return jsonify(result)
+
+    # Fase 1: Lock super singkat (<0.05ms) HANYA untuk membaca/memperbarui state mata di RAM
     with _liveness_lock:
         # Pembersihan otomatis memori RAM (TTL Eviction) untuk sesi tidak aktif > 120 detik
         if now_t - _last_tracker_cleanup > 30:
@@ -277,42 +318,20 @@ def detect_liveness():
             user_state['last_update'] = now_t
 
             if eye_state == 'OPEN':
+                cur_score = float(result.get('openness_score', 0.0))
+                # Perbarui rata-rata bergerak (moving average) baseline mata terbuka siswa
+                if cur_score >= 12.0:
+                    curr_b = user_state.get('baseline_open')
+                    if curr_b is None:
+                        user_state['baseline_open'] = cur_score
+                    else:
+                        user_state['baseline_open'] = round(0.6 * curr_b + 0.4 * cur_score, 2)
+
                 # Cek apakah sudah melalui siklus lengkap 3 tahap: OPEN -> CLOSED -> OPEN
                 if 'last_closed' in user_state and 'initial_open' in user_state:
-                    if (user_state['last_closed'] > user_state['initial_open']) and (now_t - user_state['last_closed'] <= 5.0):
-                        can_issue = True
-                        if user_role == 'siswa':
-                            siswa = getattr(request, 'current_user_obj', None)
-                            if not siswa or not hasattr(siswa, 'face_encoding'):
-                                siswa = Siswa.query.get(user_id)
-
-                            # Cek status dispensasi khusus medis biometrik
-                            med_until = getattr(siswa, 'medical_exemption_until', None)
-                            is_med_exempt = False
-                            if med_until:
-                                today_str = date.today().strftime("%Y-%m-%d")
-                                med_str = med_until.strftime("%Y-%m-%d") if hasattr(med_until, 'strftime') else str(med_until)
-                                is_med_exempt = (med_str >= today_str)
-
-                            face_enc = getattr(siswa, 'face_encoding', None)
-                            if siswa and face_enc and not is_med_exempt:
-                                try:
-                                    stored = json.loads(face_enc) if isinstance(face_enc, str) else face_enc
-                                    encs = stored if isinstance(stored, list) else []
-                                    ids = [siswa.id] * len(encs)
-                                    match = verify_face(image_data, encs, ids)
-                                    if not match.get('success'):
-                                        can_issue = False
-                                        result['liveness_verified'] = False
-                                        result['message'] = "Wajah di kamera tidak cocok dengan data biometrik akun siswa yang login."
-                                except Exception:
-                                    pass
-
-                        if can_issue:
-                            token = create_liveness_token(user_id)
-                            result['liveness_token'] = token
-                            result['liveness_verified'] = True
-                            _liveness_tracker.pop(user_id, None)
+                    if (user_state['last_closed'] >= user_state['initial_open']) and (now_t - user_state['last_closed'] <= 5.0):
+                        need_face_verification = True
+                        _liveness_tracker.pop(user_id, None)
                 else:
                     # Tahap 1: Rekam mata terbuka awal
                     user_state['initial_open'] = now_t
@@ -321,6 +340,36 @@ def detect_liveness():
                 # Tahap 2: Rekam kedipan (mata terpejam) hanya jika mata sebelumnya sudah terdeteksi terbuka
                 if 'initial_open' in user_state and (now_t - user_state['initial_open'] <= 10.0):
                     user_state['last_closed'] = now_t
+
+    # Fase 2: Eksekusi verifikasi wajah di LUAR _liveness_lock (100% paralel antar worker thread)
+    if need_face_verification:
+        can_issue = True
+        if user_role == 'siswa':
+            from utils.helpers import get_student_decrypted_encodings
+            encs, is_med_exempt = get_student_decrypted_encodings(user_id)
+            if not is_med_exempt:
+                if not encs:
+                    can_issue = False
+                    result['liveness_verified'] = False
+                    result['message'] = "Data biometrik wajah belum terdaftar."
+                else:
+                    try:
+                        match = verify_face(image_data, encs, [user_id] * len(encs))
+                        if not match.get('success'):
+                            can_issue = False
+                            result['liveness_verified'] = False
+                            result['message'] = "Wajah di kamera tidak cocok dengan data biometrik akun siswa yang login."
+                    except Exception:
+                        # Fail-closed: Jangan pernah menerbitkan token jika inferensi/verifikasi error
+                        can_issue = False
+                        result['liveness_verified'] = False
+                        result['message'] = "Gagal memverifikasi data biometrik wajah siswa."
+
+        if can_issue:
+            session_tok = current_user.get('session_token', '')
+            token = create_liveness_token(user_id, session_token=session_tok)
+            result['liveness_token'] = token
+            result['liveness_verified'] = True
 
     return jsonify(result)
 

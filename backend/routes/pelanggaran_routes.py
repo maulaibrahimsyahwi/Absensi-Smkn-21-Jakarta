@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from datetime import datetime, time
+from sqlalchemy.exc import IntegrityError
 from models import db, PelanggaranSiswa, Siswa, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
@@ -116,35 +117,55 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
     else:
         ket += f" pada pukul {waktu_dt.strftime('%H:%M:%S')} WIB (Batas masuk: 06:30 WIB)"
 
-    cfg = PengaturanJadwal.query.first()
-    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
-    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+    try:
+        from utils.helpers import get_cached_school_context
+        ctx = get_cached_school_context(waktu_dt)
+        j_dict = ctx.get("jadwal_dict") or {}
+        curr_ta = j_dict.get("tahun_ajaran") or "2026/2027"
+        curr_sem = j_dict.get("semester") or "Ganjil"
+    except Exception:
+        cfg = PengaturanJadwal.query.first()
+        curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+        curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
-    record = PelanggaranSiswa(
-        siswa_id=siswa.id,
-        nis=siswa.nis,
-        nama_siswa=siswa.nama,
-        kelas=siswa.kelas,
-        tanggal_waktu=waktu_dt,
-        jenis_pelanggaran="Terlambat masuk sekolah",
-        poin=5,
-        kategori="Pelanggaran",
-        tahun_ajaran=curr_ta,
-        semester=curr_sem,
-        nama_penanggung_jawab=petugas,
-        tanda_tangan_siswa=ttd,
-        keterangan=ket
-    )
-    db.session.add(record)
-    return record
+    try:
+        with db.session.begin_nested():
+            record = PelanggaranSiswa(
+                siswa_id=siswa.id,
+                nis=siswa.nis,
+                nama_siswa=siswa.nama,
+                kelas=siswa.kelas,
+                tanggal_waktu=waktu_dt,
+                jenis_pelanggaran="Terlambat masuk sekolah",
+                poin=5,
+                kategori="Pelanggaran",
+                tahun_ajaran=curr_ta,
+                semester=curr_sem,
+                nama_penanggung_jawab=petugas,
+                tanda_tangan_siswa=ttd,
+                keterangan=ket
+            )
+            db.session.add(record)
+            db.session.flush()
+        return record
+    except IntegrityError:
+        # Menangani race condition jika request konkuren telah mencatat keterlambatan hari ini
+        return PelanggaranSiswa.query.filter(
+            PelanggaranSiswa.siswa_id == siswa.id,
+            PelanggaranSiswa.jenis_pelanggaran == "Terlambat masuk sekolah",
+            PelanggaranSiswa.tanggal_waktu >= start_of_day,
+            PelanggaranSiswa.tanggal_waktu <= end_of_day
+        ).first()
 
 
 def sync_terlambat_ke_pelanggaran():
     """
     Sinkronisasi seluruh riwayat keterlambatan dari AbsensiHarian ke PelanggaranSiswa.
+    Menggunakan joinedload(AbsensiHarian.siswa) untuk mencegah N+1 query lazy-load ke tabel siswa.
     """
+    from sqlalchemy.orm import joinedload
     from models import AbsensiHarian
-    terlambat_records = AbsensiHarian.query.filter_by(status='Terlambat').all()
+    terlambat_records = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter_by(status='Terlambat').all()
     count = 0
     for a in terlambat_records:
         if a.siswa:

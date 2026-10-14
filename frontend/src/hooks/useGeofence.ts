@@ -26,6 +26,14 @@ export interface GeoState {
   error: string | null;
   simulated: boolean;
   isMock: boolean;
+  gpsSamples?: Array<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+    altitude?: number | null;
+    speed?: number | null;
+    timestamp?: number;
+  }> | null;
 }
 
 export interface UseGeofenceReturn {
@@ -54,6 +62,7 @@ export function useGeofence(targetCoordinates: TargetCoordinates): UseGeofenceRe
     error: null,
     simulated: false,
     isMock: false,
+    gpsSamples: null,
   });
 
   const checkGeofence = useCallback(async () => {
@@ -90,6 +99,7 @@ export function useGeofence(targetCoordinates: TargetCoordinates): UseGeofenceRe
         error: null,
         simulated: false,
         isMock: loc.isMock || false,
+        gpsSamples: loc.gps_samples || null,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Gagal memperoleh titik koordinat GPS";

@@ -12,6 +12,43 @@ _account_cache = {}
 _account_cache_lock = threading.Lock()
 ACCOUNT_CACHE_TTL = 20  # detik
 
+def _evict_expired_account_cache(now_ts):
+    """Membersihkan entri cache sesi yang kadaluarsa untuk mencegah kebocoran memori."""
+    if len(_account_cache) > 500:
+        expired_keys = [k for k, v in _account_cache.items() if now_ts - v.get('timestamp', 0) > ACCOUNT_CACHE_TTL]
+        for k in expired_keys:
+            _account_cache.pop(k, None)
+        if len(_account_cache) > 500:
+            excess = len(_account_cache) - 500
+            sorted_keys = sorted(_account_cache.keys(), key=lambda k: _account_cache[k].get('timestamp', 0))
+            for k in sorted_keys[:excess]:
+                _account_cache.pop(k, None)
+
+class CachedAccountProxy:
+    """Proxy ringan untuk entri akun dari cache sesi (menghemat query DB dan thread locks)."""
+    def __init__(self, data):
+        self._data = data
+        for k, v in data.items():
+            setattr(self, k, v)
+
+    def is_alumni_expired(self):
+        return self._data.get('alumni_expired', False)
+
+    def to_dict(self, include_signature=False):
+        return {
+            'id': self._data.get('id'),
+            'role': self._data.get('role'),
+            'nama': self._data.get('nama'),
+            'nis': self._data.get('nis'),
+            'kelas': self._data.get('kelas'),
+            'status': self._data.get('status', 'Aktif'),
+            'medical_exemption_until': self._data.get('medical_exemption_until'),
+            'medical_exemption_alasan': self._data.get('medical_exemption_alasan'),
+            'privacy_consent_at': self._data.get('privacy_consent_at'),
+            'needs_pwd_change': self._data.get('needs_pwd_change', False),
+            'has_biometric': bool(self._data.get('has_biometric', False)),
+        }
+
 def invalidate_account_cache(role=None, user_id=None):
     """Menghapus entri cache sesi saat akun logout, ganti password, atau diperbarui."""
     with _account_cache_lock:
@@ -51,6 +88,27 @@ def generate_token(user_id, role, identifier, expires_in_hours=24, session_token
     """
     secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
+
+    # Pastikan session_token selalu ada dan sinkron dengan akun aktif
+    if not session_token:
+        try:
+            from models import User, Siswa, db
+            target_obj = None
+            if str(role).lower() == 'siswa':
+                target_obj = Siswa.query.get(user_id)
+            else:
+                target_obj = User.query.get(user_id)
+
+            if target_obj:
+                if not getattr(target_obj, 'active_session_token', None):
+                    target_obj.active_session_token = secrets.token_hex(16)
+                    db.session.commit()
+                session_token = target_obj.active_session_token
+            else:
+                session_token = secrets.token_hex(16)
+        except Exception:
+            session_token = secrets.token_hex(16)
+
     payload = {
         'iss': 'smkn21-absensi',
         'jti': secrets.token_hex(8),
@@ -58,7 +116,7 @@ def generate_token(user_id, role, identifier, expires_in_hours=24, session_token
         'user_id': user_id,
         'role': role.lower() if role else 'siswa',
         'identifier': str(identifier),
-        'session_token': str(session_token) if session_token else None,
+        'session_token': str(session_token),
         'iat': now,
         'exp': now + timedelta(hours=expires_in_hours)
     }
@@ -66,10 +124,16 @@ def generate_token(user_id, role, identifier, expires_in_hours=24, session_token
 
 def decode_token(token):
     """
-    Mendekode dan memverifikasi token JWT.
+    Mendekode dan memverifikasi token JWT beserta klaim wajib (iss, exp, iat, sub, session_token).
     """
     secret = _get_jwt_secret()
-    return jwt.decode(token, secret, algorithms=['HS256'])
+    return jwt.decode(
+        token,
+        secret,
+        algorithms=['HS256'],
+        issuer='smkn21-absensi',
+        options={'require': ['exp', 'iat', 'sub', 'jti', 'session_token']}
+    )
 
 def token_required(f):
     """
@@ -151,11 +215,12 @@ def token_required(f):
                         'message': 'Masa aktif akses akun alumni Anda telah berakhir.'
                     }), 401
 
-                if cached.get('active_session_token') and session_token and session_token != cached.get('active_session_token'):
+                db_session_token = cached.get('active_session_token')
+                if not session_token or not db_session_token or not secrets.compare_digest(str(session_token), str(db_session_token)):
                     return jsonify({
                         'status': 'error',
                         'error_code': 'SESSION_TERMINATED',
-                        'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
+                        'message': 'Sesi Anda telah berakhir (logout) atau akun telah login di perangkat lain.'
                     }), 401
 
                 if cached.get('needs_pwd_change'):
@@ -171,10 +236,6 @@ def token_required(f):
                     user_account = Siswa.query.get(user_id) if role == 'siswa' else User.query.get(user_id)
                     request.current_user_obj = user_account
                 else:
-                    class CachedAccountProxy:
-                        def __init__(self, data):
-                            for k, v in data.items():
-                                setattr(self, k, v)
                     request.current_user_obj = CachedAccountProxy(cached)
             else:
                 user_account = None
@@ -183,6 +244,7 @@ def token_required(f):
                     user_account = Siswa.query.get(user_id)
                     if not user_account:
                         with _account_cache_lock:
+                            _evict_expired_account_cache(now_ts)
                             _account_cache[cache_key] = {'deleted': True, 'timestamp': now_ts}
                         return jsonify({
                             'status': 'error',
@@ -192,6 +254,7 @@ def token_required(f):
                     
                     if getattr(user_account, 'status', 'Aktif') == 'Alumni' and user_account.is_alumni_expired():
                         with _account_cache_lock:
+                            _evict_expired_account_cache(now_ts)
                             _account_cache[cache_key] = {'alumni_expired': True, 'timestamp': now_ts}
                         return jsonify({
                             'status': 'error',
@@ -203,6 +266,7 @@ def token_required(f):
                     user_account = User.query.get(user_id)
                     if not user_account:
                         with _account_cache_lock:
+                            _evict_expired_account_cache(now_ts)
                             _account_cache[cache_key] = {'deleted': True, 'timestamp': now_ts}
                         return jsonify({
                             'status': 'error',
@@ -213,13 +277,13 @@ def token_required(f):
                 request.current_user_obj = user_account
 
                 # ================= MULTI-DEVICE / SINGLE ACTIVE SESSION ENFORCEMENT =================
-                if user_account and hasattr(user_account, 'active_session_token') and user_account.active_session_token:
-                    if session_token and session_token != user_account.active_session_token:
-                        return jsonify({
-                            'status': 'error',
-                            'error_code': 'SESSION_TERMINATED',
-                            'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
-                        }), 401
+                db_session_token = getattr(user_account, 'active_session_token', None) if user_account else None
+                if not session_token or not db_session_token or not secrets.compare_digest(str(session_token), str(db_session_token)):
+                    return jsonify({
+                        'status': 'error',
+                        'error_code': 'SESSION_TERMINATED',
+                        'message': 'Sesi Anda telah berakhir (logout) atau akun telah login di perangkat lain.'
+                    }), 401
 
                 # ================= FORCE PASSWORD CHANGE ENFORCEMENT =================
                 user_needs_pwd_change = False
@@ -235,6 +299,7 @@ def token_required(f):
 
                 # Simpan metadata sesi ke cache ringan (TTL 20 detik)
                 with _account_cache_lock:
+                    _evict_expired_account_cache(now_ts)
                     _account_cache[cache_key] = {
                         'id': user_account.id,
                         'role': role,
@@ -242,10 +307,14 @@ def token_required(f):
                         'alumni_expired': False,
                         'active_session_token': getattr(user_account, 'active_session_token', None),
                         'needs_pwd_change': user_needs_pwd_change,
-                        'face_encoding': getattr(user_account, 'face_encoding', None),
+                        'has_biometric': bool(getattr(user_account, 'face_encoding', None)),
                         'nama': getattr(user_account, 'nama', None),
                         'nis': getattr(user_account, 'nis', None),
                         'kelas': getattr(user_account, 'kelas', None),
+                        'status': getattr(user_account, 'status', 'Aktif'),
+                        'medical_exemption_until': getattr(user_account, 'medical_exemption_until', None),
+                        'medical_exemption_alasan': getattr(user_account, 'medical_exemption_alasan', None),
+                        'privacy_consent_at': getattr(user_account, 'privacy_consent_at', None),
                         'timestamp': now_ts
                     }
         except Exception as db_err:

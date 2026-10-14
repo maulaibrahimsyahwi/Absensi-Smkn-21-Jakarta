@@ -160,6 +160,7 @@ export default function AbsensiPerpus() {
     eyeState,
     isLiveVerified,
     livenessToken,
+    isOfflineFallback,
     resetLiveness,
   } = useLivenessDetector({
     webcamRef,
@@ -167,10 +168,23 @@ export default function AbsensiPerpus() {
       !isPerpusClosed && !loading && !showPopup && !result && isGpsValid,
     onLiveVerified: (token) => {
       if (token) verifiedTokenRef.current = token;
-      setCountdown(3);
+      setCountdown(0);
+      if (keperluan === "Lainnya") {
+        const img = webcamRef.current?.getScreenshot();
+        if (img) setCapturedImage(img);
+        setShowPopup(true);
+      } else {
+        playSound("shutter");
+        const img = webcamRef.current?.getScreenshot();
+        if (img) {
+          submitKunjungan(img, keperluan);
+        }
+      }
     },
-    pollIntervalMs: 600,
+    pollIntervalMs: 250,
   });
+
+  const isReadyForCapture = isLiveVerified || isOfflineFallback;
 
   // Auto-close popup setelah 30 detik tidak ada aktivitas agar kiosk tidak terblokir
   useEffect(() => {
@@ -178,7 +192,7 @@ export default function AbsensiPerpus() {
     const timer = setTimeout(() => {
       setShowPopup(false);
       setCapturedImage(null);
-      setCountdown(3);
+      setCountdown(0);
       resetLiveness();
     }, 30000);
     return () => clearTimeout(timer);
@@ -190,60 +204,35 @@ export default function AbsensiPerpus() {
     if (!webcamRef.current) return;
     const imageSrc = webcamRef.current.getScreenshot();
     if (imageSrc) {
-      setCapturedImage(imageSrc);
-      setShowPopup(true);
-      setResult(null);
+      if (keperluan === "Lainnya") {
+        setCapturedImage(imageSrc);
+        setShowPopup(true);
+        setResult(null);
+      } else {
+        playSound("shutter");
+        submitKunjungan(imageSrc, keperluan);
+      }
     } else {
       setResult({
         success: false,
         message: "Kamera belum siap menangkap gambar. Mempersiapkan ulang...",
       });
-      setCountdown(3);
+      setCountdown(0);
     }
-  }, [webcamRef, isGpsValid, isPerpusClosed]);
+  }, [webcamRef, isGpsValid, isPerpusClosed, keperluan]);
 
-  const captureFaceRef = useRef<() => void>(() => {});
-  captureFaceRef.current = captureFace;
-
-  // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI & GPS VALID (3 Detik)
-  useEffect(() => {
-    if (
-      isPerpusClosed ||
-      loading ||
-      showPopup ||
-      result ||
-      !isGpsValid ||
-      !isLiveVerified
-    ) {
-      if (!isLiveVerified) setCountdown(3);
-      return;
+  const submitKunjungan = async (
+    eOrImage?: React.FormEvent | string,
+    keperluanOverride?: string,
+  ) => {
+    if (eOrImage && typeof eOrImage === "object" && "preventDefault" in eOrImage) {
+      eOrImage.preventDefault();
     }
+    const targetImage = (typeof eOrImage === "string" ? eOrImage : null) || capturedImage;
+    if (!targetImage) return;
 
-    if (countdown <= 0) {
-      captureFaceRef.current();
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [
-    isPerpusClosed,
-    countdown,
-    isLiveVerified,
-    loading,
-    showPopup,
-    result,
-    isGpsValid,
-  ]);
-
-  const submitKunjungan = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-
-    let finalKeperluan = keperluan;
-    if (keperluan === "Lainnya") {
+    let finalKeperluan = keperluanOverride || keperluan;
+    if (finalKeperluan === "Lainnya") {
       finalKeperluan = customKeperluan.trim() || "Keperluan Lainnya";
     }
 
@@ -253,7 +242,7 @@ export default function AbsensiPerpus() {
 
     try {
       const response = await api.post("/verify_perpus", {
-        image: capturedImage,
+        image: targetImage,
         keperluan: finalKeperluan,
         latitude: geoState.latitude,
         longitude: geoState.longitude,
@@ -266,21 +255,22 @@ export default function AbsensiPerpus() {
       });
       playSound("success");
       setResult({ success: true, message: response.data.message });
+      const resetDelayMs = !isSiswa ? 1600 : 3200;
       setTimeout(() => {
         setResult(null);
         setCustomKeperluan("");
         setKeperluan("Membaca/Belajar");
-        setCountdown(3);
+        setCountdown(0);
         resetLiveness();
-      }, 4000);
+      }, resetDelayMs);
     } catch (err: any) {
       playSound("error");
       const isNetworkOffline =
         !navigator.onLine || err.code === "ERR_NETWORK" || !err.response;
-      if (isNetworkOffline && capturedImage) {
+      if (isNetworkOffline && targetImage) {
         const saved = await enqueueOfflineAttendance({
           mode: isSiswa ? "mandiri" : "kiosk",
-          image: capturedImage,
+          image: targetImage,
           latitude: geoState.latitude,
           longitude: geoState.longitude,
           accuracy: geoState.accuracy,
@@ -303,11 +293,12 @@ export default function AbsensiPerpus() {
           message:
             "Jaringan Terputus: Bukti foto kunjungan perpustakaan tersimpan di Buffer Darurat. Akan otomatis disinkronkan saat online.",
         });
+        const resetDelayMs = !isSiswa ? 1600 : 3200;
         setTimeout(() => {
           setResult(null);
-          setCountdown(3);
+          setCountdown(0);
           resetLiveness();
-        }, 3500);
+        }, resetDelayMs);
         return;
       }
       setResult({
@@ -316,11 +307,12 @@ export default function AbsensiPerpus() {
           err.response?.data?.message ||
           "Wajah tidak cocok atau terjadi kesalahan server. Mencoba kembali...",
       });
+      const resetDelayMs = !isSiswa ? 1600 : 3000;
       setTimeout(() => {
         setResult(null);
-        setCountdown(3);
+        setCountdown(0);
         resetLiveness();
-      }, 3000);
+      }, resetDelayMs);
     } finally {
       setLoading(false);
       setCapturedImage(null);
@@ -446,11 +438,13 @@ export default function AbsensiPerpus() {
         </div>
       ) : (
         <>
-          {/* 1. Kamera Fullscreen Memenuhi Layar */}
+          {/* 1. Kamera Fullscreen Memenuhi Layar (720p Mirrored) */}
           <Webcam
             audio={false}
             ref={webcamRef}
+            mirrored={true}
             screenshotFormat="image/jpeg"
+            screenshotQuality={0.82}
             onUserMediaError={(err) =>
               setCamError(
                 typeof err === "string"
@@ -461,8 +455,8 @@ export default function AbsensiPerpus() {
             }
             videoConstraints={{
               facingMode: "user",
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
             }}
             className="w-full h-full object-cover"
           />
@@ -478,20 +472,21 @@ export default function AbsensiPerpus() {
             loading={loading}
             isLiveVerified={isLiveVerified}
             eyeState={eyeState}
+            isOfflineFallback={isOfflineFallback}
           />
         </>
       )}
 
-      {/* 4. Top Floating Bar */}
+      {/* 4. Top Floating Bar (WCAG 2.1 SC 2.5.5 >= 48x48px Touch Targets) */}
       <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between z-20 pointer-events-auto">
         <Link
           to={backTarget}
           title="Kembali ke Beranda"
           aria-label="Kembali ke Beranda"
-          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs font-bold"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[48px] min-w-[48px] rounded-xl sm:rounded-2xl text-white bg-black/60 hover:bg-black/80 border border-white/20 backdrop-blur-md transition-all shadow-md group active:scale-95 text-xs sm:text-sm font-bold"
         >
           <ArrowLeft
-            className="w-4 h-4 sm:w-5 sm:h-5 transition-transform group-hover:-translate-x-0.5"
+            className="w-5 h-5 transition-transform group-hover:-translate-x-0.5"
             strokeWidth={2.5}
           />
           <span className="hidden sm:inline">Kembali</span>
@@ -499,27 +494,27 @@ export default function AbsensiPerpus() {
 
         {/* GPS Geofence Pill */}
         {geoState.loading ? (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-semibold">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
             <span className="hidden sm:inline">GPS:</span> Cek Radius...
           </div>
         ) : geoState.isWithinRadius ? (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-[11px] sm:text-xs font-semibold">
-            <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-xs font-semibold">
+            <MapPin className="w-4 h-4 text-emerald-500" />
             <span className="hidden sm:inline">Area SMKN 21:</span>{" "}
             <span>{Math.round(geoState.distanceMeters || 0)}m</span>
           </div>
         ) : (
-          <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-950/80 backdrop-blur-md border border-rose-400/50 text-rose-200 text-[11px] sm:text-xs font-semibold">
-            <MapPin className="w-3.5 h-3.5 text-rose-400" />
+          <div className="inline-flex items-center gap-1.5 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-rose-950/80 backdrop-blur-md border border-rose-400/50 text-rose-200 text-xs font-semibold">
+            <MapPin className="w-4 h-4 text-rose-400" />
             <span className="hidden sm:inline">Luar Radius:</span>{" "}
             <span>{formatDistance(geoState.distanceMeters)}</span>
           </div>
         )}
 
-        <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-[11px] sm:text-xs font-semibold shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="font-bold text-emerald-300">
+        <div className="inline-flex items-center gap-2 px-3.5 py-2.5 min-h-[48px] rounded-xl bg-black/60 backdrop-blur-md border border-white/20 text-white text-xs font-semibold shadow-lg">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-bold text-xs sm:text-sm text-emerald-300">
             {currentTime || "00:00:00 WIB"}
           </span>
         </div>
@@ -646,18 +641,55 @@ export default function AbsensiPerpus() {
         </div>
       )}
 
-      {/* 8. Floating Bottom Button: Pindai Langsung & Stepper */}
-      <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex flex-col items-center gap-2.5 z-20 pointer-events-auto px-4 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+      {/* 8. One-Tap Keperluan Dock & Pindai Manual (Touch Target >= 48px) */}
+      <div className="absolute bottom-3 sm:bottom-5 inset-x-2 sm:inset-x-6 flex flex-col items-center gap-2.5 z-20 pointer-events-auto pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]">
+        {/* Dock 5 Tombol Keperluan Horizontal Responsive */}
+        <div className="w-full max-w-2xl bg-black/75 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl border border-white/20 shadow-2xl flex items-center justify-between gap-1.5 overflow-x-auto">
+          {KEPERLUAN_OPTIONS.map((item) => {
+            const Icon = item.icon;
+            const isSelected = keperluan === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setKeperluan(item.id);
+                  if (item.id === "Lainnya") {
+                    const img = webcamRef.current?.getScreenshot();
+                    if (img) setCapturedImage(img);
+                    setShowPopup(true);
+                  }
+                }}
+                className={`flex-1 min-h-[52px] min-w-[68px] sm:min-w-[90px] px-2 py-1.5 rounded-xl text-center flex flex-col items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer ${
+                  isSelected
+                    ? "bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-600/40 ring-2 ring-emerald-400"
+                    : "bg-white/10 hover:bg-white/20 text-slate-300 font-semibold"
+                }`}
+              >
+                <Icon
+                  className={`w-4 h-4 sm:w-5 sm:h-5 ${
+                    isSelected ? "text-white" : "text-emerald-400"
+                  }`}
+                />
+                <span className="text-[10px] sm:text-xs leading-tight line-clamp-1 truncate w-full">
+                  {item.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Floating Action Button untuk Pindai Manual jika dibutuhkan */}
         <button
           onClick={() => {
-            if (!isLiveVerified) return;
+            if (!isReadyForCapture) return;
             setResult(null);
             captureFace();
           }}
-          disabled={loading || showPopup || !isGpsValid || !isLiveVerified}
-          className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-all flex items-center gap-2 sm:gap-2.5 shadow-2xl shadow-emerald-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed"
+          disabled={loading || showPopup || !isGpsValid || !isReadyForCapture}
+          className="px-6 py-2.5 min-h-[48px] rounded-2xl bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-all flex items-center gap-2.5 shadow-2xl shadow-emerald-500/40 active:scale-95 disabled:opacity-50 backdrop-blur-md border border-white/20 text-xs sm:text-sm cursor-pointer disabled:cursor-not-allowed"
         >
-          <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
+          <Camera className="w-5 h-5 flex-shrink-0" />
           <span>
             {isGpsWaiting
               ? "Menunggu GPS..."
@@ -666,7 +698,9 @@ export default function AbsensiPerpus() {
                 : !isFaceDetected
                   ? "Posisikan Wajah"
                   : !isLiveVerified
-                    ? "Kedipkan Mata untuk Absen"
+                    ? isOfflineFallback
+                      ? "Ambil Foto (Offline)"
+                      : "Kedipkan Mata untuk Absen"
                     : "Pindai Langsung"}
           </span>
         </button>
@@ -678,7 +712,7 @@ export default function AbsensiPerpus() {
         onClose={() => {
           setShowPopup(false);
           setCapturedImage(null);
-          setCountdown(3);
+          setCountdown(0);
           resetLiveness();
         }}
         size="sm"
@@ -690,7 +724,7 @@ export default function AbsensiPerpus() {
           onClose={() => {
             setShowPopup(false);
             setCapturedImage(null);
-            setCountdown(3);
+            setCountdown(0);
             resetLiveness();
           }}
         />
@@ -768,7 +802,7 @@ export default function AbsensiPerpus() {
               onClick={() => {
                 setShowPopup(false);
                 setCapturedImage(null);
-                setCountdown(3);
+                setCountdown(0);
                 resetLiveness();
               }}
               className="w-full sm:w-auto"

@@ -69,10 +69,8 @@ export default function ModalPresensiManual({
         const res = await api.get("/siswa", {
           params: { search: studentSearch.trim(), limit: 15 },
         });
-        const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-        const filtered = raw.filter(
-          (s: any) => s.status !== "Alumni",
-        );
+        const raw = Array.isArray(res.data) ? res.data : res.data?.data || [];
+        const filtered = raw.filter((s: any) => s.status !== "Alumni");
         setStudentList(filtered);
         setIsDropdownOpen(filtered.length > 0);
       } catch (err) {
@@ -210,14 +208,16 @@ export default function ModalPresensiManual({
                       className="w-full p-3 text-left hover:bg-blue-50/70 flex items-center justify-between transition cursor-pointer"
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="font-bold text-slate-900 text-xs truncate">{s.nama}</p>
+                        <p className="font-bold text-slate-900 text-xs truncate">
+                          {s.nama}
+                        </p>
                         <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                          NIS: {s.nis} &bull; <span className="font-semibold text-slate-700">{s.kelas}</span>
+                          {s.nis} &bull;{" "}
+                          <span className="font-semibold text-slate-700">
+                            {s.kelas}
+                          </span>
                         </p>
                       </div>
-                      <span className="text-[10px] font-bold text-blue-700 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 shrink-0">
-                        Pilih
-                      </span>
                     </button>
                   ))}
                 </div>
@@ -236,12 +236,14 @@ export default function ModalPresensiManual({
                       {selectedStudent.nama}
                     </p>
                     <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                      NIS: {selectedStudent.nis} &bull; <span className="font-semibold text-slate-700">{selectedStudent.kelas}</span>
+                      {selectedStudent.nis} &bull;{" "}
+                      <span className="font-semibold text-slate-700">
+                        {selectedStudent.kelas}
+                      </span>
                     </p>
                   </div>
                 </div>
                 <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                   Terpilih
                 </span>
               </div>
@@ -250,7 +252,8 @@ export default function ModalPresensiManual({
             {/* Status Presensi */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-700">
-                Status Presensi Hari Ini <span className="text-rose-500">*</span>
+                Status Presensi Hari Ini{" "}
+                <span className="text-rose-500">*</span>
               </label>
               <div className="grid grid-cols-2 gap-2.5">
                 <button
@@ -262,7 +265,6 @@ export default function ModalPresensiManual({
                       : "bg-slate-50/70 border-slate-200/80 text-slate-600 hover:bg-slate-100/70"
                   }`}
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   <span>Hadir Tepat Waktu</span>
                 </button>
                 <button
@@ -274,14 +276,13 @@ export default function ModalPresensiManual({
                       : "bg-slate-50/70 border-slate-200/80 text-slate-600 hover:bg-slate-100/70"
                   }`}
                 >
-                  <Clock className="w-4 h-4 text-amber-600" />
                   <span>Terlambat Masuk</span>
                 </button>
               </div>
             </div>
 
             {/* Alasan Override */}
-            <Field label="Alasan Manual Override" required>
+            <Field label="Alasan Manual" required>
               <CustomDropdown
                 value={alasanOverride}
                 onChange={setAlasanOverride}
@@ -316,10 +317,9 @@ export default function ModalPresensiManual({
             type="submit"
             variant="primary"
             loading={submitting}
-            icon={<UserCheck className="w-4 h-4" />}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-600/20"
           >
-            Simpan Presensi Manual
+            Simpan
           </Button>
         </SheetFooter>
       </form>

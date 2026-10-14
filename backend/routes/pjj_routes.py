@@ -3,7 +3,7 @@ from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from models import db, PengaturanPJJ, Siswa
 from utils.auth_middleware import token_required, role_required
-from utils.helpers import is_kelas_pjj, get_holiday_status, is_school_day
+from utils.helpers import is_kelas_pjj, get_holiday_status, is_school_day, invalidate_school_config_cache
 from utils.realtime_bus import notify_data_changed
 from utils.audit_trail import record_audit_log
 
@@ -198,6 +198,7 @@ def update_pjj_settings():
         cfg.updated_at = datetime.now()
 
         db.session.commit()
+        invalidate_school_config_cache()
         notify_data_changed("pjj")
         notify_data_changed("presensi")
 

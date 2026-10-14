@@ -50,10 +50,13 @@ export default function ModalDispensasiMassal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const kelasOptions: DropdownOption[] = useMemo(() => [
-    { value: "ALL", label: "Semua Kelas" },
-    ...DAFTAR_KELAS_SMKN21.map((k) => ({ value: k, label: k })),
-  ], []);
+  const kelasOptions: DropdownOption[] = useMemo(
+    () => [
+      { value: "ALL", label: "Semua Kelas" },
+      ...DAFTAR_KELAS_SMKN21.map((k) => ({ value: k, label: k })),
+    ],
+    [],
+  );
 
   // Ambil daftar siswa aktif
   useEffect(() => {
@@ -306,7 +309,9 @@ export default function ModalDispensasiMassal({
                 {loadingStudents ? (
                   <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
                     <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs font-medium">Memuat data siswa SMKN 21...</span>
+                    <span className="text-xs font-medium">
+                      Memuat data siswa SMKN 21...
+                    </span>
                   </div>
                 ) : filteredStudents.length === 0 ? (
                   <div className="p-8 text-center text-slate-400 text-xs">
@@ -333,14 +338,19 @@ export default function ModalDispensasiMassal({
                                 : "border-slate-300 bg-white"
                             }`}
                           >
-                            {isChecked && <CheckCircle2 className="w-3.5 h-3.5" />}
+                            {isChecked && (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            )}
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-slate-900 text-xs truncate">
                               {s.nama}
                             </p>
                             <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                              NIS: {s.nis} &bull; <span className="font-semibold text-slate-700">{s.kelas}</span>
+                              {s.nis} &bull;{" "}
+                              <span className="font-semibold text-slate-700">
+                                {s.kelas}
+                              </span>
                             </p>
                           </div>
                         </div>
@@ -361,7 +371,8 @@ export default function ModalDispensasiMassal({
         <SheetFooter>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
             <span className="text-xs text-slate-500 font-medium">
-              Total <b>{selectedIds.size} slip E-Dispensasi</b> akan otomatis dibuat resmi.
+              Total <b>{selectedIds.size} slip E-Dispensasi</b> akan otomatis
+              dibuat resmi.
             </span>
             <div className="flex items-center gap-2 self-end sm:self-auto">
               <Button

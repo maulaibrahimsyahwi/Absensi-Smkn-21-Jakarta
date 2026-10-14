@@ -56,11 +56,18 @@ import jwt
 def get_smart_limiter_key():
     """
     Kunci Rate Limiting Cerdas:
-    - Jika siswa/guru sudah login (membawa token JWT valid dan belum kedaluwarsa), gunakan user_id & role sebagai kunci.
-      Ini memastikan setiap siswa memiliki kuota terpisah, meskipun 1000 siswa menggunakan
-      Wi-Fi SMKN 21 yang sama (NAT Gateway berbagi 1 IP Publik).
+    - Khusus endpoint login (/api/auth/login): Kunci berdasarkan IP dan username/nis target.
+      Mencegah bypass limitasi login dengan menyertakan Authorization header sembarang (AUTH-BYPASS)
+      serta mencegah DoS lockout massal terhadap siswa lain yang berbagi NAT IP sekolah.
+    - Jika siswa/guru sudah login pada endpoint lain (membawa token JWT valid dan belum kedaluwarsa),
+      gunakan user_id & role sebagai kunci.
     - Jika token expired, manipulatif, atau request unauthenticated (belum login), gunakan IP asli yang diverifikasi oleh ProxyFix.
     """
+    if request.endpoint == 'auth.login' or request.path == '/api/auth/login':
+        data = request.get_json(silent=True) or {}
+        target_user = str(data.get('username') or data.get('nis') or '').strip().lower()[:40]
+        return f"login:{get_remote_address()}:{target_user}"
+
     auth = request.headers.get("Authorization")
     if auth and auth.strip().startswith("Bearer "):
         token = auth.strip().split(" ")[1]
@@ -102,10 +109,15 @@ app.register_blueprint(realtime_bp)
 if 'auth.login' in app.view_functions:
     limiter.limit("10 per minute")(app.view_functions['auth.login'])
 
-# Bebaskan endpoint presensi, biometrik, dan realtime agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
-limiter.exempt(biometrik_bp)
+# Bebaskan endpoint presensi dan realtime agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
 limiter.exempt(presensi_bp)
 limiter.exempt(realtime_bp)
+
+# Terapkan kuota rate limit terukur pada endpoint biometrik untuk mencegah DoS inferensi AI (BIO-03)
+if 'biometrik.detect_liveness' in app.view_functions:
+    limiter.limit("120 per minute")(app.view_functions['biometrik.detect_liveness'])
+if 'biometrik.register_face' in app.view_functions:
+    limiter.limit("20 per minute")(app.view_functions['biometrik.register_face'])
 
 # CLI Command untuk inisialisasi basis data secara eksplisit
 @app.cli.command("init-db")
@@ -118,40 +130,66 @@ def init_db_command():
 run_db_migrations(app)
 
 
-# Middleware: Proteksi Dokumen Medis Sensitif (UU PDP No. 27/2022)
+# Middleware: Proteksi Dokumen Medis Sensitif & Tanda Tangan Digital (UU PDP No. 27/2022 & IDOR-02/03)
 @app.before_request
-def protect_medical_records():
+def protect_sensitive_static_files():
     """
-    Melindungi berkas surat izin / surat keterangan dokter dari akses langsung tanpa otorisasi (UU PDP).
-    Mendukung otorisasi via Header 'Authorization: Bearer <token>' maupun query string '?token=<token>'
-    agar tag <img> dan tautan tab baru dapat menampilkan dokumen secara aman dan terverifikasi.
+    Melindungi berkas surat izin dokter (/static/uploads/surat/) dan tanda tangan digital
+    (/static/uploads/signatures/) dari akses langsung tanpa otorisasi sah dan verifikasi kepemilikan.
+    Menolak token via query string '?token=' untuk mencegah kebocoran kredensial ke server log (AUTH-03).
     """
-    if request.path.startswith('/static/uploads/surat/'):
+    norm_path = os.path.normpath(request.path).replace('\\', '/')
+    if norm_path.startswith('/static/uploads/surat/') or norm_path.startswith('/static/uploads/signatures/'):
         auth = request.headers.get("Authorization")
-        token = None
-        if auth and auth.strip().startswith("Bearer "):
-            token = auth.strip().split(" ")[1]
-        elif request.args.get("token"):
-            token = request.args.get("token").strip()
+        if not auth or not auth.strip().startswith("Bearer "):
+            return jsonify({
+                "success": False,
+                "message": "Akses langsung ke berkas sensitif memerlukan header Authorization Bearer yang sah."
+            }), 401
 
-        if not token:
-            return jsonify({
-                "success": False,
-                "message": "Akses dokumen medis rahasia wajib menyertakan token otorisasi yang sah."
-            }), 403
+        token = auth.strip().split(" ")[1]
         try:
-            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
-            role = payload.get("role")
-            if not role:
-                return jsonify({
-                    "success": False,
-                    "message": "Sesi token tidak memiliki kredensial peran yang sah."
-                }), 403
+            import secrets
+            from utils.auth_middleware import decode_token
+            from models import Siswa, PengajuanIzin, User
+            payload = decode_token(token)
+            role = str(payload.get("role", "")).lower()
+            user_id = payload.get("user_id")
+            session_token = payload.get("session_token")
+            fname = os.path.basename(norm_path)
+
+            if role in ["admin", "piket", "staf"]:
+                user_obj = User.query.get(user_id)
+                if not user_obj or not user_obj.active_session_token or not session_token or not secrets.compare_digest(str(session_token), str(user_obj.active_session_token)):
+                    return jsonify({"success": False, "message": "Sesi tidak lagi aktif."}), 401
+                return None
+
+            if role == "siswa":
+                siswa = Siswa.query.get(user_id)
+                if not siswa or not siswa.active_session_token or not session_token or not secrets.compare_digest(str(session_token), str(siswa.active_session_token)):
+                    return jsonify({"success": False, "message": "Sesi siswa tidak lagi aktif."}), 401
+
+                if norm_path.startswith('/static/uploads/surat/'):
+                    owned = PengajuanIzin.query.filter_by(
+                        siswa_id=siswa.id,
+                        surat_bukti=f"/static/uploads/surat/{fname}"
+                    ).first()
+                    if not owned:
+                        return jsonify({"success": False, "message": "Akses ditolak: Anda bukan pemilik dokumen medis ini."}), 403
+                elif norm_path.startswith('/static/uploads/signatures/'):
+                    expected_sig_url = f"/static/uploads/signatures/{fname}"
+                    owns_profile_sig = (siswa.tanda_tangan == expected_sig_url)
+                    owns_izin_sig = PengajuanIzin.query.filter_by(
+                        siswa_id=siswa.id,
+                        tanda_tangan_siswa=expected_sig_url
+                    ).first() is not None
+                    if not (owns_profile_sig or owns_izin_sig):
+                        return jsonify({"success": False, "message": "Akses ditolak: Anda bukan pemilik tanda tangan digital ini."}), 403
+                return None
+
+            return jsonify({"success": False, "message": "Peran tidak memiliki otorisasi."}), 403
         except Exception:
-            return jsonify({
-                "success": False,
-                "message": "Sesi token tidak valid untuk mengakses dokumen medis ini."
-            }), 403
+            return jsonify({"success": False, "message": "Token otorisasi tidak valid atau kedaluwarsa."}), 401
 
 
 # Server Start Time untuk pelacakan Uptime
@@ -213,19 +251,63 @@ def health_check():
 # Middleware: Security Headers
 @app.after_request
 def set_security_headers(response):
+    # 1. Cegah MIME-sniffing & Clickjacking
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
-    # Content-Security-Policy untuk melindungi aplikasi dari XSS dan framing ilegal
-    response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "img-src 'self' data: blob:; "
-        "style-src 'self' 'unsafe-inline'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co; "
-        "frame-ancestors 'self';"
+    # Nonaktifkan XSS Auditor lawas yang rentan XS-Leaks; andalkan CSP modern
+    response.headers['X-XSS-Protection'] = '0'
+
+    # 2. Isolasi Cross-Origin & Proteksi Sensor Hardware (Kamera & GPS hanya untuk origin sekolah)
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
+    response.headers['Permissions-Policy'] = (
+        "camera=(self), "
+        "geolocation=(self), "
+        "microphone=(), "
+        "usb=(), "
+        "payment=(), "
+        "accelerometer=(), "
+        "gyroscope=(), "
+        "magnetometer=()"
     )
+
+    # 3. Aktifkan HSTS jika koneksi berjalan di atas HTTPS (Reverse Proxy Nginx / Production)
+    if request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https':
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
+    # 4. Content-Security-Policy (CSP):
+    # Jangan timpa jika endpoint dokumen/lampiran sudah menyetel CSP ketat (misal "default-src 'none'")
+    if 'Content-Security-Policy' not in response.headers:
+        if request.path.startswith('/static/uploads/') or '/lampiran' in request.path or '/dokumen/' in request.path:
+            # Sandbox ketat untuk semua berkas unggahan (gambar/PDF tidak boleh menjalankan script)
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'none'; "
+                "img-src 'self' data:; "
+                "style-src 'unsafe-inline'; "
+                "sandbox;"
+            )
+            response.headers['Content-Disposition'] = response.headers.get(
+                'Content-Disposition', 'inline'
+            )
+        else:
+            # CSP Utama Aplikasi PWA React/Vite (Tanpa 'unsafe-eval', mengunci object-src & base-uri)
+            script_src = "'self' 'unsafe-inline'" if app.debug else "'self'"
+            response.headers['Content-Security-Policy'] = (
+                "default-src 'self'; "
+                f"script-src {script_src}; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' data: https://fonts.gstatic.com; "
+                "img-src 'self' data: blob:; "
+                "media-src 'self' blob: mediastream:; "
+                "connect-src 'self' https://*.supabase.co wss://*.supabase.co; "
+                "worker-src 'self' blob:; "
+                "manifest-src 'self'; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'; "
+                "frame-ancestors 'self';"
+            )
     return response
 
 

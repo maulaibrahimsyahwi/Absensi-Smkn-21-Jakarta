@@ -53,6 +53,51 @@ let cache: OfflineAttendanceEntry[] = [];
 let initialized = false;
 let inFlight: Promise<SyncOfflineResult> | null = null;
 
+const TIME_ANCHOR_KEY = "smkn21_server_time_anchor";
+
+/**
+ * Menyimpan patokan waktu server resmi (Monotonic Time Anchor).
+ * Memetakan selisih server_epoch_ms terhadap performance.now() browser
+ * agar jam offline kebal dari manipulasi mundurnya jam lokal HP siswa.
+ */
+export function setServerTimeAnchor(serverTimestampStr: string): void {
+  try {
+    const serverMs = new Date(serverTimestampStr).getTime();
+    if (!isNaN(serverMs) && typeof window !== "undefined") {
+      const anchor = {
+        serverMs,
+        clientPerfNow: performance.now(),
+      };
+      sessionStorage.setItem(TIME_ANCHOR_KEY, JSON.stringify(anchor));
+    }
+  } catch {
+    // Abaikan jika sessionStorage tidak tersedia
+  }
+}
+
+/**
+ * Menghitung estimasi waktu resmi server berdasarkan patokan monotonic performance.now().
+ */
+export function getEstimatedServerDate(): Date {
+  try {
+    if (typeof window !== "undefined") {
+      const raw = sessionStorage.getItem(TIME_ANCHOR_KEY);
+      if (raw) {
+        const anchor = JSON.parse(raw);
+        if (anchor.serverMs && typeof anchor.clientPerfNow === "number") {
+          const elapsed = performance.now() - anchor.clientPerfNow;
+          if (elapsed >= 0 && elapsed < 86400000) {
+            return new Date(anchor.serverMs + elapsed);
+          }
+        }
+      }
+    }
+  } catch {
+    // Fallback ke jam lokal
+  }
+  return new Date();
+}
+
 const emit = (name: string, detail?: unknown) => {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(name, { detail }));
@@ -60,7 +105,7 @@ const emit = (name: string, detail?: unknown) => {
 };
 
 const nowWib = (): string =>
-  new Date().toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" }); // e.g. "2026-10-07 04:45:00"
+  getEstimatedServerDate().toLocaleString("sv-SE", { timeZone: "Asia/Jakarta" }); // e.g. "2026-10-07 04:45:00"
 
 const generateEntryId = (): string =>
   "off_" +
@@ -137,12 +182,13 @@ export async function enqueueOfflineAttendance(
     await initOfflineQueue();
   }
 
+  const estDate = getEstimatedServerDate();
   const entry: OfflineAttendanceEntry = {
     ...input,
     id: generateEntryId(),
     status: input.status || "Tepat Waktu", // Label awal untuk tampilan offline; status resmi dihitung ulang oleh server
     waktu: input.waktu || nowWib(),
-    captured_at: new Date().toISOString(),
+    captured_at: estDate.toISOString(),
     device_id: input.device_id || null,
     notes: "Tersimpan di buffer offline",
   };
@@ -180,18 +226,18 @@ export function registerPwaBackgroundSync(): void {
 
 /**
  * Menyinkronkan antrean presensi darurat offline ke server.
- * Menggunakan kunci inFlight tunggal untuk mencegah duplikasi pengiriman konkuren.
+ * Memproses secara kronologis (paling pagi lebih dulu), melakukan deduplikasi,
+ * dan menggunakan Web Locks API lintas tab agar tidak terjadi balapan data ganda.
  */
 export function syncOfflineQueueToServer(): Promise<SyncOfflineResult> {
   if (inFlight) return inFlight;
 
-  inFlight = (async (): Promise<SyncOfflineResult> => {
+  const runSync = async (): Promise<SyncOfflineResult> => {
     if (!initialized) {
       await initOfflineQueue();
     }
 
-    const batch = [...cache];
-    if (batch.length === 0) {
+    if (cache.length === 0) {
       return { success: true, count: 0 };
     }
 
@@ -205,10 +251,39 @@ export function syncOfflineQueueToServer(): Promise<SyncOfflineResult> {
       };
     }
 
+    // 1. Urutkan berdasarkan captured_at paling pagi (ASC) agar rekaman Tepat Waktu diproses lebih dulu
+    const sortedBatch = [...cache].sort(
+      (a, b) => Date.parse(a.captured_at) - Date.parse(b.captured_at),
+    );
+
+    // 2. Deduplikasi sisi klien untuk siswa mandiri pada tanggal & tipe yang sama (ambil yang paling pagi)
+    const seenMandiriKey = new Set<string>();
+    const redundantIds: string[] = [];
+    const batchToSend: OfflineAttendanceEntry[] = [];
+
+    for (const item of sortedBatch) {
+      const datePart = (item.waktu || item.captured_at).slice(0, 10);
+      const dedupKey =
+        item.mode === "mandiri" && item.expected_siswa_id
+          ? `${item.tipe || "harian"}:${item.expected_siswa_id}:${datePart}`
+          : null;
+      if (dedupKey && seenMandiriKey.has(dedupKey)) {
+        redundantIds.push(item.id);
+      } else {
+        if (dedupKey) seenMandiriKey.add(dedupKey);
+        batchToSend.push(item);
+      }
+    }
+
+    if (redundantIds.length > 0) {
+      cache = cache.filter((e) => !redundantIds.includes(e.id));
+      await deleteManyFromIdb(redundantIds);
+    }
+
     let totalDecided = 0;
     try {
-      for (let i = 0; i < batch.length; i += CHUNK_SIZE) {
-        const part = batch.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < batchToSend.length; i += CHUNK_SIZE) {
+        const part = batchToSend.slice(i, i + CHUNK_SIZE);
         const res: SyncOfflineResponse = await presensiService.syncOffline(part);
 
         if (!res || !res.success) {
@@ -257,10 +332,36 @@ export function syncOfflineQueueToServer(): Promise<SyncOfflineResult> {
         error: err instanceof Error ? err.message : String(err),
       };
     }
-  })().finally(() => {
+  };
+
+  // Cegah balapan sinkronisasi multi-tab menggunakan Web Locks API
+  if (
+    typeof navigator !== "undefined" &&
+    "locks" in navigator &&
+    navigator.locks?.request
+  ) {
+    inFlight = navigator.locks.request(
+      "smkn21_offline_sync_lock",
+      { ifAvailable: true },
+      async (lock) => {
+        if (!lock) {
+          return {
+            success: true,
+            count: 0,
+            message: "Sinkronisasi antrean sedang dikerjakan oleh tab lain.",
+          };
+        }
+        return await runSync();
+      },
+    ).finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  }
+
+  inFlight = runSync().finally(() => {
     inFlight = null;
   });
-
   return inFlight;
 }
 

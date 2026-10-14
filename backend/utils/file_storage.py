@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import base64
 from datetime import datetime
@@ -13,111 +14,151 @@ SURAT_EDARAN_DIR = os.path.join(UPLOADS_BASE, 'surat_edaran')
 for d in [UPLOADS_BASE, SIGNATURES_DIR, AVATARS_DIR, SURAT_DIR, SURAT_EDARAN_DIR]:
     os.makedirs(d, exist_ok=True)
 
+ALLOWED_SUBFOLDERS = {
+    'signatures': {'max_bytes': 250 * 1024, 'allow_pdf': False},
+    'avatars': {'max_bytes': 600 * 1024, 'allow_pdf': False},
+    'surat': {'max_bytes': 5 * 1024 * 1024, 'allow_pdf': True},
+    'surat_edaran': {'max_bytes': 10 * 1024 * 1024, 'allow_pdf': True},
+}
+
+# Daftar tag berbahaya pada dokumen PDF (mencegah PDF XSS / Launch Action / Polyglot)
+DANGEROUS_PDF_PATTERNS = re.compile(
+    rb'/(JavaScript|JS|Launch|EmbeddedFiles|RichMedia|XFA|AA|OpenAction)\b',
+    re.IGNORECASE
+)
+
+MAX_IMAGE_DIMENSION = 4096  # Cegah Image Decompression Bomb (Pixel Flood)
+
 
 def save_base64_file(base64_str, subfolder='signatures', prefix='file', watermark_text=None):
     """
-    Menyimpan data URI Base64 ke berkas fisik disk server secara aman.
-    Mencegah membengkaknya basis data PostgreSQL akibat string Base64 yang masif.
-    
-    :param base64_str: String data URI base64 (e.g. data:image/png;base64,...) atau path yang sudah tersimpan
-    :param subfolder: Subdirektori di dalam /static/uploads (e.g. 'signatures', 'avatars', 'surat')
-    :param prefix: Prefix nama berkas
-    :param watermark_text: Teks watermark kontekstual untuk mencegah penyalahgunaan dokumen (UU PDP)
-    :return: Path URL relatif (e.g. /static/uploads/signatures/sig_123.png) atau string asli jika bukan base64
+    Menyimpan Data URI Base64 ke disk server dengan validasi keamanan berlapis (OWASP File Upload):
+    1. Validasi Subfolder & Ukuran Maksimum per Kategori
+    2. Validasi Ketat Magic Bytes (PNG, JPEG, WEBP, dan PDF opsional)
+    3. Sanitasi PDF (blokir /JavaScript, /Launch, /OpenAction) & Re-encoding Citra via OpenCV (100% bebas EXIF/Polyglot)
+    4. Sanitasi Nama File (UUID + Alphanumeric Prefix) & Proteksi Path Traversal
+
+    Mengembalikan path URL relatif jika sukses, atau None jika tidak valid.
     """
     if not base64_str or not isinstance(base64_str, str):
         return None
 
-    # Jika sudah berupa path file di server atau URL, kembalikan langsung
-    if not base64_str.startswith('data:image'):
-        return base64_str
+    if subfolder not in ALLOWED_SUBFOLDERS:
+        print(f"[SECURITY ALERT] Subfolder upload '{subfolder}' tidak diizinkan.")
+        return None
+
+    policy = ALLOWED_SUBFOLDERS[subfolder]
+    max_bytes = policy['max_bytes']
+    allow_pdf = policy['allow_pdf']
+
+    # Wajib berformat Data URI (data:<mime>;base64,<payload>) — menolak path/URL eksternal
+    if not base64_str.startswith('data:') or ';base64,' not in base64_str[:100]:
+        print(f"[SECURITY ALERT] Format input pada '{subfolder}' bukan Data URI Base64 yang sah.")
+        return None
 
     try:
         header, encoded = base64_str.split(',', 1)
-        file_bytes = base64.b64decode(encoded)
 
-        # 1. Validasi Magic Bytes (A05 & A08 OWASP Top 10)
+        # Cegah DoS memori sebelum dekode base64 (ukuran base64 ~ 4/3 ukuran biner)
+        if len(encoded) > int(max_bytes * 1.4) + 1024:
+            print(f"[SECURITY ALERT] Payload Base64 pada '{subfolder}' melebihi batas ukuran ({max_bytes} bytes).")
+            return None
+
+        file_bytes = base64.b64decode(encoded, validate=True)
+        if len(file_bytes) == 0 or len(file_bytes) > max_bytes:
+            print(f"[SECURITY ALERT] Ukuran biner '{subfolder}' ({len(file_bytes)} B) di luar batas.")
+            return None
+
+        # 1. Validasi Magic Bytes Biner (File Signature)
         is_png = file_bytes.startswith(b'\x89PNG\r\n\x1a\n')
         is_jpeg = file_bytes.startswith(b'\xff\xd8\xff')
         is_webp = file_bytes.startswith(b'RIFF') and len(file_bytes) >= 12 and file_bytes[8:12] == b'WEBP'
+        is_pdf = allow_pdf and file_bytes.startswith(b'%PDF-1.') and (b'%%EOF' in file_bytes[-1024:])
 
-        if not (is_png or is_jpeg or is_webp):
-            print(f"[SECURITY ALERT] Magic bytes biner tidak valid pada berkas {subfolder}. Ditolak demi integritas sistem.")
+        if not (is_png or is_jpeg or is_webp or is_pdf):
+            print(f"[SECURITY ALERT] Magic bytes biner tidak sah pada '{subfolder}'.")
             return None
 
-        # Sinkronisasi ekstensi dengan magic bytes terverifikasi
-        if is_jpeg:
-            ext = 'jpg'
-        elif is_webp:
-            ext = 'webp'
-        else:
-            ext = 'png'
-
-        target_dir = os.path.join(UPLOADS_BASE, subfolder)
+        target_dir = os.path.realpath(os.path.join(UPLOADS_BASE, subfolder))
         os.makedirs(target_dir, exist_ok=True)
 
-        # 2. Sanitasi & Pembersihan 100% Metadata EXIF via OpenCV (UU PDP No. 27/2022 Pasal 35)
-        import cv2
-        import numpy as np
+        # 2A. Jika Berkas adalah PDF (Khusus Surat Izin / Surat Dokter / Surat Edaran)
+        if is_pdf:
+            if DANGEROUS_PDF_PATTERNS.search(file_bytes):
+                print("[SECURITY ALERT] Dokumen PDF mengandung objek aktif/script berbahaya. Ditolak!")
+                return None
+            ext = 'pdf'
+        else:
+            # 2B. Jika Berkas adalah Citra (PNG / JPEG / WEBP): Dekode & Re-encode via OpenCV
+            import cv2
+            import numpy as np
 
-        np_arr = np.frombuffer(file_bytes, np.uint8)
-        read_flag = cv2.IMREAD_UNCHANGED if subfolder == 'signatures' else cv2.IMREAD_COLOR
-        img = cv2.imdecode(np_arr, read_flag)
+            ext = 'jpg' if is_jpeg else ('webp' if is_webp else 'png')
+            np_arr = np.frombuffer(file_bytes, np.uint8)
+            read_flag = cv2.IMREAD_UNCHANGED if subfolder == 'signatures' else cv2.IMREAD_COLOR
+            img = cv2.imdecode(np_arr, read_flag)
 
-        if img is None:
-            print(f"[SECURITY ALERT] Gagal mendekode citra biner {subfolder}. File kemungkinan korup.")
-            return None
+            if img is None or img.size == 0:
+                print(f"[SECURITY ALERT] Gagal mendekode struktur piksel citra pada '{subfolder}'.")
+                return None
 
-        # Kepatuhan UU PDP No. 27/2022: Watermarking Dokumen Medis & Surat Izin
-        if watermark_text:
-            try:
-                h, w = img.shape[:2]
-                overlay = img.copy()
+            h, w = img.shape[:2]
+            if h > MAX_IMAGE_DIMENSION or w > MAX_IMAGE_DIMENSION or (h * w) > 12_000_000:
+                print(f"[SECURITY ALERT] Dimensi citra terlalu ekstrem ({w}x{h}). Indikasi Decompression Bomb.")
+                return None
 
-                font = cv2.FONT_HERSHEY_SIMPLEX
-                scale = max(0.45, min(w / 750.0, 1.1))
-                thickness = max(1, int(scale * 2))
+            # Watermarking Kontekstual UU PDP untuk Surat Bukti Medis/Izin
+            if watermark_text and subfolder == 'surat':
+                try:
+                    overlay = img.copy()
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    scale = max(0.45, min(w / 750.0, 1.1))
+                    thickness = max(1, int(scale * 2))
+                    (tw, th), _ = cv2.getTextSize(watermark_text, font, scale, thickness)
+                    tx, ty = max(10, (w - tw) // 2), max(th + 10, h // 2)
+                    cv2.putText(overlay, watermark_text, (tx, ty), font, scale, (0, 0, 220), thickness, cv2.LINE_AA)
 
-                (tw, th), _ = cv2.getTextSize(watermark_text, font, scale, thickness)
-                tx = max(10, (w - tw) // 2)
-                ty = max(th + 10, h // 2)
+                    # Footer proteksi tambahan
+                    footer_text = "VERIFIKASI RESMI SMKN 21 JAKARTA - TIDAK BERLAKU DI LUAR SEKOLAH"
+                    f_scale = max(0.35, min(w / 1100.0, 0.75))
+                    (fw, fh), _ = cv2.getTextSize(footer_text, font, f_scale, 1)
+                    fx = max(10, (w - fw) // 2)
+                    fy = h - 12
 
-                # Watermark teks di tengah
-                cv2.putText(overlay, watermark_text, (tx, ty), font, scale, (0, 0, 220), thickness, cv2.LINE_AA)
+                    cv2.rectangle(overlay, (0, max(0, h - 30)), (w, h), (20, 20, 20), -1)
+                    cv2.putText(overlay, footer_text, (fx, fy), font, f_scale, (255, 255, 255), 1, cv2.LINE_AA)
 
-                # Footer proteksi tambahan
-                footer_text = "VERIFIKASI RESMI SMKN 21 JAKARTA - TIDAK BERLAKU DI LUAR SEKOLAH"
-                f_scale = max(0.35, min(w / 1100.0, 0.75))
-                (fw, fh), _ = cv2.getTextSize(footer_text, font, f_scale, 1)
-                fx = max(10, (w - fw) // 2)
-                fy = h - 12
+                    cv2.addWeighted(overlay, 0.32, img, 0.68, 0, img)
+                except Exception:
+                    pass
 
-                cv2.rectangle(overlay, (0, max(0, h - 30)), (w, h), (20, 20, 20), -1)
-                cv2.putText(overlay, footer_text, (fx, fy), font, f_scale, (255, 255, 255), 1, cv2.LINE_AA)
-
-                # Alpha blend overlay 30% ke gambar asli
-                alpha = 0.32
-                cv2.addWeighted(overlay, alpha, img, 1.0 - alpha, 0, img)
-            except Exception as e_wm:
-                print(f"[WATERMARK WARNING] Gagal memberi watermark dokumen: {e_wm}")
-
-        # Re-encode biner: Membuang 100% metadata EXIF (GPS, informasi kamera, serial, timestamp kamera)
-        encode_ext = '.jpg' if ext == 'jpg' else ('.webp' if ext == 'webp' else '.png')
-        encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85] if ext == 'jpg' else ([cv2.IMWRITE_WEBP_QUALITY, 85] if ext == 'webp' else [cv2.IMWRITE_PNG_COMPRESSION, 6])
-        success, enc_buf = cv2.imencode(encode_ext, img, encode_params)
-        if success:
+            # Re-encode citra: menghancurkan 100% metadata EXIF dan payload poliglot tersembunyi
+            encode_ext = f".{ext}"
+            encode_params = (
+                [cv2.IMWRITE_JPEG_QUALITY, 85] if ext == 'jpg' else
+                ([cv2.IMWRITE_WEBP_QUALITY, 85] if ext == 'webp' else [cv2.IMWRITE_PNG_COMPRESSION, 6])
+            )
+            success, enc_buf = cv2.imencode(encode_ext, img, encode_params)
+            if not success:
+                return None
             file_bytes = enc_buf.tobytes()
 
-        filename = f"{prefix}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}.{ext}"
-        filepath = os.path.join(target_dir, filename)
+        # 3. Sanitasi Nama File & Verifikasi Kanonik Path Traversal
+        clean_prefix = re.sub(r'[^a-zA-Z0-9_-]', '', str(prefix or 'file'))[:40] or 'file'
+        filename = f"{clean_prefix}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:12]}.{ext}"
+        filepath = os.path.realpath(os.path.join(target_dir, filename))
+
+        if not filepath.startswith(target_dir + os.sep):
+            print("[SECURITY ALERT] Percobaan Path Traversal terdeteksi dan diblokir!")
+            return None
 
         with open(filepath, 'wb') as f:
             f.write(file_bytes)
 
         return f"/static/uploads/{subfolder}/{filename}"
     except Exception as e:
-        print(f"[FILE_STORAGE ERROR] Gagal menyimpan file base64 ke disk ({subfolder}): {e}")
-        return base64_str
+        print(f"[FILE_STORAGE ERROR] Upload ditolak ({subfolder}): {e}")
+        return None
 
 
 def delete_uploaded_file(relative_url):
@@ -133,7 +174,11 @@ def delete_uploaded_file(relative_url):
 
     try:
         rel_clean = relative_url.lstrip('/')
-        full_path = os.path.join(BASE_DIR, rel_clean)
+        full_path = os.path.realpath(os.path.join(BASE_DIR, rel_clean))
+        uploads_root = os.path.realpath(UPLOADS_BASE)
+        if not full_path.startswith(uploads_root + os.sep):
+            print(f"[SECURITY ALERT] Percobaan path traversal pada penghapusan file ({relative_url}).")
+            return False
         if os.path.exists(full_path) and os.path.isfile(full_path):
             os.remove(full_path)
             return True
@@ -141,4 +186,3 @@ def delete_uploaded_file(relative_url):
         print(f"[FILE_STORAGE ERROR] Gagal menghapus file fisik ({relative_url}): {e}")
 
     return False
-

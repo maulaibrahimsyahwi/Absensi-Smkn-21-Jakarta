@@ -141,8 +141,17 @@ export interface GpsPositionSample {
   longitude: number;
   accuracy?: number | null;
   altitude?: number | null;
+  speed?: number | null;
   timestamp?: number;
   isMock?: boolean;
+  gps_samples?: Array<{
+    latitude: number;
+    longitude: number;
+    accuracy?: number | null;
+    altitude?: number | null;
+    speed?: number | null;
+    timestamp?: number;
+  }>;
 }
 
 // Variabel penyimpan sampel GPS sebelumnya untuk mendeteksi anomali koordinat beku (Zero-Drift)
@@ -246,47 +255,140 @@ export function getCurrentLocation(options: PositionOptions = {}): Promise<GpsPo
       ...options,
     };
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const rawPos: GpsPositionSample = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy || 0,
-          altitude: position.coords.altitude,
-          timestamp: position.timestamp || Date.now(),
-        };
+    const samples: GpsPositionSample[] = [];
+    let watchId: number | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
 
-        const mockCheck = detectMockGps(rawPos);
-
-        if (mockCheck.isMock) {
-          reject(new Error(mockCheck.reason));
-          return;
+    const cleanup = () => {
+      if (watchId !== null) {
+        try {
+          navigator.geolocation.clearWatch(watchId);
+        } catch {
+          // ignore
         }
+        watchId = null;
+      }
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
 
-        // Simpan sampel yang valid untuk deteksi zero-drift berikutnya
-        lastGpsSample = rawPos;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
 
-        resolve({
-          latitude: rawPos.latitude,
-          longitude: rawPos.longitude,
-          accuracy: Math.round(rawPos.accuracy || 0),
-          altitude: rawPos.altitude,
-          timestamp: rawPos.timestamp,
-          isMock: false,
-        });
-      },
-      (error) => {
-        let msg = "Gagal membaca titik lokasi perangkat.";
-        if (error.code === error.PERMISSION_DENIED) {
-          msg = "Izin akses lokasi ditolak oleh pengguna/browser";
-        } else if (error.code === error.POSITION_UNAVAILABLE) {
-          msg = "Sinyal GPS atau informasi lokasi tidak tersedia";
-        } else if (error.code === error.TIMEOUT) {
-          msg = "Waktu pencarian sinyal lokasi habis";
+      if (samples.length === 0) {
+        reject(new Error("Gagal membaca titik lokasi perangkat. Sinyal GPS tidak tersedia."));
+        return;
+      }
+
+      const latest = samples[samples.length - 1];
+
+      // Verifikasi mock location: gunakan sampel sebelumnya dari burst atau riwayat sebelumnya
+      const prevPos = samples.length > 1 ? samples[0] : lastGpsSample;
+      let mockCheck = detectMockGps(latest, prevPos);
+
+      // Multi-Sample Micro-Jitter & Zero-Drift Check
+      if (!mockCheck.isMock && samples.length >= 2) {
+        const s0 = samples[0];
+        const sEnd = samples[samples.length - 1];
+        const timeDiff = Math.abs((sEnd.timestamp || 0) - (s0.timestamp || 0));
+        // Sensor GPS hardware asli selalu memiliki micro-jitter pada floating point; 0.0 mutlak adalah sintetis
+        if (
+          timeDiff >= 400 &&
+          s0.latitude === sEnd.latitude &&
+          s0.longitude === sEnd.longitude &&
+          s0.accuracy === sEnd.accuracy
+        ) {
+          mockCheck = {
+            isMock: true,
+            reason: "Sinyal sensor GPS membeku secara sintetis (Zero-Drift Mock Location).",
+          };
         }
-        reject(new Error(msg));
-      },
-      defaultOptions,
-    );
+      }
+
+      if (mockCheck.isMock) {
+        reject(new Error(mockCheck.reason));
+        return;
+      }
+
+      lastGpsSample = latest;
+
+      resolve({
+        latitude: latest.latitude,
+        longitude: latest.longitude,
+        accuracy: latest.accuracy, // Presisi desimal asli, TANPA Math.round()
+        altitude: latest.altitude,
+        speed: latest.speed,
+        timestamp: latest.timestamp,
+        isMock: false,
+        gps_samples: samples.map((s) => ({
+          latitude: s.latitude,
+          longitude: s.longitude,
+          accuracy: s.accuracy,
+          altitude: s.altitude,
+          speed: s.speed,
+          timestamp: s.timestamp,
+        })),
+      });
+    };
+
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const rawPos: GpsPositionSample = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy, // unrounded float
+            altitude: position.coords.altitude,
+            speed: position.coords.speed,
+            timestamp: position.timestamp || Date.now(),
+          };
+
+          samples.push(rawPos);
+
+          // Cek instan jika akurasi jelas sintetis/invalid
+          if (rawPos.accuracy !== undefined && rawPos.accuracy !== null) {
+            if (rawPos.accuracy <= 0 || (rawPos.accuracy > 0 && rawPos.accuracy < 1.8)) {
+              finish();
+              return;
+            }
+          }
+
+          if (samples.length >= 3) {
+            finish();
+          }
+        },
+        (error) => {
+          if (samples.length === 0) {
+            settled = true;
+            cleanup();
+            let msg = "Gagal membaca titik lokasi perangkat.";
+            if (error.code === error.PERMISSION_DENIED) {
+              msg = "Izin akses lokasi ditolak oleh pengguna/browser";
+            } else if (error.code === error.POSITION_UNAVAILABLE) {
+              msg = "Sinyal GPS atau informasi lokasi tidak tersedia";
+            } else if (error.code === error.TIMEOUT) {
+              msg = "Waktu pencarian sinyal lokasi habis";
+            }
+            reject(new Error(msg));
+          } else {
+            finish();
+          }
+        },
+        defaultOptions,
+      );
+
+      // Kumpulkan sampel dalam jeda 1.2 detik (burst sampling)
+      timer = setTimeout(() => {
+        finish();
+      }, 1200);
+    } catch (e: unknown) {
+      cleanup();
+      reject(e instanceof Error ? e : new Error("Gagal mengaktifkan sensor lokasi."));
+    }
   });
 }

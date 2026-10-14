@@ -8,6 +8,7 @@ export interface FaceSilhouetteGuideProps {
   isLiveVerified?: boolean;
   eyeState?: "UNKNOWN" | "OPEN" | "CLOSED" | string;
   progress?: number;
+  isOfflineFallback?: boolean;
 }
 
 export default function FaceSilhouetteGuide({
@@ -18,21 +19,38 @@ export default function FaceSilhouetteGuide({
   isLiveVerified = false,
   eyeState = "UNKNOWN",
   progress,
+  isOfflineFallback = false,
 }: FaceSilhouetteGuideProps) {
   const isBlue = theme === "blue";
-  const activeColor = isLiveVerified
-    ? "#34d399"
-    : isDetected
-      ? isBlue
-        ? "#60a5fa"
-        : "#34d399"
-      : "rgba(255,255,255,0.85)";
 
-  const glowColor = isLiveVerified
-    ? "rgba(16, 185, 129, 0.75)"
-    : isBlue
-      ? "rgba(59, 130, 246, 0.65)"
-      : "rgba(16, 185, 129, 0.65)";
+  // Hirarki 4-Warna Dynamic Ring:
+  // 1. Live Verified -> Emerald Green (#10b981)
+  // 2. Mata Terpejam / Proses Kedip -> Pulsing Cyan (#06b6d4)
+  // 3. Wajah Terdeteksi & Terbuka -> Electric Blue (#3b82f6) / Emerald Theme (#10b981)
+  // 4. Standby / Mencari Wajah -> Faded White Dashed (rgba(255,255,255,0.45))
+  let activeColor = "rgba(255, 255, 255, 0.45)";
+  let glowColor = "rgba(0, 0, 0, 0.5)";
+  let strokeDash = "12 8";
+  let strokeWidth = "2.5";
+
+  if (isLiveVerified) {
+    activeColor = "#10b981";
+    glowColor = "rgba(16, 185, 129, 0.85)";
+    strokeDash = "none";
+    strokeWidth = "3.5";
+  } else if (isDetected) {
+    strokeDash = "none";
+    strokeWidth = "3.5";
+    if (eyeState === "CLOSED") {
+      activeColor = "#06b6d4";
+      glowColor = "rgba(6, 182, 212, 0.85)";
+    } else {
+      activeColor = isBlue ? "#3b82f6" : "#10b981";
+      glowColor = isBlue
+        ? "rgba(59, 130, 246, 0.75)"
+        : "rgba(16, 185, 129, 0.75)";
+    }
+  }
 
   // Kalkulasi progress lingkaran countdown (radius = 44)
   const radius = 44;
@@ -48,13 +66,13 @@ export default function FaceSilhouetteGuide({
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10 select-none px-4">
       <div className="relative flex flex-col items-center justify-center">
-        {/* SVG Siluet Wajah Proporsional, Luas & Pas untuk HP serta Tablet */}
+        {/* SVG Siluet Wajah Proporsional, Disesuaikan untuk Tablet Landscape 10" (1280x800) & HP */}
         <svg
           viewBox="0 0 380 500"
           role="img"
           aria-label="Siluet panduan posisi wajah"
-          className={`w-[88vw] max-w-[340px] sm:max-w-[440px] md:max-w-[490px] lg:max-w-[530px] h-auto max-h-[68dvh] sm:max-h-[74dvh] transition-all duration-300 ${
-            isDetected ? "scale-100 opacity-100" : "scale-[0.98] opacity-85"
+          className={`w-[82vw] max-w-[320px] sm:max-w-[380px] lg:max-w-[420px] h-auto max-h-[58dvh] sm:max-h-[62dvh] transition-all duration-300 ${
+            isDetected ? "scale-100 opacity-100" : "scale-[0.98] opacity-75"
           }`}
           style={{
             filter: isDetected
@@ -73,8 +91,8 @@ export default function FaceSilhouetteGuide({
                C 48 85, 105 32, 190 32 Z"
             fill="none"
             stroke={activeColor}
-            strokeWidth={isDetected ? "3.5" : "2.5"}
-            strokeDasharray={isDetected ? "none" : "12 8"}
+            strokeWidth={strokeWidth}
+            strokeDasharray={strokeDash}
             strokeLinecap="round"
             className="transition-all duration-300"
           />
@@ -136,6 +154,10 @@ export default function FaceSilhouetteGuide({
             isLiveVerified ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-emerald-950/90 border-emerald-400 text-emerald-200 animate-in fade-in zoom-in-95">
                 <span className="truncate">Wajah Teridentifikasi</span>
+              </span>
+            ) : isOfflineFallback ? (
+              <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-amber-950/90 border-amber-400 text-amber-200 animate-pulse">
+                <span className="truncate">Mode Offline: Tahan Posisi Wajah</span>
               </span>
             ) : eyeState === "CLOSED" ? (
               <span className="inline-flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-bold border backdrop-blur-md shadow-lg bg-cyan-950/90 border-cyan-400 text-cyan-200 animate-pulse">

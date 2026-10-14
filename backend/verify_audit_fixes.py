@@ -16,7 +16,7 @@ from models import (
     db, User, Siswa, PengaturanJadwal, PelanggaranSiswa, 
     AbsensiHarian, PengajuanIzin, IzinPiket
 )
-from utils.auth_middleware import generate_token
+from utils.auth_middleware import generate_token, invalidate_account_cache
 
 def run_tests():
     client = app.test_client()
@@ -125,6 +125,20 @@ def run_tests():
         assert test_siswa.two_factor_enabled is False and test_siswa.two_factor_secret is None
         print("[PASS] 6. Admin 2FA Reset Endpoint (/api/siswa/<id>/reset_2fa)")
 
+        # Matikan flag must_change_password dan login ulang (karena reset_2fa mencabut sesi aktif siswa)
+        test_siswa.must_change_password = False
+        db.session.commit()
+        invalidate_account_cache('siswa', test_siswa.id)
+
+        res_s_relogin = client.post('/api/auth/login', json={
+            'username': 'TEST9999',
+            'nis': 'TEST9999',
+            'password': 'TEST9999'
+        })
+        assert res_s_relogin.status_code == 200
+        siswa_token = res_s_relogin.json['token']
+        siswa_headers = {'Authorization': f'Bearer {siswa_token}'}
+
         # 6. Test Pelanggaran Tamper-Proof & Status Verifikasi
         # Siswa self-reports violation: tries to set point to 1 (cheat)
         res_pelanggaran = client.post('/api/pelanggaran', headers=siswa_headers, json={
@@ -133,7 +147,7 @@ def run_tests():
             'siswa_id': test_siswa.id,
             'kelas': test_siswa.kelas,
             'tanggal_waktu': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'jenis_pelanggaran': 'Datang terlambat masuk sekolah',
+            'jenis_pelanggaran': 'Terlambat masuk sekolah',
             'poin': 1, # Attempts to tamper
             'nama_penanggung_jawab': 'Mandiri',
             'tanda_tangan_siswa': 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
@@ -165,7 +179,8 @@ def run_tests():
         assert pel_check is not None, "Violation history was erroneously deleted on student soft delete!"
         print("[PASS] 9. Dapodik Soft Delete (is_deleted=True, status='Mutasi', history preserved)")
 
-        # Clean up test violation and student
+        # Clean up test violation, attendance, and student
+        AbsensiHarian.query.filter_by(siswa_id=test_siswa.id).delete()
         db.session.delete(pel_check)
         db.session.delete(test_siswa)
         db.session.commit()

@@ -313,12 +313,12 @@ def run_storage_cleanup():
                     if val and isinstance(val, str) and not val.startswith('data:'):
                         referenced_files.add(os.path.basename(val))
 
-            for pi in PengajuanIzin.query.with_entities(PengajuanIzin.file_surat, PengajuanIzin.tanda_tangan_siswa).all():
+            for pi in PengajuanIzin.query.with_entities(PengajuanIzin.surat_bukti, PengajuanIzin.tanda_tangan_siswa).all():
                 for val in pi:
                     if val and isinstance(val, str) and not val.startswith('data:'):
                         referenced_files.add(os.path.basename(val))
 
-            for ps in PelanggaranSiswa.query.with_entities(PelanggaranSiswa.bukti_foto, PelanggaranSiswa.tanda_tangan_ortu, PelanggaranSiswa.tanda_tangan_guru).all():
+            for ps in PelanggaranSiswa.query.with_entities(PelanggaranSiswa.tanda_tangan_siswa).all():
                 for val in ps:
                     if val and isinstance(val, str) and not val.startswith('data:'):
                         referenced_files.add(os.path.basename(val))

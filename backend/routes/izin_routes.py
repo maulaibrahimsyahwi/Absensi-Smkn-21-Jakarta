@@ -163,7 +163,18 @@ def submit_pengajuan_izin():
     try:
         # Simpan foto surat keterangan fisik di folder disk server (menghemat RAM & database)
         file_path_surat = save_base64_surat(surat_bukti, prefix=f"surat_{siswa.nis}")
+        if not file_path_surat:
+            return jsonify({
+                "success": False,
+                "message": "Format atau isi berkas Surat Bukti tidak valid! Hanya berkas gambar asli (JPG/PNG/WEBP) atau PDF resmi (maksimal 5 MB) yang diizinkan."
+            }), 400
+
         saved_ttd = save_base64_file(tanda_tangan_siswa, subfolder='signatures', prefix=f"sig_izin_{siswa.nis}")
+        if not saved_ttd:
+            return jsonify({
+                "success": False,
+                "message": "Format tanda tangan digital tidak valid (wajib citra PNG/JPG maksimal 250 KB)."
+            }), 400
 
         pengajuan = PengajuanIzin(
             siswa_id=siswa.id,
@@ -209,10 +220,22 @@ def get_pengajuan_izin():
 @token_required
 @role_required(['piket', 'admin', 'siswa'])
 def get_single_pengajuan_izin(id):
-    """Mengambil rincian pengajuan izin lengkap dengan tanda tangan digital siswa."""
+    """Mengambil rincian pengajuan izin dengan validasi kepemilikan ketat (Anti-IDOR)."""
     pengajuan = PengajuanIzin.query.options(joinedload(PengajuanIzin.siswa)).filter_by(id=id).first()
     if not pengajuan:
         return jsonify({"success": False, "message": "Data pengajuan tidak ditemukan."}), 404
+
+    current_u = getattr(request, 'current_user', {})
+    role = str(current_u.get('role', '')).lower()
+    user_id = current_u.get('user_id')
+
+    # FIX IDOR-01: Siswa hanya diizinkan melihat pengajuan miliknya sendiri
+    if role == 'siswa' and str(pengajuan.siswa_id) != str(user_id):
+        return jsonify({
+            "success": False,
+            "message": "Akses ditolak: Anda tidak memiliki izin untuk melihat dokumen medis/perizinan siswa lain."
+        }), 403
+
     return jsonify({"success": True, "data": pengajuan.to_dict(include_signature=True)})
 
 
@@ -324,22 +347,24 @@ def get_dokumen_surat(filename):
     """
     current_u = getattr(request, 'current_user', {})
     role = str(current_u.get('role', '')).lower()
+    safe_fname = os.path.basename(filename)  # Cegah path traversal & wildcard injection
+    expected_path = f"/static/uploads/surat/{safe_fname}"
 
     response = None
     if role in ['admin', 'piket', 'staf']:
-        response = send_from_directory(UPLOAD_SURAT_DIR, filename)
+        response = send_from_directory(UPLOAD_SURAT_DIR, safe_fname)
     elif role == 'siswa':
         siswa_id = current_u.get('user_id')
         owned = PengajuanIzin.query.filter(
             PengajuanIzin.siswa_id == siswa_id,
-            PengajuanIzin.surat_bukti.like(f"%{filename}%")
+            (PengajuanIzin.surat_bukti == expected_path) | (PengajuanIzin.surat_bukti.like(f"%{safe_fname}%"))
         ).first()
         if owned:
-            response = send_from_directory(UPLOAD_SURAT_DIR, filename)
+            response = send_from_directory(UPLOAD_SURAT_DIR, safe_fname)
         else:
             return jsonify({
                 "success": False,
-                "message": "Akses ditolak: Dokumen medis/kesehatan ini dilindungi UU PDP dan hanya dapat dilihat oleh pemilik atau pihak sekolah berwenang."
+                "message": "Akses ditolak: Dokumen medis ini dilindungi UU PDP dan hanya dapat diakses oleh pemiliknya."
             }), 403
     else:
         return jsonify({"success": False, "message": "Akses ditolak."}), 403

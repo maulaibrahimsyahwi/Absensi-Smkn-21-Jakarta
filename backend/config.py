@@ -43,13 +43,26 @@ if 'sqlite' in _raw_db_url.lower():
 SQLALCHEMY_DATABASE_URI = _raw_db_url
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-# Connection Pool untuk PostgreSQL / Supabase PgBouncer (Aman terhadap batas koneksi & anti-freeze)
+# Connection Pool untuk PostgreSQL / Supabase Transaction Mode Pooler (Port 6543)
+# Dioptimalkan untuk beban puncak 1.000+ siswa (anti-freeze, hemat network RTT, fail-fast)
+_connect_args = {}
+if '+pg8000' not in _raw_db_url:
+    _connect_args = {
+        "connect_timeout": 5,
+        "options": "-c statement_timeout=8000",
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
+
 SQLALCHEMY_ENGINE_OPTIONS = {
-    "pool_size": 15,
+    "pool_size": 20,       # Sesuaikan >= jumlah worker threads (16) agar thread tidak antre di pool lokal
     "max_overflow": 20,
-    "pool_recycle": 300,   # Segarkan koneksi idle setiap 5 menit agar tidak di-drop pooler
-    "pool_pre_ping": True,  # Cek keaktifan koneksi sebelum digunakan
-    "pool_timeout": 30,    # Batas toleransi antrean koneksi
+    "pool_recycle": 180,   # Recycle tiap 3 menit sebelum diputus idle oleh Supavisor / PgBouncer
+    "pool_pre_ping": False, # Matikan SELECT 1 pre-ping untuk menghemat 1 network RTT (~20ms) per request di jam sibuk
+    "pool_timeout": 10,    # Fail-fast (10s) daripada menggantung worker thread selama 30s
+    "connect_args": _connect_args,
 }
 
 

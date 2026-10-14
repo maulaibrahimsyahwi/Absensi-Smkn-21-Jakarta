@@ -40,6 +40,18 @@ def notify_data_changed(module_name="all"):
                     _modules_timestamp[k] = now
             else:
                 _modules_timestamp[mod_key] = now
+
+        if isinstance(module_name, (list, tuple, set)):
+            keys = [str(m).strip().lower() for m in module_name]
+        else:
+            keys = [str(module_name).strip().lower()]
+        if any(k in ("libur", "pjj", "piket", "all") for k in keys):
+            try:
+                from utils.helpers import invalidate_school_config_cache
+                invalidate_school_config_cache()
+            except Exception:
+                pass
+
         return _current_version
 
 

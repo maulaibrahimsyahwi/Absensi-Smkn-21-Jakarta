@@ -521,24 +521,6 @@ export default function PortalSiswa(): React.JSX.Element {
 
           {/* Sisi Kanan: Dropdown Notifikasi & Profil (Desktop) */}
           <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => openProfile("profil")}
-              title="Profil Pengguna & Pengaturan Akun"
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-            >
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Profil"}
-                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-                />
-              ) : (
-                <User className="w-4 h-4 text-blue-200" />
-              )}
-              <span>Profil</span>
-            </button>
-
             <NotificationDropdown
               notifications={
                 notifikasiList.length > 0
@@ -735,6 +717,136 @@ export default function PortalSiswa(): React.JSX.Element {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tombol Aksi Cepat Siswa (Hanya Tampil di Laptop / Desktop; di HP & Tablet sudah ada di BottomNav) */}
+      {!isAlumni && (
+        <div className="hidden lg:grid lg:grid-cols-3 gap-4">
+          {user?.terdaftar ? (
+            <Link
+              to="/harian"
+              className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-blue-300"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white shrink-0">
+                  <Camera className="w-5 h-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 truncate">
+                    Presensi Harian
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">
+                    {personalData?.status_hari_ini?.is_holiday
+                      ? "Sedang Libur"
+                      : personalData?.status_hari_ini?.is_special_school_day
+                        ? "Masuk Khusus"
+                        : "Scan wajah mandiri"}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5 shrink-0" />
+            </Link>
+          ) : (
+            <div
+              onClick={() =>
+                setNotification({
+                  type: "error",
+                  message:
+                    "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
+                })
+              }
+              className="group flex items-center justify-between rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 cursor-not-allowed select-none opacity-80"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-200/70 text-slate-500 shrink-0">
+                  <Camera className="w-5 h-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-bold text-slate-600 truncate">
+                      Presensi Harian
+                    </h3>
+                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">
+                    Wajib biometrik wajah
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {user?.terdaftar ? (
+            <Link
+              to="/izin"
+              className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-amber-300"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-amber-50 text-amber-600 transition-colors group-hover:bg-amber-600 group-hover:text-white shrink-0">
+                  <FileText className="w-5 h-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 truncate">
+                    Surat Izin / Sakit
+                  </h3>
+                  <p className="text-xs text-slate-500 truncate">
+                    Formulir mandiri
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5 shrink-0" />
+            </Link>
+          ) : (
+            <div
+              onClick={() =>
+                setNotification({
+                  type: "error",
+                  message:
+                    "Lakukan perekaman biometrik wajah melalui Admin / Tata Usaha terlebih dahulu",
+                })
+              }
+              className="group flex items-center justify-between rounded-2xl border border-slate-200/60 bg-slate-50/80 p-4 cursor-not-allowed select-none opacity-80"
+            >
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <span className="grid h-11 w-11 place-items-center rounded-xl bg-slate-200/70 text-slate-500 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-bold text-slate-600 truncate">
+                      Surat Izin / Sakit
+                    </h3>
+                    <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">
+                    Wajib biometrik wajah
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Catat / Pengakuan Pelanggaran Mandiri Siswa */}
+          <Link
+            to="/pelanggaran"
+            className="card-lift press group flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs hover:border-rose-300"
+          >
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-rose-50 text-rose-600 transition-colors group-hover:bg-rose-600 group-hover:text-white shrink-0">
+                <ShieldAlert className="w-5 h-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-bold text-slate-800 truncate">
+                  Catat Pelanggaran
+                </h3>
+                <p className="text-xs text-slate-500 truncate">
+                  Formulir pengakuan mandiri
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-0.5 shrink-0" />
+          </Link>
         </div>
       )}
 

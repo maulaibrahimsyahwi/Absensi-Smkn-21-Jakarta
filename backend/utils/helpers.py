@@ -1,11 +1,13 @@
 import re
 import math
 import json
+import threading
+import time as _time_mod
 import numpy as np
 from datetime import datetime, time, timedelta
 import calendar
-from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK, WIB
-from models import Siswa
+from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK, WIB, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE
+from models import Siswa, AbsensiHarian
 
 def now_wib():
     """
@@ -133,7 +135,124 @@ def is_point_in_polygon(lat, lon, polygon):
     return inside
 
 
-def get_holiday_status(dt=None):
+def verify_anti_fake_gps(siswa_id, latitude, longitude, accuracy, is_mock=False, gps_samples=None, now_dt=None, is_kiosk=False):
+    """
+    Validasi berlapis Anti-Fake GPS & Mock Location di sisi server:
+    1. Flag eksplisit & batas fisik akurasi sensor
+    2. Entropi multi-sampel (Zero-Drift & Linear Joystick Detection)
+    3. Deteksi Shared Pin-Drop lintas siswa (2+ siswa di titik koordinat identik <0.1m)
+    4. Deteksi Titik Pusat Presisi 0 Meter (pin buatan)
+    """
+    if is_mock:
+        return False, "Terdeteksi penggunaan fitur lokasi palsu (Mock Location)."
+
+    try:
+        lat = float(latitude)
+        lon = float(longitude)
+        acc = float(accuracy) if accuracy is not None and accuracy != '' else None
+    except (TypeError, ValueError):
+        return False, "Format koordinat lokasi GPS tidak valid."
+
+    # 1. Validasi batas fisik akurasi GPS smartphone di lingkungan gedung sekolah
+    if acc is not None:
+        if acc <= 0 or acc < 1.8:
+            return False, f"Akurasi GPS ({acc}m) tidak wajar (indikasi emulator/Fake GPS)."
+        if acc > 120:
+            return False, f"Sinyal GPS terlalu lemah/tidak akurat (±{int(acc)}m). Pindah ke area terbuka dekat gerbang."
+
+    # 2. Tolak koordinat yang menempel persis di titik pusat konfigurasi sekolah (<0.5 meter)
+    dist_center = calculate_distance_meters(lat, lon, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE)
+    if dist_center is not None and dist_center < 0.5 and abs(lat - SEKOLAH_LATITUDE) < 1e-6:
+        return False, "Koordinat identik dengan titik tengah peta konfigurasi (indikasi pin Fake GPS)."
+
+    # 3. Analisis deret sampel (Multi-Sample Zero-Drift Check) jika dikirim oleh klien
+    if isinstance(gps_samples, list) and len(gps_samples) >= 2:
+        s0, s1 = gps_samples[0], gps_samples[-1]
+        try:
+            d_lat = abs(float(s1.get("latitude", 0)) - float(s0.get("latitude", 0)))
+            d_lon = abs(float(s1.get("longitude", 0)) - float(s0.get("longitude", 0)))
+            d_acc = abs(float(s1.get("accuracy", 0)) - float(s0.get("accuracy", 0)))
+            # Sensor GPS perangkat keras asli memiliki thermal/atmospheric jitter; 0.0000000 mutlak adalah sintetis
+            if d_lat == 0.0 and d_lon == 0.0 and d_acc == 0.0:
+                return False, "Sinyal sensor GPS membeku secara sintetis (Zero-Drift Mock Location)."
+        except Exception:
+            pass
+
+    # 4. Deteksi Shared Spoof Pin: Cek apakah ada siswa lain dalam 15 menit terakhir
+    # yang mengirim koordinat identik persis hingga 6 desimal (~0.11 meter)
+    # (Catatan: dilewati untuk mode kiosk sekolah di mana banyak siswa scan di perangkat yang sama)
+    if not is_kiosk and siswa_id:
+        now = now_dt or now_wib()
+        recent_window = now - timedelta(minutes=15)
+        identical_pin = AbsensiHarian.query.filter(
+            AbsensiHarian.siswa_id != siswa_id,
+            AbsensiHarian.waktu >= recent_window,
+            AbsensiHarian.latitude.between(lat - 1e-6, lat + 1e-6),
+            AbsensiHarian.longitude.between(lon - 1e-6, lon + 1e-6)
+        ).first()
+        if identical_pin:
+            return False, "Titik koordinat GPS terdeteksi identik persis dengan perangkat lain (indikasi koordinat Fake GPS bersama)."
+
+    return True, "Valid"
+
+
+# ==============================================================================
+# CACHE KONFIGURASI OPERASIONAL SEKOLAH (TTL 60 Detik)
+# Menggabungkan PengaturanJadwal, PengaturanPJJ, dan HariLibur hari ini di RAM
+# Mengeliminasi 6-7 query SQL redundan pada setiap transaksi presensi jam sibuk
+# ==============================================================================
+_CONFIG_CACHE_LOCK = threading.Lock()
+_SCHOOL_CONFIG_CACHE = {
+    "date": None,
+    "expires_at": 0,
+    "jadwal_dict": None,
+    "pjj_dict": None,
+    "holiday_status": None,
+}
+
+def invalidate_school_config_cache():
+    """Panggil saat Admin/Piket mengubah Jadwal, Mode Darurat, PJJ, atau Hari Libur."""
+    with _CONFIG_CACHE_LOCK:
+        _SCHOOL_CONFIG_CACHE["expires_at"] = 0
+
+def get_cached_school_context(dt=None):
+    """
+    Mengambil konteks operasional harian (Holiday, Jadwal, PJJ) dari RAM cache (TTL 60 detik).
+    Mengeliminasi 6-7 query SQL berulang pada setiap request presensi.
+    """
+    now = dt if dt is not None else now_wib()
+    cur_date = now.date() if isinstance(now, datetime) else now
+    ts = _time_mod.time()
+
+    if _SCHOOL_CONFIG_CACHE["date"] == cur_date and ts < _SCHOOL_CONFIG_CACHE["expires_at"]:
+        return _SCHOOL_CONFIG_CACHE
+
+    with _CONFIG_CACHE_LOCK:
+        if _SCHOOL_CONFIG_CACHE["date"] == cur_date and ts < _SCHOOL_CONFIG_CACHE["expires_at"]:
+            return _SCHOOL_CONFIG_CACHE
+
+        try:
+            from models import PengaturanJadwal, PengaturanPJJ
+            cfg_jadwal = PengaturanJadwal.query.first()
+            cfg_pjj = PengaturanPJJ.query.first()
+            h_status = get_holiday_status(now, use_cache=False)
+            _SCHOOL_CONFIG_CACHE.update({
+                "date": cur_date,
+                "expires_at": ts + 60.0,
+                "jadwal_dict": cfg_jadwal.to_dict() if cfg_jadwal else None,
+                "pjj_dict": cfg_pjj.to_dict() if cfg_pjj else None,
+                "holiday_status": h_status,
+            })
+        except Exception as e:
+            print(f"[CACHE WARNING] Gagal refresh school context cache: {e}")
+            if not _SCHOOL_CONFIG_CACHE["date"]:
+                _SCHOOL_CONFIG_CACHE["date"] = cur_date
+                _SCHOOL_CONFIG_CACHE["expires_at"] = ts + 10.0
+
+        return _SCHOOL_CONFIG_CACHE
+
+
+def get_holiday_status(dt=None, use_cache=True):
     """
     Mengecek status operasional sekolah untuk tanggal tertentu.
     Mempertimbangkan:
@@ -143,6 +262,12 @@ def get_holiday_status(dt=None):
     """
     now = dt if dt is not None else now_wib()
     cur_date = now.date() if isinstance(now, datetime) else now
+
+    if use_cache and cur_date == today_wib():
+        ctx = get_cached_school_context(now)
+        cached_h = ctx.get("holiday_status")
+        if cached_h:
+            return cached_h
     nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now.weekday()]
     is_weekend_cal = now.weekday() >= 5
 
@@ -253,9 +378,10 @@ def is_school_day(dt=None):
 
 def get_active_schedule(dt=None):
     """
-    Mengambil konfigurasi jadwal jam operasional presensi yang aktif secara dinamis dari database.
+    Mengambil konfigurasi jadwal jam operasional presensi yang aktif secara dinamis.
     Mendukung penyesuaian khusus (Normal, Puasa, Ujian, Hari Jumat)
     dan Mode Darurat Jaringan dengan toleransi keterlambatan.
+    Menggunakan RAM cache (0 ms) pada jam sibuk.
     """
     now = dt if dt is not None else now_wib()
     w_mulai = WAKTU_MULAI_MASUK
@@ -264,35 +390,62 @@ def get_active_schedule(dt=None):
     toleransi = 0
     keterangan = "Normal"
 
-    try:
-        from models import PengaturanJadwal
-        cfg = PengaturanJadwal.query.first()
-        if cfg:
-            # Parse waktu mulai masuk
-            if cfg.jam_mulai_masuk:
-                parts = [int(p) for p in cfg.jam_mulai_masuk.split(':')]
-                w_mulai = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+    cur_date = now.date() if isinstance(now, datetime) else now
+    cfg_dict = None
+    if cur_date == today_wib():
+        ctx = get_cached_school_context(now)
+        cfg_dict = ctx.get("jadwal_dict")
 
-            # Jika hari Jumat (weekday 4), gunakan jam batas Jumat jika disetel
-            is_jumat = now.weekday() == 4
-            target_batas_str = cfg.jam_batas_jumat if (is_jumat and cfg.jam_batas_jumat) else cfg.jam_batas_masuk
+    if cfg_dict:
+        # Gunakan cache in-memory (0 ms, no SQL query)
+        jam_mulai_s = cfg_dict.get('jam_mulai_masuk')
+        if jam_mulai_s:
+            parts = [int(p) for p in jam_mulai_s.split(':')]
+            w_mulai = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
 
-            if target_batas_str:
-                parts = [int(p) for p in target_batas_str.split(':')]
-                w_batas = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+        is_jumat = now.weekday() == 4
+        jam_batas_j = cfg_dict.get('jam_batas_jumat')
+        target_batas_str = jam_batas_j if (is_jumat and jam_batas_j) else cfg_dict.get('jam_batas_masuk')
+        if target_batas_str:
+            parts = [int(p) for p in target_batas_str.split(':')]
+            w_batas = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
 
-            mode_darurat = bool(cfg.mode_darurat_jaringan)
-            toleransi = int(cfg.toleransi_darurat_menit or 0)
-            keterangan = cfg.keterangan or "Jadwal Dinamis"
+        mode_darurat = bool(cfg_dict.get('mode_darurat_jaringan'))
+        toleransi = int(cfg_dict.get('toleransi_darurat_menit') or 0)
+        keterangan = cfg_dict.get('keterangan') or "Jadwal Dinamis"
 
-            # Jika Mode Darurat Jaringan aktif, tambahkan toleransi menit ke jam batas masuk
-            if mode_darurat and toleransi > 0:
-                base_dt = datetime.combine(now.date(), w_batas)
-                extended_dt = base_dt + timedelta(minutes=toleransi)
-                w_batas = extended_dt.time()
-                keterangan += f" (Mode Darurat Jaringan: +{toleransi}m)"
-    except Exception:
-        pass
+        if mode_darurat and toleransi > 0:
+            base_dt = datetime.combine(now.date(), w_batas)
+            extended_dt = base_dt + timedelta(minutes=toleransi)
+            w_batas = extended_dt.time()
+            keterangan += f" (Mode Darurat Jaringan: +{toleransi}m)"
+    else:
+        try:
+            from models import PengaturanJadwal
+            cfg = PengaturanJadwal.query.first()
+            if cfg:
+                if cfg.jam_mulai_masuk:
+                    parts = [int(p) for p in cfg.jam_mulai_masuk.split(':')]
+                    w_mulai = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+
+                is_jumat = now.weekday() == 4
+                target_batas_str = cfg.jam_batas_jumat if (is_jumat and cfg.jam_batas_jumat) else cfg.jam_batas_masuk
+
+                if target_batas_str:
+                    parts = [int(p) for p in target_batas_str.split(':')]
+                    w_batas = time(parts[0], parts[1], parts[2] if len(parts) > 2 else 0)
+
+                mode_darurat = bool(cfg.mode_darurat_jaringan)
+                toleransi = int(cfg.toleransi_darurat_menit or 0)
+                keterangan = cfg.keterangan or "Jadwal Dinamis"
+
+                if mode_darurat and toleransi > 0:
+                    base_dt = datetime.combine(now.date(), w_batas)
+                    extended_dt = base_dt + timedelta(minutes=toleransi)
+                    w_batas = extended_dt.time()
+                    keterangan += f" (Mode Darurat Jaringan: +{toleransi}m)"
+        except Exception:
+            pass
 
     return {
         "waktu_mulai": w_mulai,
@@ -333,16 +486,12 @@ def is_kelas_pjj(kelas_str, dt=None):
     """
     Mengecek apakah kelas siswa tertentu sedang dalam Mode PJJ (Pembelajaran Jarak Jauh).
     Mengembalikan tuple: (is_pjj: bool, keterangan: str)
+    Menggunakan in-memory cache RAM untuk performa tinggi tanpa query database berulang.
     """
     if not kelas_str:
         return False, ""
     
     try:
-        from models import PengaturanPJJ
-        cfg = PengaturanPJJ.query.first()
-        if not cfg or not cfg.is_active:
-            return False, ""
-
         now = dt if dt is not None else now_wib()
         cur_date = now.date() if isinstance(now, datetime) else now
 
@@ -350,16 +499,36 @@ def is_kelas_pjj(kelas_str, dt=None):
         if not is_school_day(now):
             return False, ""
 
-        # Validasi rentang tanggal jika disetel
-        if cfg.tanggal_mulai and cur_date < cfg.tanggal_mulai:
-            return False, ""
-        if cfg.tanggal_selesai and cur_date > cfg.tanggal_selesai:
+        cfg_pjj = None
+        if cur_date == today_wib():
+            ctx = get_cached_school_context(now)
+            cfg_pjj = ctx.get("pjj_dict")
+
+        if not cfg_pjj:
+            from models import PengaturanPJJ
+            db_pjj = PengaturanPJJ.query.first()
+            cfg_pjj = db_pjj.to_dict() if db_pjj else None
+
+        if not cfg_pjj or not cfg_pjj.get('is_active'):
             return False, ""
 
+        # Validasi rentang tanggal jika disetel
+        t_mulai = cfg_pjj.get('tanggal_mulai')
+        t_selesai = cfg_pjj.get('tanggal_selesai')
+        if t_mulai:
+            t_m_date = datetime.strptime(t_mulai, '%Y-%m-%d').date() if isinstance(t_mulai, str) else t_mulai
+            if cur_date < t_m_date:
+                return False, ""
+        if t_selesai:
+            t_s_date = datetime.strptime(t_selesai, '%Y-%m-%d').date() if isinstance(t_selesai, str) else t_selesai
+            if cur_date > t_s_date:
+                return False, ""
+
         # 1. Jika lingkup PJJ adalah seluruh sekolah
-        if cfg.tipe_lingkup == "semua":
-            ket = cfg.keterangan or "PJJ Seluruh Sekolah"
-            return True, ket
+        tipe_lingkup = cfg_pjj.get('tipe_lingkup')
+        ket = cfg_pjj.get('keterangan')
+        if tipe_lingkup == "semua":
+            return True, ket or "PJJ Seluruh Sekolah"
 
         kelas_upper = str(kelas_str).strip().upper()
 
@@ -373,27 +542,19 @@ def is_kelas_pjj(kelas_str, dt=None):
             tingkat = "X"
 
         # 2. Jika lingkup PJJ berbasis tingkat
-        if cfg.tipe_lingkup == "tingkat":
-            try:
-                tingkat_list = json.loads(cfg.tingkat_aktif or "[]")
-            except Exception:
-                tingkat_list = []
-            
+        if tipe_lingkup == "tingkat":
+            tingkat_raw = cfg_pjj.get('tingkat_aktif')
+            tingkat_list = json.loads(tingkat_raw) if isinstance(tingkat_raw, str) else (tingkat_raw or [])
             if tingkat and tingkat in tingkat_list:
-                ket = cfg.keterangan or f"PJJ Tingkat {tingkat}"
-                return True, ket
+                return True, ket or f"PJJ Tingkat {tingkat}"
             return False, ""
 
         # 3. Jika lingkup PJJ berbasis kelas spesifik
-        if cfg.tipe_lingkup == "kelas":
-            try:
-                kelas_list = json.loads(cfg.kelas_aktif or "[]")
-            except Exception:
-                kelas_list = []
-            
+        if tipe_lingkup == "kelas":
+            kelas_raw = cfg_pjj.get('kelas_aktif')
+            kelas_list = json.loads(kelas_raw) if isinstance(kelas_raw, str) else (kelas_raw or [])
             if kelas_upper in [k.upper() for k in kelas_list]:
-                ket = cfg.keterangan or f"PJJ Kelas {kelas_upper}"
-                return True, ket
+                return True, ket or f"PJJ Kelas {kelas_upper}"
             return False, ""
 
         return False, ""
@@ -402,61 +563,135 @@ def is_kelas_pjj(kelas_str, dt=None):
         return False, ""
 
 
-# Cache in-memory biometrik wajah siswa untuk mitigasi lonjakan jam 05:00-06:30 WIB
+# ==============================================================================
+# CACHE BIOMETRIK WAJAH SISWA TERDEKRIPSI (TTL 30 Menit)
+# Dilindungi Double-Checked Locking untuk mencegah Cache Stampede saat Rush Hour
+# Menyimpan array float32 terdekripsi per-siswa agar bebas dari dekripsi Fernet berulang
+# ==============================================================================
+class NormalizedArray(np.ndarray):
+    """Subclass NumPy ndarray untuk menandai matriks encoding yang telah dinormalisasi (Unit Norm)."""
+    _is_normalized = True
+
+_FACE_CACHE_LOCK = threading.Lock()
 _FACE_CACHE = {
     "encodings": [],
     "siswa_ids": [],
+    "by_siswa_id": {},  # {siswa_id: {"encodings": list, "med_until": date}}
     "last_updated": 0,
-    "ttl": 60  # simpan di RAM selama 60 detik
+    "ttl": 1800  # 30 menit (mencakup seluruh jam sibuk presensi pagi 06:00-06:30 WIB)
 }
 
-def invalidate_face_cache():
-    """Memaksa reload cache biometrik pada saat ada siswa baru mendaftar atau reset wajah."""
-    _FACE_CACHE["last_updated"] = 0
+def invalidate_face_cache(siswa_id=None):
+    """
+    Memaksa reload cache biometrik pada saat ada siswa baru mendaftar atau reset wajah.
+    Jika siswa_id diberikan, hanya invalidasi entri siswa tersebut tanpa mereset 1.000 siswa lain.
+    """
+    with _FACE_CACHE_LOCK:
+        if siswa_id is not None:
+            try:
+                sid = int(siswa_id)
+                _FACE_CACHE["by_siswa_id"].pop(sid, None)
+            except Exception:
+                pass
+            _FACE_CACHE["last_updated"] = 0
+        else:
+            _FACE_CACHE["by_siswa_id"].clear()
+            _FACE_CACHE["encodings"] = []
+            _FACE_CACHE["siswa_ids"] = []
+            _FACE_CACHE["last_updated"] = 0
 
 def get_flattened_known_faces():
     """
     Mengambil dan meratakan seluruh sampel biometrik wajah siswa yang berstatus 'Aktif'
-    menggunakan in-memory cache cepat untuk performa tinggi tanpa query ulang database SQLite.
+    menggunakan Double-Checked Locking untuk efisiensi tinggi tanpa race condition.
     """
-    import time
-    now = time.time()
-    if _FACE_CACHE["encodings"] and (now - _FACE_CACHE["last_updated"] < _FACE_CACHE["ttl"]):
+    now = _time_mod.time()
+    if len(_FACE_CACHE["encodings"]) > 0 and (now - _FACE_CACHE["last_updated"] < _FACE_CACHE["ttl"]):
         return _FACE_CACHE["encodings"], _FACE_CACHE["siswa_ids"]
 
-    siswa_list = Siswa.query.filter(
-        Siswa.face_encoding != None,
-        (Siswa.status == 'Aktif') | (Siswa.status == None),
-        (Siswa.is_deleted == False) | (Siswa.is_deleted == None)
-    ).all()
-    encodings = []
-    siswa_ids = []
-    for s in siswa_list:
-        try:
-            raw = s.get_encoding()
-            # Check if multi-sample (list of lists)
-            if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list):
-                for enc in raw:
-                    encodings.append(enc)
+    with _FACE_CACHE_LOCK:
+        # Double check di dalam lock
+        if len(_FACE_CACHE["encodings"]) > 0 and (now - _FACE_CACHE["last_updated"] < _FACE_CACHE["ttl"]):
+            return _FACE_CACHE["encodings"], _FACE_CACHE["siswa_ids"]
+
+        siswa_list = Siswa.query.filter(
+            Siswa.face_encoding != None,
+            (Siswa.status == 'Aktif') | (Siswa.status == None),
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None)
+        ).all()
+
+        encodings = []
+        siswa_ids = []
+        by_siswa_id = {}
+
+        for s in siswa_list:
+            try:
+                raw = s.get_encoding()
+                s_encs = []
+                if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list):
+                    for enc in raw:
+                        encodings.append(enc)
+                        siswa_ids.append(s.id)
+                        s_encs.append(enc)
+                elif isinstance(raw, list) and len(raw) > 0:
+                    encodings.append(raw)
                     siswa_ids.append(s.id)
-            elif isinstance(raw, list):
-                encodings.append(raw)
-                siswa_ids.append(s.id)
-        except Exception:
-            continue
+                    s_encs.append(raw)
 
-    if encodings:
-        known_mat = np.array(encodings, dtype=np.float32)
-        norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        known_mat_norm = known_mat / norms
-        setattr(known_mat_norm, '_is_normalized', True)
-        cached_encodings = known_mat_norm
-    else:
-        cached_encodings = []
+                by_siswa_id[s.id] = {
+                    "encodings": s_encs,
+                    "med_until": s.medical_exemption_until
+                }
+            except Exception:
+                continue
 
-    _FACE_CACHE["encodings"] = cached_encodings
-    _FACE_CACHE["siswa_ids"] = siswa_ids
-    _FACE_CACHE["last_updated"] = now
-    return cached_encodings, siswa_ids
+        if encodings:
+            known_mat = np.array(encodings, dtype=np.float32)
+            norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            cached_encodings = (known_mat / norms).view(NormalizedArray)
+        else:
+            cached_encodings = []
+
+        _FACE_CACHE["encodings"] = cached_encodings
+        _FACE_CACHE["siswa_ids"] = siswa_ids
+        _FACE_CACHE["by_siswa_id"] = by_siswa_id
+        _FACE_CACHE["last_updated"] = now
+        return cached_encodings, siswa_ids
+
+
+def get_student_decrypted_encodings(siswa_id):
+    """
+    Mengambil vektor wajah 1 siswa yang sudah didekripsi dari RAM (<0.01ms) tanpa dekripsi Fernet berulang.
+    Thread-safe dan menggunakan Double-Checked Locking.
+    """
+    get_flattened_known_faces()  # Pastikan cache terisi
+    sid = int(siswa_id)
+    entry = _FACE_CACHE["by_siswa_id"].get(sid)
+
+    if not entry:
+        with _FACE_CACHE_LOCK:
+            entry = _FACE_CACHE["by_siswa_id"].get(sid)
+            if not entry:
+                s = Siswa.query.get(sid)
+                if s and s.face_encoding:
+                    try:
+                        raw = s.get_encoding()
+                        s_encs = raw if isinstance(raw, list) and (len(raw) == 0 or isinstance(raw[0], list)) else ([raw] if isinstance(raw, list) else [])
+                        entry = {
+                            "encodings": s_encs,
+                            "med_until": s.medical_exemption_until
+                        }
+                    except Exception:
+                        entry = {"encodings": [], "med_until": None}
+                else:
+                    entry = {
+                        "encodings": [],
+                        "med_until": getattr(s, 'medical_exemption_until', None) if s else None
+                    }
+                _FACE_CACHE["by_siswa_id"][sid] = entry
+
+    med_until = entry.get("med_until")
+    is_med_exempt = bool(med_until and med_until >= today_wib())
+    return entry.get("encodings", []), is_med_exempt
 

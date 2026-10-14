@@ -354,15 +354,13 @@ def save_signature():
 
             saved_sig = save_base64_file(signature, subfolder='signatures', prefix=f"sig_{role}_{user_id}")
             siswa.tanda_tangan = saved_sig
-            if not siswa.privacy_consent_at:
-                siswa.privacy_consent_at = datetime.now()
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {siswa.nama} berhasil disimpan.",
                 "has_signature": True,
                 "tanda_tangan": saved_sig,
-                "has_privacy_consent": True,
+                "has_privacy_consent": bool(siswa.privacy_consent_at),
                 "privacy_consent_at": siswa.privacy_consent_at.strftime("%Y-%m-%d %H:%M:%S") if siswa.privacy_consent_at else None
             })
         else:
@@ -707,6 +705,7 @@ def change_password():
         new_session = secrets.token_hex(16)
         account.active_session_token = new_session
         db.session.commit()
+        invalidate_account_cache(role, account.id)
 
         new_jwt = generate_token(
             user_id=account.id,
@@ -1121,7 +1120,8 @@ def logout():
                 user.active_session_token = None
 
         db.session.commit()
-        return jsonify({"success": True, "message": "Berhasil logout."}), 200
+        invalidate_account_cache(role, user_id)
+        return jsonify({"success": True, "message": "Berhasil logout dan sesi aktif telah dicabut."}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"Gagal logout: {str(e)}"}), 500
