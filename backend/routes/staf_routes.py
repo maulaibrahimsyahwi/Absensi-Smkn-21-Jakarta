@@ -140,6 +140,16 @@ def update_staf(id):
 
     try:
         db.session.commit()
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role='admin',
+            user_name=current_u.get('identifier', 'Admin'),
+            action='UPDATE_STAF',
+            target_type='User',
+            target_id=user.id,
+            keterangan=f"Memperbarui profil akun staf {user.nama} ({user.username}), role: {user.role}"
+        )
         return jsonify({
             "success": True,
             "message": f"Data akun {user.nama} berhasil diperbarui.",
@@ -166,8 +176,20 @@ def delete_staf(id):
 
     try:
         nama_guru = user.nama
+        username_guru = user.username
+        role_guru = user.role
         db.session.delete(user)
         db.session.commit()
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role='admin',
+            user_name=current_u.get('identifier', 'Admin'),
+            action='DELETE_STAF',
+            target_type='User',
+            target_id=id,
+            keterangan=f"Menghapus akun staf {nama_guru} ({username_guru}, role: {role_guru}) dari sistem"
+        )
         return jsonify({
             "success": True,
             "message": f"Akun Guru Piket {nama_guru} berhasil dihapus dari sistem."

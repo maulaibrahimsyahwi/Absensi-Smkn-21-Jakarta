@@ -141,6 +141,17 @@ def batch_import_siswa():
         invalidate_face_cache()
         notify_data_changed("siswa")
 
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='BATCH_IMPORT_SISWA',
+            target_type='Siswa',
+            target_id='Massal',
+            keterangan=f"Impor data siswa: {added_count} ditambahkan, {updated_count} diperbarui, {skipped_count} dilewati dari total {len(students)} data"
+        )
+
         msg = f"Import selesai {added_count} siswa baru ditambahkan, {updated_count} diperbarui"
         if skipped_count > 0:
             msg += f" {skipped_count} siswa dilewati."
@@ -323,6 +334,18 @@ def luluskan_tingkat():
         db.session.commit()
         invalidate_face_cache()
         notify_data_changed("siswa")
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='LULUSKAN_TINGKAT',
+            target_type='Siswa',
+            target_id=tingkat,
+            keterangan=f"Meluluskan seluruh {target_count} siswa tingkat {tingkat} menjadi Alumni (data biometrik wajah dibersihkan)"
+        )
+
         return jsonify({
             "success": True,
             "count": target_count,
@@ -356,6 +379,18 @@ def bulk_delete_siswa():
         db.session.commit()
         invalidate_face_cache()
         notify_data_changed("siswa")
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='BULK_DELETE_SISWA',
+            target_type='Siswa',
+            target_id=f"{deleted_count} siswa",
+            keterangan=f"Mengarsipkan {deleted_count} siswa massal ke status Mutasi (data biometrik wajah dihapus sesuai UU PDP)"
+        )
+
         return jsonify({
             "success": True,
             "count": deleted_count,
@@ -375,6 +410,7 @@ def delete_siswa(id):
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
     try:
         nama_siswa = siswa.nama
+        nis_siswa = siswa.nis
         # Soft delete: tandai is_deleted = True dan status = 'Mutasi'
         # Kepatuhan UU PDP No. 27/2022 Pasal 43: Hapus data biometrik wajah siswa yang dimutasi/dihapus
         siswa.is_deleted = True
@@ -383,6 +419,18 @@ def delete_siswa(id):
         db.session.commit()
         invalidate_face_cache()
         notify_data_changed("siswa")
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'admin'),
+            user_name=current_u.get('identifier', 'Admin'),
+            action='DELETE_SISWA',
+            target_type='Siswa',
+            target_id=id,
+            keterangan=f"Mengarsipkan siswa {nama_siswa} (NIS {nis_siswa}) ke status Mutasi (data biometrik wajah dihapus sesuai UU PDP)"
+        )
+
         return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil diarsipkan (Status: Mutasi / Terhapus). Data biometrik wajah telah dihapus secara aman demi kepatuhan UU PDP."})
     except Exception as e:
         db.session.rollback()
@@ -821,5 +869,51 @@ def set_medical_exemption(id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@siswa_bp.route('/api/siswa/privacy_consent', methods=['POST'])
+@token_required
+def set_privacy_consent():
+    """
+    Endpoint perekaman bukti persetujuan pemrosesan data biometrik & data pribadi
+    sesuai amanat UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP Pasal 22 & 25).
+    """
+    current_u = getattr(request, 'current_user', {}) or {}
+    role = current_u.get('role')
+    user_id = current_u.get('user_id')
+
+    if role != 'siswa':
+        return jsonify({"success": False, "message": "Persetujuan privasi biometrik hanya berlaku untuk akun siswa."}), 403
+
+    siswa = Siswa.query.get(user_id)
+    if not siswa:
+        return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+
+    try:
+        now = datetime.now()
+        siswa.privacy_consent_at = now
+        db.session.commit()
+
+        record_audit_log(
+            user_id=siswa.id,
+            role='siswa',
+            user_name=siswa.nama,
+            action='BIOMETRIC_PRIVACY_CONSENT',
+            target_type='Siswa',
+            target_id=str(siswa.id),
+            keterangan=f"Siswa {siswa.nama} ({siswa.nis}) memberikan persetujuan eksplisit pemrosesan biometrik wajah (UU PDP Pasal 22 & 25)"
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "Persetujuan pemrosesan data biometrik berhasil dicatat sesuai UU PDP.",
+            "data": {
+                "privacy_consent_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "has_privacy_consent": True
+            }
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal mencatat persetujuan privasi: {str(e)}"}), 500
 
 

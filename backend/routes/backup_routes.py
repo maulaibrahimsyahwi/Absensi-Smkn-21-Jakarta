@@ -268,7 +268,12 @@ def run_storage_cleanup():
     data = request.json or {}
     prune_audit = data.get('prune_audit', True)
     vacuum_db = data.get('vacuum_db', data.get('run_vacuum', True))
-    days = int(data.get('audit_days_keep', data.get('days_to_keep', 180)))
+    # Kepatuhan UU PDP No. 27/2022 Pasal 31 & OWASP A09: Kunci batas retensi minimum 90 hari
+    # Mencegah penyerang/akun admin yang terkompromi menghapus jejak audit hari ini (0 hari)
+    try:
+        days = max(90, int(data.get('audit_days_keep', data.get('days_to_keep', 180))))
+    except (ValueError, TypeError):
+        days = 180
 
     cleaned_actions = []
     deleted_audit = 0

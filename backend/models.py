@@ -81,6 +81,7 @@ class Siswa(db.Model):
     is_deleted = db.Column(db.Boolean, default=False, nullable=False, index=True)  # Soft Delete untuk integritas arsip
     medical_exemption_until = db.Column(db.Date, nullable=True)  # Tanggal dispensasi khusus medis biometrik
     medical_exemption_alasan = db.Column(db.String(255), nullable=True)  # Alasan medis (misal: perban wajah, luka bakar, pasca operasi)
+    privacy_consent_at = db.Column(db.DateTime, nullable=True)  # Bukti persetujuan pemrosesan biometrik (UU PDP Pasal 22 & 25)
     
     def get_encoding(self):
         if self.face_encoding:
@@ -162,7 +163,9 @@ class Siswa(db.Model):
             "is_deleted": bool(self.is_deleted),
             "medical_exemption_until": self.medical_exemption_until.strftime("%Y-%m-%d") if self.medical_exemption_until else None,
             "medical_exemption_alasan": self.medical_exemption_alasan,
-            "is_medical_exempt": bool(self.medical_exemption_until and self.medical_exemption_until >= date.today())
+            "is_medical_exempt": bool(self.medical_exemption_until and self.medical_exemption_until >= date.today()),
+            "privacy_consent_at": self.privacy_consent_at.strftime("%Y-%m-%d %H:%M:%S") if self.privacy_consent_at else None,
+            "has_privacy_consent": bool(self.privacy_consent_at)
         }
 
 

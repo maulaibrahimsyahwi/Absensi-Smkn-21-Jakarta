@@ -145,7 +145,9 @@ def login():
                 "terdaftar": bool(siswa.face_encoding),
                 "medical_exemption_until": siswa.medical_exemption_until.strftime("%Y-%m-%d") if siswa.medical_exemption_until else None,
                 "medical_exemption_alasan": siswa.medical_exemption_alasan,
-                "is_medical_exempt": bool(siswa.medical_exemption_until and siswa.medical_exemption_until >= date.today())
+                "is_medical_exempt": bool(siswa.medical_exemption_until and siswa.medical_exemption_until >= date.today()),
+                "privacy_consent_at": siswa.privacy_consent_at.strftime("%Y-%m-%d %H:%M:%S") if siswa.privacy_consent_at else None,
+                "has_privacy_consent": bool(siswa.privacy_consent_at)
             }
         })
 
@@ -352,12 +354,16 @@ def save_signature():
 
             saved_sig = save_base64_file(signature, subfolder='signatures', prefix=f"sig_{role}_{user_id}")
             siswa.tanda_tangan = saved_sig
+            if not siswa.privacy_consent_at:
+                siswa.privacy_consent_at = datetime.now()
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {siswa.nama} berhasil disimpan.",
                 "has_signature": True,
-                "tanda_tangan": saved_sig
+                "tanda_tangan": saved_sig,
+                "has_privacy_consent": True,
+                "privacy_consent_at": siswa.privacy_consent_at.strftime("%Y-%m-%d %H:%M:%S") if siswa.privacy_consent_at else None
             })
         else:
             user = User.query.get(user_id)

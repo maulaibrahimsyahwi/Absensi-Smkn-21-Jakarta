@@ -528,6 +528,16 @@ def update_jadwal():
     notify_data_changed("piket")
     notify_data_changed("presensi")
 
+    record_audit_log(
+        user_id=current_u.get('user_id'),
+        role='admin',
+        user_name=current_u.get('identifier', 'Admin'),
+        action='UPDATE_JADWAL',
+        target_type='PengaturanJadwal',
+        target_id='Jadwal',
+        keterangan=f"Memperbarui jadwal operasional: mulai {cfg.jam_mulai_masuk}, batas {cfg.jam_batas_masuk}, jumat {cfg.jam_batas_jumat}, TA: {cfg.tahun_ajaran} {cfg.semester}"
+    )
+
     return jsonify({
         "success": True,
         "message": "Pengaturan jadwal operasional & tahun ajaran presensi berhasil diperbarui!",

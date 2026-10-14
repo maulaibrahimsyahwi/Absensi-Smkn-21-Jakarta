@@ -58,3 +58,4 @@ def decrypt_json_payload(raw_content: str) -> dict:
         decrypted_str = decrypt_field(raw_content)
         return json.loads(decrypted_str)
     return json.loads(raw_content)
+

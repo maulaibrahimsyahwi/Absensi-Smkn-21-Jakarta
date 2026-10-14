@@ -27,6 +27,7 @@ def migrate_postgres_columns(conn):
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS medical_exemption_until DATE;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS medical_exemption_alasan VARCHAR(255);",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS last_totp_step BIGINT;",
+        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS privacy_consent_at TIMESTAMP;",
         "ALTER TABLE siswa ALTER COLUMN two_factor_secret TYPE TEXT;",
         # Users
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS foto_profil TEXT;",

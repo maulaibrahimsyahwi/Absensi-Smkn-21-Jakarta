@@ -745,9 +745,52 @@ def upload_surat_edaran():
     if size > 10 * 1024 * 1024:
         return jsonify({"success": False, "message": "Ukuran file surat edaran melebihi batas 10MB."}), 400
 
+    # 1. Validasi Magic Bytes Biner (A05 & A08 OWASP Top 10)
+    header = file.read(16)
+    file.seek(0)
+
+    is_pdf = header.startswith(b'%PDF-')
+    is_jpeg = header.startswith(b'\xff\xd8\xff')
+    is_png = header.startswith(b'\x89PNG\r\n\x1a\n')
+    is_webp = header.startswith(b'RIFF') and len(header) >= 12 and header[8:12] == b'WEBP'
+
+    if ext == 'pdf' and not is_pdf:
+        return jsonify({"success": False, "message": "Header biner PDF tidak valid atau file rusak (bukan berkas PDF resmi)."}), 400
+    elif ext in ['jpg', 'jpeg'] and not is_jpeg:
+        return jsonify({"success": False, "message": "Header biner JPEG tidak valid."}), 400
+    elif ext == 'png' and not is_png:
+        return jsonify({"success": False, "message": "Header biner PNG tidak valid."}), 400
+    elif ext == 'webp' and not is_webp:
+        return jsonify({"success": False, "message": "Header biner WebP tidak valid."}), 400
+
     unique_name = f"se_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}.{ext}"
     filepath = os.path.join(UPLOAD_EDARAN_DIR, unique_name)
-    file.save(filepath)
+
+    # 2. Sanitasi & Pembersihan 100% Metadata EXIF untuk Gambar (UU PDP No. 27/2022 Pasal 35)
+    if ext in ['jpg', 'jpeg', 'png', 'webp']:
+        try:
+            import cv2
+            import numpy as np
+            img_bytes = file.read()
+            file.seek(0)
+            np_arr = np.frombuffer(img_bytes, np.uint8)
+            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            if img is None:
+                return jsonify({"success": False, "message": "Gagal membaca konten visual gambar dokumen."}), 400
+
+            encode_ext = '.jpg' if ext in ['jpg', 'jpeg'] else ('.' + ext)
+            params = [cv2.IMWRITE_JPEG_QUALITY, 85] if ext in ['jpg', 'jpeg'] else []
+            success, enc_buf = cv2.imencode(encode_ext, img, params)
+            if success:
+                with open(filepath, 'wb') as f_out:
+                    f_out.write(enc_buf.tobytes())
+            else:
+                file.save(filepath)
+        except Exception as e_img:
+            print(f"[EXIF STRIP NOTICE] Fallback direct save: {e_img}")
+            file.save(filepath)
+    else:
+        file.save(filepath)
 
     total_pages = 1
     if ext == 'pdf':

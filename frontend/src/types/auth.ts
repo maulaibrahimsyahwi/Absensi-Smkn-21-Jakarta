@@ -31,6 +31,8 @@ export interface BaseUser {
   is_medical_exempt?: boolean;
   medical_exemption_until?: string | null;
   medical_exemption_alasan?: string | null;
+  privacy_consent_at?: string | null;
+  has_privacy_consent?: boolean;
 }
 
 export interface StaffUser extends BaseUser {
@@ -65,6 +67,8 @@ export function normalizeUser(raw: Record<string, unknown>): User {
     is_medical_exempt: Boolean(raw.is_medical_exempt),
     medical_exemption_until: (raw.medical_exemption_until as string) || null,
     medical_exemption_alasan: (raw.medical_exemption_alasan as string) || null,
+    privacy_consent_at: (raw.privacy_consent_at as string) || null,
+    has_privacy_consent: Boolean(raw.has_privacy_consent ?? raw.privacy_consent_at),
   };
 
   if (role === 'siswa') {
@@ -109,6 +113,8 @@ export interface Siswa {
   is_deleted?: boolean;
   medical_exemption_until?: string | null;
   medical_exemption_alasan?: string | null;
+  privacy_consent_at?: string | null;
+  has_privacy_consent?: boolean;
   created_at?: string;
 }
 

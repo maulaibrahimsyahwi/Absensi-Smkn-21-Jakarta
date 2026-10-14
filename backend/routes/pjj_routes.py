@@ -5,6 +5,7 @@ from models import db, PengaturanPJJ, Siswa
 from utils.auth_middleware import token_required, role_required
 from utils.helpers import is_kelas_pjj, get_holiday_status, is_school_day
 from utils.realtime_bus import notify_data_changed
+from utils.audit_trail import record_audit_log
 
 pjj_bp = Blueprint('pjj', __name__)
 
@@ -210,6 +211,17 @@ def update_pjj_settings():
             msg = f"Mode PJJ diaktifkan untuk Tingkat {tingkat_str}"
         else:
             msg = f"Mode PJJ diaktifkan untuk {len(kelas_aktif)} kelas pilihan"
+
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role='admin',
+            user_name=updater_name,
+            action='UPDATE_PJJ_SETTINGS',
+            target_type='PengaturanPJJ',
+            target_id='PJJ',
+            keterangan=msg
+        )
 
         return jsonify({
             "success": True,

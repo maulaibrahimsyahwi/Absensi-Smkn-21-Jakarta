@@ -255,7 +255,24 @@ def ratelimit_handler(e):
 
 @app.errorhandler(500)
 def internal_error(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     return jsonify({"success": False, "message": "Terjadi kesalahan internal server"}), 500
+
+
+@app.teardown_request
+def teardown_db_session(exception=None):
+    """
+    Menjamin pembersihan koneksi pool PostgreSQL jika terjadi unhandled exception
+    sehingga tidak meninggalkan transaksi macet (InFailedSqlTransaction) di pooler.
+    """
+    if exception:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':

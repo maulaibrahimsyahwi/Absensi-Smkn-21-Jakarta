@@ -464,6 +464,11 @@ export default function OnboardingGate(): React.JSX.Element | null {
                 </span>
               </div>
 
+              {/* Deklarasi Persetujuan UU PDP No. 27/2022 */}
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-[11px] text-blue-300 leading-relaxed">
+                <span className="font-semibold text-blue-200">Persetujuan UU PDP (No. 27/2022 Pasal 22 & 25):</span> Dengan menyimpan data ini, saya menyetujui pemrosesan data pribadi dan biometrik wajah untuk keperluan presensi dan verifikasi administrasi resmi SMKN 21 Jakarta.
+              </div>
+
               {/* Tombol submit akhir */}
               <div className="pt-2">
                 <Button
