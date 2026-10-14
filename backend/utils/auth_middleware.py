@@ -1,5 +1,6 @@
 import time
 import threading
+import secrets
 import jwt
 from functools import wraps
 from datetime import datetime, timezone, timedelta
@@ -36,14 +37,23 @@ EXEMPT_PATHS = {
     '/api/auth/foto_profil'
 }
 
+def _get_jwt_secret():
+    try:
+        return current_app.config.get('JWT_SECRET_KEY') or JWT_SECRET_KEY
+    except Exception:
+        return JWT_SECRET_KEY
+
 def generate_token(user_id, role, identifier, expires_in_hours=24, session_token=None):
     """
     Menghasilkan token JWT HS256 yang ditandatangani secara kriptografis
     beserta pelacakan session_token untuk Single Active Device.
+    Menyertakan claims 'iss' dan 'jti' sesuai rekomendasi OWASP Top 10.
     """
-    secret = current_app.config.get('JWT_SECRET_KEY') or JWT_SECRET_KEY
+    secret = _get_jwt_secret()
     now = datetime.now(timezone.utc)
     payload = {
+        'iss': 'smkn21-absensi',
+        'jti': secrets.token_hex(8),
         'sub': str(user_id),
         'user_id': user_id,
         'role': role.lower() if role else 'siswa',
@@ -58,7 +68,7 @@ def decode_token(token):
     """
     Mendekode dan memverifikasi token JWT.
     """
-    secret = current_app.config.get('JWT_SECRET_KEY') or JWT_SECRET_KEY
+    secret = _get_jwt_secret()
     return jwt.decode(token, secret, algorithms=['HS256'])
 
 def token_required(f):

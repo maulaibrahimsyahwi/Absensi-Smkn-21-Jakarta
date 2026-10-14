@@ -56,16 +56,16 @@ import jwt
 def get_smart_limiter_key():
     """
     Kunci Rate Limiting Cerdas:
-    - Jika siswa/guru sudah login (membawa token JWT), gunakan user_id & role sebagai kunci.
+    - Jika siswa/guru sudah login (membawa token JWT valid dan belum kedaluwarsa), gunakan user_id & role sebagai kunci.
       Ini memastikan setiap siswa memiliki kuota terpisah, meskipun 1000 siswa menggunakan
       Wi-Fi SMKN 21 yang sama (NAT Gateway berbagi 1 IP Publik).
-    - Jika request unauthenticated (belum login), gunakan IP asli yang diverifikasi oleh ProxyFix.
+    - Jika token expired, manipulatif, atau request unauthenticated (belum login), gunakan IP asli yang diverifikasi oleh ProxyFix.
     """
     auth = request.headers.get("Authorization")
     if auth and auth.strip().startswith("Bearer "):
         token = auth.strip().split(" ")[1]
         try:
-            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"], options={"verify_exp": False})
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
             uid = payload.get("user_id")
             role = payload.get("role", "user")
             if uid:
@@ -217,6 +217,15 @@ def set_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['X-XSS-Protection'] = '1; mode=block'
+    # Content-Security-Policy untuk melindungi aplikasi dari XSS dan framing ilegal
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "connect-src 'self' https://*.supabase.co wss://*.supabase.co; "
+        "frame-ancestors 'self';"
+    )
     return response
 
 
