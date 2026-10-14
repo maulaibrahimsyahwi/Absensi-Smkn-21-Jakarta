@@ -157,6 +157,8 @@ def token_required(f):
                 'error_code': 'DATABASE_UNAVAILABLE',
                 'message': 'Layanan basis data sedang sibuk atau mengalami kendala koneksi. Silakan coba sesaat lagi.'
             }), 503
+
+        return f(*args, **kwargs)
     return decorated
 
 def role_required(allowed_roles):

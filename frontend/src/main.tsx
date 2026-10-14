@@ -13,8 +13,13 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
       .then(() => {
         // Service worker aktif
       })
-      .catch((err) => {
-        console.warn("[PWA] Catatan registrasi Service Worker:", err);
+      .catch((err: unknown) => {
+        const errorMsg = String(err);
+        if (errorMsg.includes("SSL certificate error") || errorMsg.includes("SecurityError")) {
+          console.info("[PWA] Service Worker dilewati di mode local dev (sertifikat SSL self-signed). Fitur PWA offline akan aktif penuh saat deployment dengan sertifikat SSL valid.");
+        } else {
+          console.warn("[PWA] Catatan registrasi Service Worker:", err);
+        }
       });
   });
 }
