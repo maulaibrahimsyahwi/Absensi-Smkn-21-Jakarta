@@ -272,6 +272,8 @@ def run_storage_cleanup():
 
     cleaned_actions = []
     deleted_audit = 0
+    deleted_orphans_count = 0
+    reclaimed_bytes = 0
 
     # 1. Prune audit logs older than N days
     if prune_audit:
@@ -280,7 +282,69 @@ def run_storage_cleanup():
         db.session.commit()
         cleaned_actions.append(f"Membersihkan {deleted_audit} baris log audit (> {days} hari)")
 
-    # 2. PostgreSQL VACUUM ANALYZE
+    # 2. Pembersihan berkas fisik orphan (tidak terikat di tabel basis data)
+    prune_orphans = data.get('prune_orphans', True)
+    if prune_orphans:
+        try:
+            import time
+            from models import Siswa, User, IzinPiket, PengajuanIzin, PelanggaranSiswa
+            from utils.file_storage import SURAT_DIR, SIGNATURES_DIR, AVATARS_DIR
+
+            referenced_files = set()
+
+            # Kumpulkan berkas yang masih aktif dirujuk oleh basis data
+            for s in Siswa.query.with_entities(Siswa.tanda_tangan, Siswa.foto_profil).all():
+                for val in s:
+                    if val and isinstance(val, str) and not val.startswith('data:'):
+                        referenced_files.add(os.path.basename(val))
+
+            for u in User.query.with_entities(User.foto_profil).all():
+                for val in u:
+                    if val and isinstance(val, str) and not val.startswith('data:'):
+                        referenced_files.add(os.path.basename(val))
+
+            for ip in IzinPiket.query.with_entities(IzinPiket.tanda_tangan_petugas, IzinPiket.tanda_tangan_siswa).all():
+                for val in ip:
+                    if val and isinstance(val, str) and not val.startswith('data:'):
+                        referenced_files.add(os.path.basename(val))
+
+            for pi in PengajuanIzin.query.with_entities(PengajuanIzin.file_surat, PengajuanIzin.tanda_tangan_siswa).all():
+                for val in pi:
+                    if val and isinstance(val, str) and not val.startswith('data:'):
+                        referenced_files.add(os.path.basename(val))
+
+            for ps in PelanggaranSiswa.query.with_entities(PelanggaranSiswa.bukti_foto, PelanggaranSiswa.tanda_tangan_ortu, PelanggaranSiswa.tanda_tangan_guru).all():
+                for val in ps:
+                    if val and isinstance(val, str) and not val.startswith('data:'):
+                        referenced_files.add(os.path.basename(val))
+
+            # Scan direktori fisik uploads untuk mencari file yang tidak terikat (orphan)
+            now_epoch = time.time()
+            for d in [SURAT_DIR, SIGNATURES_DIR, AVATARS_DIR]:
+                if os.path.exists(d):
+                    for fname in os.listdir(d):
+                        filepath = os.path.join(d, fname)
+                        if os.path.isfile(filepath):
+                            file_age = now_epoch - os.path.getmtime(filepath)
+                            # Hanya bersihkan file > 1 jam untuk mencegah menghapus file saat transaksi upload
+                            if fname not in referenced_files and file_age > 3600:
+                                sz = os.path.getsize(filepath)
+                                try:
+                                    os.remove(filepath)
+                                    deleted_orphans_count += 1
+                                    reclaimed_bytes += sz
+                                except Exception:
+                                    pass
+
+            if deleted_orphans_count > 0:
+                mb_reclaimed = reclaimed_bytes / (1024 * 1024)
+                cleaned_actions.append(f"Menghapus {deleted_orphans_count} berkas lampiran tidak terpakai/orphan ({mb_reclaimed:.2f} MB)")
+            else:
+                cleaned_actions.append("Penyimpanan fisik lampiran bersih (tidak ada berkas orphan)")
+        except Exception as e_orph:
+            cleaned_actions.append(f"Pembersihan berkas orphan dilewati ({str(e_orph)})")
+
+    # 3. PostgreSQL VACUUM ANALYZE
     if vacuum_db:
         try:
             with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -307,6 +371,8 @@ def run_storage_cleanup():
         "success": True,
         "message": "Pembersihan storage & rotasi cache berhasil dijalankan!",
         "pruned_audit_logs": deleted_audit,
+        "deleted_orphans_count": deleted_orphans_count,
+        "reclaimed_bytes": reclaimed_bytes,
         "actions_taken": cleaned_actions
     })
 

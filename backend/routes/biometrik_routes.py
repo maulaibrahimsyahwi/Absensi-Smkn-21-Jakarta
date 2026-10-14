@@ -226,10 +226,14 @@ def detect_liveness():
                     if (user_state['last_closed'] > user_state['initial_open']) and (now_t - user_state['last_closed'] <= 5.0):
                         can_issue = True
                         if user_role == 'siswa':
-                            siswa = Siswa.query.get(user_id)
-                            if siswa and siswa.face_encoding:
+                            siswa = getattr(request, 'current_user_obj', None)
+                            if not siswa or not hasattr(siswa, 'face_encoding'):
+                                siswa = Siswa.query.get(user_id)
+
+                            face_enc = getattr(siswa, 'face_encoding', None)
+                            if siswa and face_enc:
                                 try:
-                                    stored = json.loads(siswa.face_encoding)
+                                    stored = json.loads(face_enc) if isinstance(face_enc, str) else face_enc
                                     encs = stored if isinstance(stored, list) else []
                                     ids = [siswa.id] * len(encs)
                                     match = verify_face(image_data, encs, ids)

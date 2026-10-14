@@ -2,6 +2,7 @@ import re
 import math
 import json
 from datetime import datetime, time, timedelta
+import calendar
 from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK, WIB
 from models import Siswa
 
@@ -16,6 +17,34 @@ def now_wib():
 def today_wib():
     """Mengembalikan tanggal hari ini dalam zona waktu WIB."""
     return now_wib().date()
+
+def get_date_range(tahun=None, bulan=None):
+    """
+    Mengembalikan rentang datetime (start_dt, end_dt) untuk query database sargable.
+    Memungkinkan PostgreSQL menggunakan Index Scan pada kolom timestamp alih-alih Full Table Scan.
+    """
+    try:
+        y = int(tahun) if tahun and str(tahun) != 'ALL' and str(tahun).isdigit() else None
+    except Exception:
+        y = None
+
+    try:
+        m = int(bulan) if bulan and str(bulan) != 'ALL' and str(bulan).isdigit() else None
+    except Exception:
+        m = None
+
+    if not y:
+        return None, None
+
+    if m and 1 <= m <= 12:
+        _, last_day = calendar.monthrange(y, m)
+        start_dt = datetime(y, m, 1, 0, 0, 0)
+        end_dt = datetime(y, m, last_day, 23, 59, 59, 999999)
+        return start_dt, end_dt
+    else:
+        start_dt = datetime(y, 1, 1, 0, 0, 0)
+        end_dt = datetime(y, 12, 31, 23, 59, 59, 999999)
+        return start_dt, end_dt
 
 def validate_siswa_input(nis, nama, kelas):
     """

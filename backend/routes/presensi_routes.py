@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, time, date, timedelta, timezone
 from flask import Blueprint, request, jsonify
+from sqlalchemy.exc import IntegrityError
 from config import SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH, SEKOLAH_POLYGON, SEKOLAH_INFO, WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengaturanJadwal
 from face_utils import verify_face
@@ -485,7 +486,17 @@ def verify_harian():
                     alasan=f"Presensi mandiri tercatat pukul {now_dt.strftime('%H:%M:%S')} WIB (Batas: {jam_batas_s} WIB)"
                 )
 
-            db.session.commit()
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                return jsonify({
+                    "success": False,
+                    "already_present": True,
+                    "message": f"{siswa.nama} ({siswa.kelas}) sudah tercatat presensi untuk hari ini. Presensi ganda tidak diperkenankan.",
+                    "status_harian": "Sudah Absen"
+                }), 409
+
             notify_data_changed("presensi")
 
             confidence_text = f" kecocokan {result.get('confidence', 95)}%" if ('confidence' in result and not medical_bypass_applied) else ""

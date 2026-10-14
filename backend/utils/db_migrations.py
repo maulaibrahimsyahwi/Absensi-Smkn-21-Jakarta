@@ -63,6 +63,9 @@ def migrate_postgres_columns(conn):
         "UPDATE absensi_perpustakaan ap SET kelas = s.kelas FROM siswa s WHERE ap.siswa_id = s.id AND (ap.kelas IS NULL OR ap.kelas = '');",
         "UPDATE pengajuan_izin pi SET kelas = s.kelas FROM siswa s WHERE pi.siswa_id = s.id AND (pi.kelas IS NULL OR pi.kelas = '');",
         "UPDATE izin_piket ip SET kelas = s.kelas FROM siswa s WHERE ip.siswa_id = s.id AND (ip.kelas IS NULL OR ip.kelas = '');",
+        # Anti-Duplikasi Presensi: Hapus duplikat harian lama lalu pasang Unique Index
+        "DELETE FROM absensi_harian a USING absensi_harian b WHERE a.id > b.id AND a.siswa_id = b.siswa_id AND CAST(a.waktu AS DATE) = CAST(b.waktu AS DATE);",
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_absensi_harian_siswa_tanggal ON absensi_harian (siswa_id, (CAST(waktu AS DATE)));",
     ]
     for cmd in pg_commands:
         try:

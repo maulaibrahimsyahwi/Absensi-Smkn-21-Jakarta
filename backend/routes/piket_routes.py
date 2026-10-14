@@ -1,5 +1,6 @@
 from datetime import datetime, date, time
 from flask import Blueprint, request, jsonify
+from sqlalchemy.orm import joinedload
 from models import db, Siswa, IzinPiket, AbsensiHarian, PengajuanIzin, PelanggaranSiswa, PengaturanJadwal
 from routes.pelanggaran_routes import catat_pelanggaran_terlambat
 from utils.auth_middleware import token_required, role_required
@@ -153,7 +154,7 @@ def get_izin_piket():
     tanggal_param = request.args.get('tanggal')
     search = request.args.get('search', '').strip()
     
-    query = IzinPiket.query.join(Siswa, IzinPiket.siswa_id == Siswa.id)
+    query = IzinPiket.query.options(joinedload(IzinPiket.siswa)).join(Siswa, IzinPiket.siswa_id == Siswa.id)
     
     if tanggal_param and tanggal_param != 'ALL':
         try:
@@ -228,7 +229,8 @@ def get_piket_summary_today():
         ).count()
 
         # 5. Daftar 6 surat izin piket terbaru hari ini
-        recent_records = IzinPiket.query.join(Siswa, IzinPiket.siswa_id == Siswa.id)\
+        recent_records = IzinPiket.query.options(joinedload(IzinPiket.siswa))\
+            .join(Siswa, IzinPiket.siswa_id == Siswa.id)\
             .filter(IzinPiket.tanggal == today)\
             .order_by(IzinPiket.created_at.desc())\
             .limit(6).all()
@@ -263,15 +265,18 @@ def get_piket_notifikasi():
     3. Dispensasi Masuk/Meninggalkan Kelas (E-Slip) yang diterbitkan hari ini.
     """
     today = date.today()
+    start_of_today = datetime.combine(today, time.min)
+    end_of_today = datetime.combine(today, time.max)
     notifikasi = []
 
     try:
         # 1. Pengajuan Izin Siswa yang Masih Menunggu Persetujuan Guru Piket (Prioritas Utama)
-        pending_izin = PengajuanIzin.query.filter_by(status_pengajuan='Menunggu')\
+        pending_izin = PengajuanIzin.query.options(joinedload(PengajuanIzin.siswa))\
+            .filter_by(status_pengajuan='Menunggu')\
             .order_by(PengajuanIzin.created_at.desc()).limit(15).all()
 
         for p in pending_izin:
-            siswa = Siswa.query.get(p.siswa_id)
+            siswa = p.siswa
             nama_siswa = siswa.nama if siswa else "Siswa"
             kelas_siswa = siswa.kelas if siswa else "-"
 
@@ -293,14 +298,15 @@ def get_piket_notifikasi():
         pass
 
     try:
-        # 2. Siswa yang Terlambat Hari Ini (Informasi Operasional Pagi Ini)
-        terlambat_today = AbsensiHarian.query.filter(
-            db.func.date(AbsensiHarian.waktu) == today,
+        # 2. Siswa yang Terlambat Hari Ini (Informasi Operasional Pagi Ini - Sargable & Eager Loaded)
+        terlambat_today = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter(
+            AbsensiHarian.waktu >= start_of_today,
+            AbsensiHarian.waktu <= end_of_today,
             AbsensiHarian.status == 'Terlambat'
         ).order_by(AbsensiHarian.waktu.desc()).limit(15).all()
 
         for ab in terlambat_today:
-            siswa = Siswa.query.get(ab.siswa_id)
+            siswa = ab.siswa
             nama_siswa = siswa.nama if siswa else "Siswa"
             kelas_siswa = siswa.kelas if siswa else "-"
 
@@ -321,12 +327,13 @@ def get_piket_notifikasi():
         pass
 
     try:
-        # 3. E-Slip Dispensasi Meja Piket Hari Ini
-        piket_today = IzinPiket.query.filter(IzinPiket.tanggal == today)\
+        # 3. E-Slip Dispensasi Meja Piket Hari Ini (Eager Loaded)
+        piket_today = IzinPiket.query.options(joinedload(IzinPiket.siswa))\
+            .filter(IzinPiket.tanggal == today)\
             .order_by(IzinPiket.created_at.desc()).limit(10).all()
 
         for ip in piket_today:
-            siswa = Siswa.query.get(ip.siswa_id)
+            siswa = ip.siswa
             nama_siswa = siswa.nama if siswa else "Siswa"
             kelas_siswa = siswa.kelas if siswa else "-"
 

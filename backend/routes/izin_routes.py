@@ -3,8 +3,9 @@ import uuid
 import base64
 from datetime import datetime, time, timedelta
 from flask import Blueprint, request, jsonify, send_from_directory
+from sqlalchemy.orm import joinedload
 from config import BASE_DIR
-from models import db, Siswa, AbsensiHarian, PengajuanIzin
+from models import db, Siswa, AbsensiHarian, PengajuanIzin, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
 from utils.helpers import is_school_day
@@ -168,7 +169,7 @@ def submit_pengajuan_izin():
 @role_required(['piket', 'admin'])
 def get_pengajuan_izin():
     status = request.args.get('status')
-    query = PengajuanIzin.query
+    query = PengajuanIzin.query.options(joinedload(PengajuanIzin.siswa))
     if status and status != 'ALL':
         query = query.filter_by(status_pengajuan=status)
     pengajuan_list = query.order_by(PengajuanIzin.created_at.desc()).all()
@@ -206,6 +207,10 @@ def verifikasi_pengajuan_izin(id):
 
         # Jika disetujui, generasikan rekaman AbsensiHarian untuk rentang tanggal tersebut (HANYA pada hari sekolah aktif)
         if aksi == "Disetujui":
+            cfg = PengaturanJadwal.query.first()
+            curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+            curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
             curr = pengajuan.tanggal_mulai
             while curr <= pengajuan.tanggal_selesai:
                 # Validasi: Akhir pekan (Sabtu/Minggu) dan Hari Libur Nasional TIDAK digenerate presensi
@@ -222,12 +227,19 @@ def verifikasi_pengajuan_izin(id):
 
                     if existing:
                         existing.status = pengajuan.jenis
+                        if not existing.tahun_ajaran:
+                            existing.tahun_ajaran = curr_ta
+                        if not existing.semester:
+                            existing.semester = curr_sem
                     else:
                         absensi_baru = AbsensiHarian(
                             siswa_id=pengajuan.siswa_id,
                             kelas=pengajuan.kelas or (pengajuan.siswa.kelas if pengajuan.siswa else None),
                             waktu=datetime.combine(curr, time(7, 0, 0)),
-                            status=pengajuan.jenis
+                            status=pengajuan.jenis,
+                            tahun_ajaran=curr_ta,
+                            semester=curr_sem,
+                            sumber="surat_izin"
                         )
                         db.session.add(absensi_baru)
                 

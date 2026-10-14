@@ -195,8 +195,11 @@ def update_siswa(id):
             siswa.jenis_kelamin = jenis_kelamin_input
         if status_input and status_input in ["Aktif", "Alumni", "Mutasi"]:
             siswa.status = status_input
-            if status_input == "Alumni" and not siswa.tanggal_lulus:
-                siswa.tanggal_lulus = datetime.now()
+            if status_input == "Alumni":
+                if not siswa.tanggal_lulus:
+                    siswa.tanggal_lulus = datetime.now()
+                # Kepatuhan UU PDP No. 27/2022: Hapus data biometrik wajah siswa yang telah lulus
+                siswa.face_encoding = None
             elif status_input in ["Aktif", "Mutasi"]:
                 siswa.tanggal_lulus = None
             if status_input == "Mutasi":
@@ -225,8 +228,11 @@ def update_siswa_status(id):
         return jsonify({"success": False, "message": "Status harus 'Aktif' atau 'Alumni'"}), 400
     try:
         siswa.status = new_status
-        if new_status == "Alumni" and not siswa.tanggal_lulus:
-            siswa.tanggal_lulus = datetime.now()
+        if new_status == "Alumni":
+            if not siswa.tanggal_lulus:
+                siswa.tanggal_lulus = datetime.now()
+            # Kepatuhan UU PDP No. 27/2022: Hapus data biometrik wajah siswa yang telah lulus
+            siswa.face_encoding = None
         elif new_status == "Aktif":
             siswa.tanggal_lulus = None
         db.session.commit()
@@ -261,8 +267,10 @@ def bulk_update_siswa_status():
         target_records = Siswa.query.filter(Siswa.id.in_(siswa_ids)).all()
         for s in target_records:
             s.status = new_status
-            if new_status == "Alumni" and not s.tanggal_lulus:
-                s.tanggal_lulus = now
+            if new_status == "Alumni":
+                if not s.tanggal_lulus:
+                    s.tanggal_lulus = now
+                s.face_encoding = None
             elif new_status == "Aktif":
                 s.tanggal_lulus = None
         db.session.commit()
@@ -310,6 +318,7 @@ def luluskan_tingkat():
             s.status = "Alumni"
             if not s.tanggal_lulus:
                 s.tanggal_lulus = now
+            s.face_encoding = None
             
         db.session.commit()
         invalidate_face_cache()
@@ -489,66 +498,83 @@ def get_siswa_notifikasi():
     except Exception:
         pass
 
-    # 3. Catatan Pelanggaran Siswa (Buku Saku) & Milestone Poin (Hanya 7 Hari Terakhir)
+    # 3. Catatan Pelanggaran & Apresiasi Prestasi Siswa (Buku Saku) & Milestone Poin (Hanya 7 Hari Terakhir)
     try:
         seven_days_ago = now_dt - timedelta(days=7)
         pelanggaran_records = PelanggaranSiswa.query.filter(
             ((PelanggaranSiswa.siswa_id == siswa.id) | (PelanggaranSiswa.nis == siswa.nis)),
-            PelanggaranSiswa.tanggal_waktu >= seven_days_ago
+            PelanggaranSiswa.tanggal_waktu >= seven_days_ago,
+            PelanggaranSiswa.status_verifikasi == 'Disetujui'
         ).order_by(PelanggaranSiswa.tanggal_waktu.desc()).limit(5).all()
 
-        total_poin = 0
-        all_pelanggaran = PelanggaranSiswa.query.filter(
-            (PelanggaranSiswa.siswa_id == siswa.id) | (PelanggaranSiswa.nis == siswa.nis)
+        all_records = PelanggaranSiswa.query.filter(
+            ((PelanggaranSiswa.siswa_id == siswa.id) | (PelanggaranSiswa.nis == siswa.nis)),
+            PelanggaranSiswa.status_verifikasi == 'Disetujui'
         ).all()
-        for p in all_pelanggaran:
-            total_poin += int(p.poin or 0)
 
-        # Milestone akumulasi poin jika >= 25 (Peringatan Aktif)
-        if total_poin >= 75:
+        poin_pelanggaran = sum(int(p.poin or 0) for p in all_records if p.kategori != 'Prestasi')
+        poin_prestasi = sum(int(p.poin or 0) for p in all_records if p.kategori == 'Prestasi')
+        poin_bersih = max(0, poin_pelanggaran - poin_prestasi)
+
+        # Milestone akumulasi poin SP (Seragam dengan pelanggaran_routes: 30 / 50 / 100)
+        if poin_bersih >= 100:
             notifikasi.append({
-                "id": f"milestone-sp-75-{siswa.id}",
+                "id": f"milestone-sp-100-{siswa.id}",
                 "type": "milestone",
                 "category": "danger",
-                "judul": f"Peringatan Kritis: Akumulasi {total_poin} Poin (SP / Pleno)",
-                "pesan": f"Total akumulasi poin pelanggaran Anda telah mencapai {total_poin} poin. Diwajibkan segera melapor ke Guru BK dan Wali Kelas untuk penanganan khusus.",
+                "judul": f"Peringatan Kritis: Akumulasi {poin_bersih} Poin (SP 3 / Sidang Pleno)",
+                "pesan": f"Total akumulasi poin pelanggaran Anda telah mencapai {poin_bersih} poin. Diwajibkan segera melapor ke Guru BK, Kepala Sekolah, dan Wali Kelas untuk penanganan khusus sidang pleno.",
                 "waktu": pelanggaran_records[0].tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S") if pelanggaran_records else now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "badge": "SP Pleno"
+                "badge": "SP 3"
             })
-        elif total_poin >= 50:
+        elif poin_bersih >= 50:
             notifikasi.append({
                 "id": f"milestone-sp-50-{siswa.id}",
                 "type": "milestone",
                 "category": "danger",
-                "judul": f"Peringatan: Akumulasi {total_poin} Poin (Panggilan Orang Tua / BK)",
-                "pesan": f"Akumulasi poin kedisiplinan Anda mencapai {total_poin} poin. Menunggu jadwal pemanggilan orang tua dan bimbingan konseling.",
+                "judul": f"Peringatan: Akumulasi {poin_bersih} Poin (SP 2 / Panggilan Orang Tua)",
+                "pesan": f"Akumulasi poin kedisiplinan Anda mencapai {poin_bersih} poin. Menunggu jadwal pemanggilan orang tua dan bimbingan konseling intensif.",
                 "waktu": pelanggaran_records[0].tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S") if pelanggaran_records else now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "badge": "Panggilan BK"
+                "badge": "SP 2"
             })
-        elif total_poin >= 25:
+        elif poin_bersih >= 30:
             notifikasi.append({
-                "id": f"milestone-sp-25-{siswa.id}",
+                "id": f"milestone-sp-30-{siswa.id}",
                 "type": "milestone",
                 "category": "warning",
-                "judul": f"Perhatian: Akumulasi {total_poin} Poin (Peringatan Wali Kelas)",
-                "pesan": f"Akumulasi pelanggaran Anda telah mencapai {total_poin} poin. Harap lebih berhati-hati dan menjaga tata tertib sekolah.",
+                "judul": f"Perhatian: Akumulasi {poin_bersih} Poin (SP 1 / Peringatan Wali Kelas)",
+                "pesan": f"Akumulasi pelanggaran Anda telah mencapai {poin_bersih} poin. Harap lebih berhati-hati dan menjaga tata tertib sekolah.",
                 "waktu": pelanggaran_records[0].tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S") if pelanggaran_records else now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                "badge": "Peringatan"
+                "badge": "SP 1"
             })
 
         for pel in pelanggaran_records:
+            is_prestasi = pel.kategori == 'Prestasi'
             is_terlambat = "terlambat" in (pel.jenis_pelanggaran or "").lower()
-            notifikasi.append({
-                "id": f"pelanggaran-{pel.id}",
-                "type": "pelanggaran",
-                "category": "danger" if pel.poin >= 25 else "warning",
-                "judul": f"Keterlambatan Tercatat (+{pel.poin} Poin)" if is_terlambat else f"Catatan Pelanggaran (+{pel.poin} Poin)",
-                "pesan": f"{pel.jenis_pelanggaran}. Dicatat oleh {pel.nama_penanggung_jawab}." + (f" Catatan: \"{pel.keterangan}\"" if pel.keterangan else ""),
-                "waktu": pel.tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S"),
-                "badge": f"+{pel.poin} Poin",
-                "poin": pel.poin,
-                "petugas": pel.nama_penanggung_jawab
-            })
+            if is_prestasi:
+                notifikasi.append({
+                    "id": f"prestasi-{pel.id}",
+                    "type": "prestasi",
+                    "category": "success",
+                    "judul": f"Apresiasi Prestasi (+{pel.poin} Poin)",
+                    "pesan": f"{pel.jenis_pelanggaran}. Diapresiasi oleh {pel.nama_penanggung_jawab}." + (f" Catatan: \"{pel.keterangan}\"" if pel.keterangan else ""),
+                    "waktu": pel.tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S"),
+                    "badge": f"+{pel.poin} Prestasi",
+                    "poin": pel.poin,
+                    "petugas": pel.nama_penanggung_jawab
+                })
+            else:
+                notifikasi.append({
+                    "id": f"pelanggaran-{pel.id}",
+                    "type": "pelanggaran",
+                    "category": "danger" if pel.poin >= 25 else "warning",
+                    "judul": f"Keterlambatan Tercatat (+{pel.poin} Poin)" if is_terlambat else f"Catatan Pelanggaran (+{pel.poin} Poin)",
+                    "pesan": f"{pel.jenis_pelanggaran}. Dicatat oleh {pel.nama_penanggung_jawab}." + (f" Catatan: \"{pel.keterangan}\"" if pel.keterangan else ""),
+                    "waktu": pel.tanggal_waktu.strftime("%Y-%m-%d %H:%M:%S"),
+                    "badge": f"+{pel.poin} Poin",
+                    "poin": pel.poin,
+                    "petugas": pel.nama_penanggung_jawab
+                })
     except Exception:
         pass
 
@@ -688,6 +714,7 @@ def naik_kelas_massal():
             if aksi == 'lulus' or kelas_tujuan == 'ALUMNI':
                 s.status = 'Alumni'
                 s.tanggal_lulus = now_dt
+                s.face_encoding = None
             else:
                 s.kelas = kelas_tujuan
 

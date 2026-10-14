@@ -1,8 +1,40 @@
+import time
+import threading
 import jwt
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import request, jsonify, current_app
 from config import JWT_SECRET_KEY
+
+# Cache sesi akun di memori untuk mengurangi beban database saat request berfrekuensi tinggi (misal liveness camera)
+_account_cache = {}
+_account_cache_lock = threading.Lock()
+ACCOUNT_CACHE_TTL = 20  # detik
+
+def invalidate_account_cache(role=None, user_id=None):
+    """Menghapus entri cache sesi saat akun logout, ganti password, atau diperbarui."""
+    with _account_cache_lock:
+        if role and user_id:
+            _account_cache.pop(f"{str(role).lower()}:{user_id}", None)
+        else:
+            _account_cache.clear()
+
+EXEMPT_ENDPOINTS = {
+    'auth.change_password',
+    'auth.logout',
+    'auth.verify_session',
+    'auth.save_signature',
+    'auth.save_foto_profil',
+    'auth.delete_foto_profil'
+}
+
+EXEMPT_PATHS = {
+    '/api/auth/change_password',
+    '/api/auth/logout',
+    '/api/auth/verify_session',
+    '/api/auth/signature',
+    '/api/auth/foto_profil'
+}
 
 def generate_token(user_id, role, identifier, expires_in_hours=24, session_token=None):
     """
@@ -73,83 +105,139 @@ def token_required(f):
                 'message': f'Gagal memverifikasi token: {str(e)}'
             }), 401
 
-        # ================= REAL-TIME DATABASE EXISTENCE VERIFICATION =================
-        # Memastikan akun yang memiliki token JWT masih benar-benar ada di database (belum dihapus oleh Admin)
+        # ================= REAL-TIME ACCOUNT & SESSION CACHE VERIFICATION =================
+        # Menggunakan in-memory cache ringan (TTL 20 detik) untuk mencegah lonjakan query ke PostgreSQL
+        # saat pemindaian kamera biometrik (/api/detect_liveness) berlangsung setiap 600ms.
         user_id = payload.get('user_id')
         role = str(payload.get('role', '')).strip().lower()
+        session_token = payload.get('session_token')
+        curr_ep = request.endpoint or ''
+        curr_path = request.path or ''
+
+        cache_key = f"{role}:{user_id}"
+        now_ts = time.time()
+        cached = None
+        with _account_cache_lock:
+            entry = _account_cache.get(cache_key)
+            if entry and (now_ts - entry['timestamp'] < ACCOUNT_CACHE_TTL):
+                cached = entry
 
         try:
             from models import User, Siswa
-            user_account = None
+            from utils.passwords import needs_password_change
 
-            if role == 'siswa':
-                user_account = Siswa.query.get(user_id)
-                if not user_account:
+            if cached:
+                if cached.get('deleted'):
                     return jsonify({
                         'status': 'error',
                         'error_code': 'ACCOUNT_DELETED',
-                        'message': 'Akun siswa Anda telah dinonaktifkan atau dihapus oleh Administrator. Sesi login telah dihentikan.'
+                        'message': 'Akun Anda telah dinonaktifkan atau dihapus dari sistem. Sesi login telah dihentikan.'
                     }), 401
-                
-                # Cek apakah akun alumni telah melewati masa tenggang 1 tahun
-                if getattr(user_account, 'status', 'Aktif') == 'Alumni' and user_account.is_alumni_expired():
+
+                if cached.get('alumni_expired'):
                     return jsonify({
                         'status': 'error',
                         'error_code': 'ACCOUNT_EXPIRED',
                         'message': 'Masa aktif akses akun alumni Anda telah berakhir.'
                     }), 401
 
-            elif role in ['admin', 'piket', 'staf']:
-                user_account = User.query.get(user_id)
-                if not user_account:
-                    return jsonify({
-                        'status': 'error',
-                        'error_code': 'ACCOUNT_DELETED',
-                        'message': 'Akun staf/guru Anda telah dinonaktifkan atau dihapus dari sistem. Sesi login telah dihentikan.'
-                    }), 401
-            
-            request.current_user_obj = user_account
-
-            # ================= MULTI-DEVICE / SINGLE ACTIVE SESSION ENFORCEMENT =================
-            # Jika akun sudah login di perangkat lain, sesi di perangkat lama langsung ditolak
-            session_token = payload.get('session_token')
-            if user_account and hasattr(user_account, 'active_session_token') and user_account.active_session_token:
-                if session_token and session_token != user_account.active_session_token:
+                if cached.get('active_session_token') and session_token and session_token != cached.get('active_session_token'):
                     return jsonify({
                         'status': 'error',
                         'error_code': 'SESSION_TERMINATED',
                         'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
                     }), 401
 
-            # ================= FORCE PASSWORD CHANGE ENFORCEMENT =================
-            # Jika akun wajib mengganti kata sandi bawaan, blokir rute operasional
-            # kecuali endpoint ganti password, logout, verify_session, dan simpan tanda tangan digital
-            EXEMPT_ENDPOINTS = {
-                'auth.change_password',
-                'auth.logout',
-                'auth.verify_session',
-                'auth.save_signature',
-                'auth.save_foto_profil',
-                'auth.delete_foto_profil'
-            }
-            EXEMPT_PATHS = {
-                '/api/auth/change_password',
-                '/api/auth/logout',
-                '/api/auth/verify_session',
-                '/api/auth/signature',
-                '/api/auth/foto_profil'
-            }
-            if user_account:
-                from utils.passwords import needs_password_change
-                if needs_password_change(user_account):
-                    curr_ep = request.endpoint or ''
-                    curr_path = request.path or ''
+                if cached.get('needs_pwd_change'):
                     if curr_ep not in EXEMPT_ENDPOINTS and curr_path not in EXEMPT_PATHS:
                         return jsonify({
                             'status': 'error',
                             'error_code': 'PASSWORD_CHANGE_REQUIRED',
                             'message': 'Akun Anda wajib memperbarui kata sandi default sebelum dapat mengakses sistem.'
                         }), 403
+
+                # Pasang proxy ringan untuk request.current_user_obj (kecuali verify_session yang butuh full model)
+                if curr_ep == 'auth.verify_session':
+                    user_account = Siswa.query.get(user_id) if role == 'siswa' else User.query.get(user_id)
+                    request.current_user_obj = user_account
+                else:
+                    class CachedAccountProxy:
+                        def __init__(self, data):
+                            for k, v in data.items():
+                                setattr(self, k, v)
+                    request.current_user_obj = CachedAccountProxy(cached)
+            else:
+                user_account = None
+
+                if role == 'siswa':
+                    user_account = Siswa.query.get(user_id)
+                    if not user_account:
+                        with _account_cache_lock:
+                            _account_cache[cache_key] = {'deleted': True, 'timestamp': now_ts}
+                        return jsonify({
+                            'status': 'error',
+                            'error_code': 'ACCOUNT_DELETED',
+                            'message': 'Akun siswa Anda telah dinonaktifkan atau dihapus oleh Administrator. Sesi login telah dihentikan.'
+                        }), 401
+                    
+                    if getattr(user_account, 'status', 'Aktif') == 'Alumni' and user_account.is_alumni_expired():
+                        with _account_cache_lock:
+                            _account_cache[cache_key] = {'alumni_expired': True, 'timestamp': now_ts}
+                        return jsonify({
+                            'status': 'error',
+                            'error_code': 'ACCOUNT_EXPIRED',
+                            'message': 'Masa aktif akses akun alumni Anda telah berakhir.'
+                        }), 401
+
+                elif role in ['admin', 'piket', 'staf']:
+                    user_account = User.query.get(user_id)
+                    if not user_account:
+                        with _account_cache_lock:
+                            _account_cache[cache_key] = {'deleted': True, 'timestamp': now_ts}
+                        return jsonify({
+                            'status': 'error',
+                            'error_code': 'ACCOUNT_DELETED',
+                            'message': 'Akun staf/guru Anda telah dinonaktifkan atau dihapus dari sistem. Sesi login telah dihentikan.'
+                        }), 401
+                
+                request.current_user_obj = user_account
+
+                # ================= MULTI-DEVICE / SINGLE ACTIVE SESSION ENFORCEMENT =================
+                if user_account and hasattr(user_account, 'active_session_token') and user_account.active_session_token:
+                    if session_token and session_token != user_account.active_session_token:
+                        return jsonify({
+                            'status': 'error',
+                            'error_code': 'SESSION_TERMINATED',
+                            'message': 'Akun Anda telah login di perangkat lain. Sesi ini telah diakhiri demi keamanan data Anda'
+                        }), 401
+
+                # ================= FORCE PASSWORD CHANGE ENFORCEMENT =================
+                user_needs_pwd_change = False
+                if user_account:
+                    user_needs_pwd_change = needs_password_change(user_account)
+                    if user_needs_pwd_change:
+                        if curr_ep not in EXEMPT_ENDPOINTS and curr_path not in EXEMPT_PATHS:
+                            return jsonify({
+                                'status': 'error',
+                                'error_code': 'PASSWORD_CHANGE_REQUIRED',
+                                'message': 'Akun Anda wajib memperbarui kata sandi default sebelum dapat mengakses sistem.'
+                            }), 403
+
+                # Simpan metadata sesi ke cache ringan (TTL 20 detik)
+                with _account_cache_lock:
+                    _account_cache[cache_key] = {
+                        'id': user_account.id,
+                        'role': role,
+                        'deleted': False,
+                        'alumni_expired': False,
+                        'active_session_token': getattr(user_account, 'active_session_token', None),
+                        'needs_pwd_change': user_needs_pwd_change,
+                        'face_encoding': getattr(user_account, 'face_encoding', None),
+                        'nama': getattr(user_account, 'nama', None),
+                        'nis': getattr(user_account, 'nis', None),
+                        'kelas': getattr(user_account, 'kelas', None),
+                        'timestamp': now_ts
+                    }
         except Exception as db_err:
             current_app.logger.error(f"Gagal memvalidasi sesi akun di DB: {str(db_err)}")
             return jsonify({

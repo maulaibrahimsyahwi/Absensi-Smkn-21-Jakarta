@@ -1,10 +1,12 @@
 from datetime import datetime, date, time, timedelta
+import calendar
 from flask import Blueprint, request, jsonify
 from sqlalchemy import extract
 from sqlalchemy.orm import joinedload
-from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa, AuditLog
+from models import db, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, PelanggaranSiswa, AuditLog, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
-from utils.helpers import get_holiday_status
+from utils.helpers import get_holiday_status, get_date_range
+from utils.realtime_bus import notify_data_changed
 
 rekap_bp = Blueprint('rekap', __name__)
 
@@ -22,16 +24,9 @@ def get_rekap_harian():
     
     # Gunakan joinedload untuk mengeliminasi N+1 SQL query pada relasi siswa
     query = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa))
-    if tahun and tahun != 'ALL':
-        try:
-            query = query.filter(extract('year', AbsensiHarian.waktu) == int(tahun))
-        except Exception:
-            pass
-    if bulan and bulan != 'ALL':
-        try:
-            query = query.filter(extract('month', AbsensiHarian.waktu) == int(bulan))
-        except Exception:
-            pass
+    start_dt, end_dt = get_date_range(tahun, bulan)
+    if start_dt and end_dt:
+        query = query.filter(AbsensiHarian.waktu >= start_dt, AbsensiHarian.waktu <= end_dt)
         
     query = query.order_by(AbsensiHarian.waktu.desc())
 
@@ -61,16 +56,9 @@ def get_rekap_perpus():
     
     # Gunakan joinedload untuk mengeliminasi N+1 SQL query
     query = AbsensiPerpustakaan.query.options(joinedload(AbsensiPerpustakaan.siswa))
-    if tahun and tahun != 'ALL':
-        try:
-            query = query.filter(extract('year', AbsensiPerpustakaan.waktu) == int(tahun))
-        except Exception:
-            pass
-    if bulan and bulan != 'ALL':
-        try:
-            query = query.filter(extract('month', AbsensiPerpustakaan.waktu) == int(bulan))
-        except Exception:
-            pass
+    start_dt, end_dt = get_date_range(tahun, bulan)
+    if start_dt and end_dt:
+        query = query.filter(AbsensiPerpustakaan.waktu >= start_dt, AbsensiPerpustakaan.waktu <= end_dt)
         
     query = query.order_by(AbsensiPerpustakaan.waktu.desc())
 
@@ -133,14 +121,15 @@ def get_rekap_siswa_periode():
             "kunjungan_perpus": 0
         }
 
-    # 2. Agregasi presensi harian langsung di level database via SQL GROUP BY
+    # 2. Agregasi presensi harian langsung di level database via SQL GROUP BY (Sargable Query)
+    start_dt, end_dt = get_date_range(tahun, bulan if mode == 'bulan' else None)
     q_harian_agg = db.session.query(
         AbsensiHarian.siswa_id,
         AbsensiHarian.status,
         db.func.count(AbsensiHarian.id)
-    ).filter(extract('year', AbsensiHarian.waktu) == tahun)
-    if mode == 'bulan':
-        q_harian_agg = q_harian_agg.filter(extract('month', AbsensiHarian.waktu) == bulan)
+    )
+    if start_dt and end_dt:
+        q_harian_agg = q_harian_agg.filter(AbsensiHarian.waktu >= start_dt, AbsensiHarian.waktu <= end_dt)
     harian_agg_results = q_harian_agg.group_by(AbsensiHarian.siswa_id, AbsensiHarian.status).all()
 
     total_tepat_waktu = 0
@@ -184,13 +173,13 @@ def get_rekap_siswa_periode():
             elif "Alpa" in status_clean:
                 siswa_map[sid]["alpa"] += count_val
 
-    # 3. Agregasi kunjungan perpustakaan langsung di database via SQL GROUP BY
+    # 3. Agregasi kunjungan perpustakaan langsung di database via SQL GROUP BY (Sargable Query)
     q_perpus_agg = db.session.query(
         AbsensiPerpustakaan.siswa_id,
         db.func.count(AbsensiPerpustakaan.id)
-    ).filter(extract('year', AbsensiPerpustakaan.waktu) == tahun)
-    if mode == 'bulan':
-        q_perpus_agg = q_perpus_agg.filter(extract('month', AbsensiPerpustakaan.waktu) == bulan)
+    )
+    if start_dt and end_dt:
+        q_perpus_agg = q_perpus_agg.filter(AbsensiPerpustakaan.waktu >= start_dt, AbsensiPerpustakaan.waktu <= end_dt)
     perpus_agg_results = q_perpus_agg.group_by(AbsensiPerpustakaan.siswa_id).all()
 
     total_perpus = 0
@@ -375,15 +364,19 @@ def get_admin_summary():
         # 3. Pengajuan Izin Menunggu
         izin_menunggu = PengajuanIzin.query.filter(PengajuanIzin.status_pengajuan == 'Menunggu').count()
 
-        # 4. Pelanggaran Bulan Ini
+        # 4. Pelanggaran Bulan Ini (Sargable Range Query)
         now = datetime.now()
+        m_start, m_end = get_date_range(now.year, now.month)
         pelanggaran_bulan_ini = PelanggaranSiswa.query.filter(
-            extract('year', PelanggaranSiswa.tanggal_waktu) == now.year,
-            extract('month', PelanggaranSiswa.tanggal_waktu) == now.month
-        ).count()
+            PelanggaranSiswa.tanggal_waktu >= m_start,
+            PelanggaranSiswa.tanggal_waktu <= m_end
+        ).count() if m_start and m_end else 0
 
-        # 5. Aktivitas Presensi Terbaru Hari Ini
-        recent_presensi = AbsensiHarian.query.filter(db.func.date(AbsensiHarian.waktu) == today)\
+        # 5. Aktivitas Presensi Terbaru Hari Ini (Sargable Range Query + Eager Loading)
+        today_start = datetime.combine(today, time.min)
+        today_end = datetime.combine(today, time.max)
+        recent_presensi = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa))\
+            .filter(AbsensiHarian.waktu >= today_start, AbsensiHarian.waktu <= today_end)\
             .order_by(AbsensiHarian.waktu.desc()).limit(6).all()
 
         return jsonify({
@@ -412,13 +405,11 @@ def get_admin_summary():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-@rekap_bp.route('/api/rekap/generate_alpa_today', methods=['POST'])
-@token_required
-@role_required(['admin'])
-def generate_alpa_today():
+def execute_daily_alpa_generation():
     """
-    Otomatis mencatat status 'Alpa' (Tidak Hadir) untuk seluruh siswa aktif
-    yang belum memiliki catatan presensi harian (dan tidak memiliki Izin/Sakit disetujui) hari ini.
+    Menjalankan proses pencatatan Alpa otomatis harian untuk siswa aktif yang belum absen
+    dan tidak memiliki izin/sakit sah pada hari aktif sekolah.
+    Dapat dipanggil via endpoint manual Admin maupun background auto-scheduler (15:30 WIB).
     """
     today = date.today()
     today_start = datetime.combine(today, time.min)
@@ -427,10 +418,7 @@ def generate_alpa_today():
     now_dt = datetime.now()
     h_status = get_holiday_status(now_dt)
     if not h_status["is_school_day"]:
-        return jsonify({
-            "success": False,
-            "message": f"Pencatatan Alpa otomatis dibatalkan! {h_status['message']}"
-        }), 400
+        return False, f"Pencatatan Alpa otomatis dibatalkan! {h_status['message']}", 0
 
     try:
         siswa_aktif = Siswa.query.filter((Siswa.status == 'Aktif') | (Siswa.status == None)).all()
@@ -448,28 +436,52 @@ def generate_alpa_today():
         ).all()
         siswa_izin_ids = set(i.siswa_id for i in izin_disetujui)
 
+        cfg = PengaturanJadwal.query.first()
+        curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+        curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
         created_count = 0
-        now_dt = datetime.now()
         for s in siswa_aktif:
             if s.id not in siswa_absen_ids and s.id not in siswa_izin_ids:
                 alpa_record = AbsensiHarian(
                     siswa_id=s.id,
                     kelas=s.kelas,
                     status="Alpa",
-                    waktu=now_dt
+                    waktu=now_dt,
+                    tahun_ajaran=curr_ta,
+                    semester=curr_sem,
+                    sumber="auto_alpa"
                 )
                 db.session.add(alpa_record)
                 created_count += 1
 
         db.session.commit()
-        return jsonify({
-            "success": True,
-            "message": f"Berhasil mencatat status Alpa untuk {created_count} siswa aktif yang tidak hadir hari ini.",
-            "alpa_count": created_count
-        })
+        if created_count > 0:
+            notify_data_changed("presensi")
+        return True, f"Berhasil mencatat status Alpa untuk {created_count} siswa aktif yang tidak hadir hari ini.", created_count
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+        return False, str(e), 0
+
+
+@rekap_bp.route('/api/rekap/generate_alpa_today', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def generate_alpa_today():
+    """
+    Otomatis mencatat status 'Alpa' (Tidak Hadir) untuk seluruh siswa aktif
+    yang belum memiliki catatan presensi harian (dan tidak memiliki Izin/Sakit disetujui) hari ini.
+    """
+    success, message, count = execute_daily_alpa_generation()
+    if not success and count == 0 and "dibatalkan" in message:
+        return jsonify({"success": False, "message": message}), 400
+    if not success:
+        return jsonify({"success": False, "message": message}), 500
+    return jsonify({
+        "success": True,
+        "message": message,
+        "alpa_count": count
+    })
 
 
 @rekap_bp.route('/api/audit_logs', methods=['GET'])
@@ -555,15 +567,17 @@ def get_laporan_sudin():
             "alpa": 0
         }
 
-    # 2. Agregasi Absensi Harian via SQL GROUP BY
+    # 2. Agregasi Absensi Harian via SQL GROUP BY (Sargable date range filter)
+    start_dt, end_dt = get_date_range(tahun, bulan)
     q_harian = db.session.query(
         AbsensiHarian.siswa_id,
         AbsensiHarian.status,
         db.func.count(AbsensiHarian.id)
     ).filter(
-        extract('year', AbsensiHarian.waktu) == tahun,
-        extract('month', AbsensiHarian.waktu) == bulan
+        AbsensiHarian.waktu >= start_dt,
+        AbsensiHarian.waktu <= end_dt
     ).group_by(AbsensiHarian.siswa_id, AbsensiHarian.status).all()
+
 
     for sid, status_str, count_val in q_harian:
         if sid in siswa_stats:

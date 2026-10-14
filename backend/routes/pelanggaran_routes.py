@@ -5,6 +5,7 @@ from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
 from utils.realtime_bus import notify_data_changed
 from utils.file_storage import save_base64_file
+from utils.helpers import get_date_range
 
 pelanggaran_bp = Blueprint('pelanggaran_bp', __name__)
 
@@ -515,15 +516,16 @@ def get_pelanggaran_list():
     if tanggal:
         try:
             target_date = datetime.strptime(tanggal, "%Y-%m-%d").date()
-            query = query.filter(db.func.date(PelanggaranSiswa.tanggal_waktu) == target_date)
+            day_start = datetime.combine(target_date, time.min)
+            day_end = datetime.combine(target_date, time.max)
+            query = query.filter(PelanggaranSiswa.tanggal_waktu >= day_start, PelanggaranSiswa.tanggal_waktu <= day_end)
         except ValueError:
             pass
-    if tahun and str(tahun) != 'ALL':
-        try:
-            query = query.filter(db.extract('year', PelanggaranSiswa.tanggal_waktu) == int(tahun))
-        except Exception:
-            pass
-    if bulan and str(bulan) != 'ALL':
+    elif tahun and str(tahun) != 'ALL':
+        start_dt, end_dt = get_date_range(tahun, bulan if bulan and str(bulan) != 'ALL' else None)
+        if start_dt and end_dt:
+            query = query.filter(PelanggaranSiswa.tanggal_waktu >= start_dt, PelanggaranSiswa.tanggal_waktu <= end_dt)
+    elif bulan and str(bulan) != 'ALL':
         try:
             query = query.filter(db.extract('month', PelanggaranSiswa.tanggal_waktu) == int(bulan))
         except Exception:

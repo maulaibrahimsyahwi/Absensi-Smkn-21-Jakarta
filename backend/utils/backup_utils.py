@@ -390,28 +390,53 @@ def start_auto_backup_scheduler():
     _scheduler_started = True
 
     def _worker():
+        from datetime import time as dt_time
         # Beri jeda 15 detik saat startup aplikasi sebelum evaluasi pertama
         time.sleep(15)
+        last_backup_check = 0
+        last_alpa_date = None
+
         while True:
-            try:
-                from app import app
-                with app.app_context():
-                    backups = list_db_backups().get('backups', [])
-                    need_backup = True
-                    if backups:
-                        latest = backups[0]
-                        latest_dt = datetime.strptime(latest['created_at'], "%Y-%m-%d %H:%M:%S")
-                        if (datetime.now() - latest_dt).total_seconds() < 20 * 3600:
-                            need_backup = False
+            now_dt = datetime.now()
+            today_date = now_dt.date()
 
-                    if need_backup:
-                        print("[AUTO BACKUP] Memulai pembuatan snapshot otomatis PostgreSQL SMKN 21...")
-                        res = create_db_backup(max_keep=30)
-                        print(f"[AUTO BACKUP] Selesai: {res.get('message')}")
-            except Exception as e:
-                print(f"[AUTO BACKUP ERROR] Kendala background scheduler: {e}")
+            # 1. Otomasi Pencatatan Alpa Harian Siswa (Setiap Hari Sekolah pukul >= 15:30 WIB)
+            if last_alpa_date != today_date and now_dt.time() >= dt_time(15, 30):
+                try:
+                    from app import app
+                    with app.app_context():
+                        from routes.rekap_routes import execute_daily_alpa_generation
+                        success, msg, count = execute_daily_alpa_generation()
+                        last_alpa_date = today_date
+                        if success and count > 0:
+                            print(f"[AUTO ALPA SCHEDULER] {msg}")
+                        elif not success and "dibatalkan" in msg:
+                            print(f"[AUTO ALPA SCHEDULER] Dilewati hari ini ({msg})")
+                except Exception as e_alpa:
+                    print(f"[AUTO ALPA SCHEDULER ERROR] Kendala eksekusi alpa harian: {e_alpa}")
 
-            time.sleep(3600)
+            # 2. Otomasi Cadangan Database (Disaster Recovery harian setiap ~20 jam)
+            if time.time() - last_backup_check > 3600:
+                last_backup_check = time.time()
+                try:
+                    from app import app
+                    with app.app_context():
+                        backups = list_db_backups().get('backups', [])
+                        need_backup = True
+                        if backups:
+                            latest = backups[0]
+                            latest_dt = datetime.strptime(latest['created_at'], "%Y-%m-%d %H:%M:%S")
+                            if (now_dt - latest_dt).total_seconds() < 20 * 3600:
+                                need_backup = False
+
+                        if need_backup:
+                            print("[AUTO BACKUP] Memulai pembuatan snapshot otomatis PostgreSQL SMKN 21...")
+                            res = create_db_backup(max_keep=30)
+                            print(f"[AUTO BACKUP] Selesai: {res.get('message')}")
+                except Exception as e_bk:
+                    print(f"[AUTO BACKUP ERROR] Kendala background scheduler: {e_bk}")
+
+            time.sleep(60)
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
