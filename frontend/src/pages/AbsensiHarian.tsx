@@ -198,7 +198,6 @@ export default function AbsensiHarian(): React.JSX.Element {
     user?.is_medical_exempt ||
     (user?.medical_exemption_until && new Date(user.medical_exemption_until + "T23:59:59") >= new Date())
   );
-  const isReadyForCapture = isLiveVerified || isMedicalExempt;
 
   // Liveness Detection Adaptif & Anti-DDoS Polling
   const verifiedTokenRef = useRef<string | null>(null);
@@ -226,6 +225,8 @@ export default function AbsensiHarian(): React.JSX.Element {
     },
     pollIntervalMs: 750,
   });
+
+  const isReadyForCapture = isLiveVerified || isMedicalExempt;
 
   const captureAndVerify = useCallback(async () => {
     if (isAttendanceClosed) return;

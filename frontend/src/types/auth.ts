@@ -28,6 +28,9 @@ export interface BaseUser {
   is_alumni_expired?: boolean;
   terdaftar?: boolean;
   must_change_password?: boolean;
+  is_medical_exempt?: boolean;
+  medical_exemption_until?: string | null;
+  medical_exemption_alasan?: string | null;
 }
 
 export interface StaffUser extends BaseUser {
@@ -59,6 +62,9 @@ export function normalizeUser(raw: Record<string, unknown>): User {
     status: (raw.status as StatusSiswa) || 'Aktif',
     terdaftar: Boolean(raw.terdaftar ?? raw.face_encoding),
     must_change_password: Boolean(raw.must_change_password),
+    is_medical_exempt: Boolean(raw.is_medical_exempt),
+    medical_exemption_until: (raw.medical_exemption_until as string) || null,
+    medical_exemption_alasan: (raw.medical_exemption_alasan as string) || null,
   };
 
   if (role === 'siswa') {
