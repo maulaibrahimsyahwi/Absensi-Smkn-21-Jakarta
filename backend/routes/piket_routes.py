@@ -153,6 +153,7 @@ def create_izin_piket():
 def get_izin_piket():
     tanggal_param = request.args.get('tanggal')
     search = request.args.get('search', '').strip()
+    include_sig = request.args.get('include_signature', '').strip().lower() in ['1', 'true']
     
     query = IzinPiket.query.options(joinedload(IzinPiket.siswa)).join(Siswa, IzinPiket.siswa_id == Siswa.id)
     
@@ -173,7 +174,18 @@ def get_izin_piket():
         )
         
     records = query.order_by(IzinPiket.created_at.desc()).all()
-    return jsonify([r.to_dict() for r in records])
+    return jsonify([r.to_dict(include_signature=include_sig) for r in records])
+
+
+@piket_bp.route('/api/piket/izin/<int:id>', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
+def get_single_izin_piket(id):
+    """Mengambil detail tunggal rekaman izin piket lengkap beserta tanda tangan untuk cetak E-Slip."""
+    izin = IzinPiket.query.options(joinedload(IzinPiket.siswa)).filter_by(id=id).first()
+    if not izin:
+        return jsonify({"success": False, "message": "Data izin piket tidak ditemukan."}), 404
+    return jsonify({"success": True, "data": izin.to_dict(include_signature=True)})
 
 
 @piket_bp.route('/api/piket/izin/<int:id>', methods=['DELETE'])

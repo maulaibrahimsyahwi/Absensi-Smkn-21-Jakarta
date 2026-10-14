@@ -350,6 +350,8 @@ def bulk_delete_siswa():
         for s in target_records:
             s.is_deleted = True
             s.status = 'Mutasi'
+            # Kepatuhan UU PDP No. 27/2022 Pasal 43: Hapus data biometrik wajah siswa yang dimutasi/dihapus
+            s.face_encoding = None
         deleted_count = len(target_records)
         db.session.commit()
         invalidate_face_cache()
@@ -357,7 +359,7 @@ def bulk_delete_siswa():
         return jsonify({
             "success": True,
             "count": deleted_count,
-            "message": f"{deleted_count} data siswa berhasil diarsipkan (Status: Mutasi / Terhapus). Seluruh riwayat presensi tetap aman dalam arsip Dapodik."
+            "message": f"{deleted_count} data siswa berhasil diarsipkan (Status: Mutasi / Terhapus). Data biometrik wajah telah dihapus secara aman demi kepatuhan UU PDP."
         })
     except Exception as e:
         db.session.rollback()
@@ -374,13 +376,14 @@ def delete_siswa(id):
     try:
         nama_siswa = siswa.nama
         # Soft delete: tandai is_deleted = True dan status = 'Mutasi'
-        # Riwayat absensi dan pelanggaran tetap diarsipkan untuk kepatuhan audit Dapodik
+        # Kepatuhan UU PDP No. 27/2022 Pasal 43: Hapus data biometrik wajah siswa yang dimutasi/dihapus
         siswa.is_deleted = True
         siswa.status = 'Mutasi'
+        siswa.face_encoding = None
         db.session.commit()
         invalidate_face_cache()
         notify_data_changed("siswa")
-        return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil diarsipkan (Status: Mutasi / Terhapus). Riwayat tetap tersimpan untuk audit Dapodik."})
+        return jsonify({"success": True, "message": f"Siswa {nama_siswa} berhasil diarsipkan (Status: Mutasi / Terhapus). Data biometrik wajah telah dihapus secara aman demi kepatuhan UU PDP."})
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500

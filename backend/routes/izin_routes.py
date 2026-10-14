@@ -194,11 +194,23 @@ def submit_pengajuan_izin():
 @role_required(['piket', 'admin'])
 def get_pengajuan_izin():
     status = request.args.get('status')
+    include_sig = request.args.get('include_signature', '').strip().lower() in ['1', 'true']
     query = PengajuanIzin.query.options(joinedload(PengajuanIzin.siswa))
     if status and status != 'ALL':
         query = query.filter_by(status_pengajuan=status)
     pengajuan_list = query.order_by(PengajuanIzin.created_at.desc()).all()
-    return jsonify([p.to_dict() for p in pengajuan_list])
+    return jsonify([p.to_dict(include_signature=include_sig) for p in pengajuan_list])
+
+
+@izin_bp.route('/api/pengajuan_izin/<int:id>', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin', 'siswa'])
+def get_single_pengajuan_izin(id):
+    """Mengambil rincian pengajuan izin lengkap dengan tanda tangan digital siswa."""
+    pengajuan = PengajuanIzin.query.options(joinedload(PengajuanIzin.siswa)).filter_by(id=id).first()
+    if not pengajuan:
+        return jsonify({"success": False, "message": "Data pengajuan tidak ditemukan."}), 404
+    return jsonify({"success": True, "data": pengajuan.to_dict(include_signature=True)})
 
 
 @izin_bp.route('/api/pengajuan_izin/<int:id>/verifikasi', methods=['POST'])

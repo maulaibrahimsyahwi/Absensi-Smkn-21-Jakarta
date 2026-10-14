@@ -279,10 +279,15 @@ class PengajuanIzin(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    def to_dict(self):
+    def to_dict(self, include_signature=False):
         maps_url = None
         if self.latitude is not None and self.longitude is not None:
             maps_url = f"https://www.google.com/maps?q={self.latitude},{self.longitude}"
+
+        sig = None
+        if include_signature and self.tanda_tangan_siswa:
+            from utils.crypto_utils import decrypt_field
+            sig = decrypt_field(self.tanda_tangan_siswa)
 
         return {
             "id": self.id,
@@ -295,14 +300,16 @@ class PengajuanIzin(db.Model):
             "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d"),
             "alasan": self.alasan,
             "surat_bukti": self.surat_bukti,
-            "tanda_tangan_siswa": self.tanda_tangan_siswa,
+            "has_surat_bukti": bool(self.surat_bukti),
+            "tanda_tangan_siswa": sig,
+            "has_signature": bool(self.tanda_tangan_siswa),
             "status_pengajuan": self.status_pengajuan,
             "catatan_guru": self.catatan_guru,
             "latitude": self.latitude,
             "longitude": self.longitude,
             "lokasi_teks": self.lokasi_teks,
             "maps_url": maps_url,
-            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None
         }
 
 
@@ -334,7 +341,16 @@ class IzinPiket(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    def to_dict(self):
+    def to_dict(self, include_signature=False):
+        sig_petugas = None
+        sig_siswa = None
+        if include_signature:
+            from utils.crypto_utils import decrypt_field
+            if self.tanda_tangan_petugas:
+                sig_petugas = decrypt_field(self.tanda_tangan_petugas)
+            if self.tanda_tangan_siswa:
+                sig_siswa = decrypt_field(self.tanda_tangan_siswa)
+
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
@@ -348,9 +364,12 @@ class IzinPiket(db.Model):
             "jam_ke": self.jam_ke,
             "alasan": self.alasan,
             "petugas_piket": self.petugas_piket,
-            "tanda_tangan_petugas": self.tanda_tangan_petugas,
-            "tanda_tangan_siswa": self.tanda_tangan_siswa,
-            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            "tanda_tangan_petugas": sig_petugas,
+            "has_tanda_tangan_petugas": bool(self.tanda_tangan_petugas),
+            "tanda_tangan_siswa": sig_siswa,
+            "has_tanda_tangan_siswa": bool(self.tanda_tangan_siswa),
+            "has_signature": bool(self.tanda_tangan_petugas or self.tanda_tangan_siswa),
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None
         }
 
 
