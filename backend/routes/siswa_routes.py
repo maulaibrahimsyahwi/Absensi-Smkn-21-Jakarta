@@ -689,6 +689,30 @@ def naik_kelas_massal():
     if aksi == 'naik' and not kelas_tujuan:
         return jsonify({"success": False, "message": "Kelas tujuan kenaikan kelas wajib diisi."}), 400
 
+    if aksi == 'naik' and kelas_tujuan != 'ALUMNI':
+        if kelas_asal == kelas_tujuan:
+            return jsonify({
+                "success": False,
+                "message": f"Kelas tujuan tidak boleh sama dengan kelas asal ({kelas_asal})."
+            }), 400
+
+        # Proteksi tabrakan rombel: Cek apakah kelas_tujuan masih memiliki siswa aktif
+        active_in_target = Siswa.query.filter(
+            Siswa.kelas == kelas_tujuan,
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None),
+            Siswa.status == 'Aktif'
+        ).count()
+
+        if active_in_target > 0:
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Gagal memproses: Kelas tujuan '{kelas_tujuan}' masih memiliki {active_in_target} siswa aktif! "
+                    f"Untuk mencegah penggabungan rombel permanen, Anda wajib menaikkan/meluluskan siswa kelas '{kelas_tujuan}' "
+                    f"terlebih dahulu (Urutan promosi berjenjang: Tingkat XII -> Alumni, Tingkat XI -> XII, lalu Tingkat X -> XI)."
+                )
+            }), 400
+
     try:
         query = Siswa.query.filter(
             Siswa.kelas == kelas_asal,

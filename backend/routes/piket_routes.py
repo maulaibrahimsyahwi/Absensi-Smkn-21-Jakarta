@@ -367,6 +367,34 @@ def get_piket_notifikasi():
     except Exception:
         pass
 
+    try:
+        # 4. Presensi Offline / Proxy yang Membutuhkan Verifikasi Guru Piket
+        flagged_records = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter(
+            (AbsensiHarian.is_deleted == False) | (AbsensiHarian.is_deleted == None),
+            (AbsensiHarian.is_flagged_proxy == True) | (AbsensiHarian.status.ilike('%Perlu Verifikasi%'))
+        ).order_by(AbsensiHarian.waktu.desc()).limit(10).all()
+
+        for fl in flagged_records:
+            siswa = fl.siswa
+            nama_siswa = siswa.nama if siswa else "Siswa"
+            kelas_siswa = siswa.kelas if siswa else "-"
+
+            notifikasi.append({
+                "id": f"piket-flagged-{fl.id}",
+                "type": "flagged_presensi",
+                "category": "warning",
+                "judul": f"Verifikasi Presensi: {nama_siswa}",
+                "pesan": f"{nama_siswa} ({kelas_siswa}) - Status: {fl.status}. Catatan: {fl.proxy_note or 'Indikasi titip absen / sinkronisasi offline mandiri'}.",
+                "waktu": fl.waktu.strftime("%Y-%m-%d %H:%M:%S"),
+                "badge": "Verifikasi Piket",
+                "nama": nama_siswa,
+                "kelas": kelas_siswa,
+                "action_url": "/dashboard?tab=rekap_harian",
+                "action_label": "Tinjau Presensi"
+            })
+    except Exception:
+        pass
+
     # Urutkan dari notifikasi yang paling baru
     notifikasi.sort(key=lambda x: x.get('waktu', ''), reverse=True)
 
@@ -767,6 +795,108 @@ def apply_dispensasi_massal():
         "message": f"Berhasil menerbitkan dispensasi massal '{nama_kegiatan}' untuk {created_count} siswa.",
         "total": created_count
     })
+
+
+# ================= VERIFIKASI PRESENSI FLAGGED PROXY / OFFLINE MANDIRI =================
+
+@piket_bp.route('/api/piket/presensi/<int:id>/verifikasi_flag', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def verifikasi_presensi_flag(id):
+    """
+    Fitur Guru Piket / Admin:
+    Mengesahkan atau membatalkan presensi yang memiliki flag peringatan
+    (is_flagged_proxy = True atau berstatus '(Perlu Verifikasi Piket)').
+    """
+    absen = AbsensiHarian.query.get(id)
+    if not absen:
+        return jsonify({"success": False, "message": "Catatan presensi tidak ditemukan."}), 404
+
+    data = request.json or {}
+    aksi = str(data.get('aksi', 'setujui')).strip().lower()  # 'setujui' atau 'tolak'
+    catatan = str(data.get('catatan', '')).strip()
+
+    current_u = getattr(request, 'current_user', {})
+    officer_name = current_u.get('identifier', 'Guru Piket')
+
+    siswa = Siswa.query.get(absen.siswa_id)
+    nama_siswa = siswa.nama if siswa else "Siswa"
+
+    try:
+        if aksi == 'setujui':
+            # Bersihkan tanda '(Perlu Verifikasi Piket)' dari status
+            clean_status = (absen.status or '').replace("(Perlu Verifikasi Piket)", "").strip()
+            absen.status = clean_status
+            absen.is_flagged_proxy = False
+            verified_note = f"Disahkan oleh Piket ({officer_name})"
+            if catatan:
+                verified_note += f": {catatan}"
+            absen.proxy_note = f"[{verified_note}] {absen.proxy_note or ''}".strip()
+            msg = f"Presensi {nama_siswa} berhasil diverifikasi sah ({clean_status})."
+        elif aksi == 'tolak':
+            absen.is_flagged_proxy = False
+            absen.status = "Alpa"
+            reject_note = f"Ditolak Piket ({officer_name})"
+            if catatan:
+                reject_note += f": {catatan}"
+            absen.proxy_note = f"[{reject_note}] {absen.proxy_note or ''}".strip()
+            msg = f"Presensi {nama_siswa} ditolak dan status diubah menjadi Alpa."
+        else:
+            return jsonify({"success": False, "message": "Aksi tidak valid. Pilih 'setujui' atau 'tolak'."}), 400
+
+        db.session.commit()
+
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role=current_u.get('role', 'piket'),
+            user_name=officer_name,
+            action='VERIFIKASI_PRESENSI_PROXY',
+            target_type='AbsensiHarian',
+            target_id=str(absen.id),
+            keterangan=f"Aksi verifikasi {aksi} presensi {nama_siswa} ({absen.kelas}) tanggal {absen.waktu.strftime('%Y-%m-%d %H:%M') if absen.waktu else '-'}: {catatan or '-'}"
+        )
+
+        notify_data_changed("presensi")
+
+        return jsonify({
+            "success": True,
+            "message": msg,
+            "data": absen.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Gagal memproses verifikasi presensi: {str(e)}"}), 500
+
+
+@piket_bp.route('/api/piket/presensi/flagged', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
+def get_flagged_presensi():
+    """
+    Mengambil daftar presensi harian yang membutuhkan verifikasi Guru Piket
+    (is_flagged_proxy == True atau status mengandung 'Perlu Verifikasi Piket').
+    """
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = min(50, max(5, int(request.args.get('per_page', 20))))
+
+        query = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter(
+            (AbsensiHarian.is_deleted == False) | (AbsensiHarian.is_deleted == None),
+            (AbsensiHarian.is_flagged_proxy == True) | (AbsensiHarian.status.ilike('%Perlu Verifikasi%'))
+        ).order_by(AbsensiHarian.waktu.desc())
+
+        total = query.count()
+        records = query.offset((page - 1) * per_page).limit(per_page).all()
+
+        return jsonify({
+            "success": True,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "data": [r.to_dict() for r in records]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Gagal mengambil daftar presensi flagged: {str(e)}"}), 500
 
 
 

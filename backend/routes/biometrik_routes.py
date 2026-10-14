@@ -1,4 +1,5 @@
 import json
+import numpy as np
 from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from models import db, Siswa
@@ -58,7 +59,61 @@ def register_face():
                 "success": False, 
                 "message": "Tidak ada wajah terdeteksi pada foto yang diambil. Pastikan pencahayaan cukup dan wajah menghadap kamera."
             }), 400
-            
+
+        # Validasi Anti-Joki / Anti-Duplikasi: Cek apakah sampel wajah cocok dengan siswa lain yang sudah terdaftar
+        other_students = Siswa.query.filter(
+            Siswa.id != siswa.id,
+            Siswa.face_encoding != None,
+            (Siswa.status == 'Aktif') | (Siswa.status == None),
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None)
+        ).all()
+
+        if other_students:
+            other_encs = []
+            other_s_ids = []
+            for ot in other_students:
+                try:
+                    raw = json.loads(ot.face_encoding)
+                    if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list):
+                        for e in raw:
+                            other_encs.append(e)
+                            other_s_ids.append(ot.id)
+                    elif isinstance(raw, list):
+                        other_encs.append(raw)
+                        other_s_ids.append(ot.id)
+                except Exception:
+                    continue
+
+            if other_encs:
+                other_mat = np.array(other_encs, dtype=np.float32)
+                norms = np.linalg.norm(other_mat, axis=1, keepdims=True)
+                norms[norms == 0] = 1.0
+                other_mat_norm = other_mat / norms
+
+                for sample_enc in encodings:
+                    q = np.array(sample_enc, dtype=np.float32)
+                    nq = np.linalg.norm(q)
+                    if nq > 0:
+                        q = q / nq
+                    sims = np.dot(other_mat_norm, q)
+                    max_sim_idx = int(np.argmax(sims))
+                    max_sim = float(sims[max_sim_idx])
+
+                    if max_sim >= 0.45:
+                        conflicting_id = other_s_ids[max_sim_idx]
+                        conflict_siswa = Siswa.query.get(conflicting_id)
+                        conflict_name = conflict_siswa.nama if conflict_siswa else "Siswa Lain"
+                        conflict_nis = conflict_siswa.nis if conflict_siswa else "-"
+                        conflict_kelas = conflict_siswa.kelas if conflict_siswa else "-"
+                        return jsonify({
+                            "success": False,
+                            "message": (
+                                f"Registrasi biometrik ditolak! Wajah pada foto terdeteksi sangat mirip ({round(max_sim*100, 1)}%) "
+                                f"dengan siswa lain yang sudah terdaftar di sistem: {conflict_name} (NIS: {conflict_nis}, Kelas: {conflict_kelas}). "
+                                f"Satu wajah tidak dapat didaftarkan untuk dua akun siswa berbeda demi mencegah kecurangan presensi."
+                            )
+                        }), 400
+
         # Simpan array multi-sample biometrik wajah ke database
         siswa.face_encoding = json.dumps(encodings)
         db.session.commit()

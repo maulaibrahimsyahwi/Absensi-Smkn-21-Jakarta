@@ -1,6 +1,7 @@
 import re
 import math
 import json
+import numpy as np
 from datetime import datetime, time, timedelta
 import calendar
 from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK, WIB
@@ -444,8 +445,18 @@ def get_flattened_known_faces():
         except Exception:
             continue
 
-    _FACE_CACHE["encodings"] = encodings
+    if encodings:
+        known_mat = np.array(encodings, dtype=np.float32)
+        norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        known_mat_norm = known_mat / norms
+        setattr(known_mat_norm, '_is_normalized', True)
+        cached_encodings = known_mat_norm
+    else:
+        cached_encodings = []
+
+    _FACE_CACHE["encodings"] = cached_encodings
     _FACE_CACHE["siswa_ids"] = siswa_ids
     _FACE_CACHE["last_updated"] = now
-    return encodings, siswa_ids
+    return cached_encodings, siswa_ids
 

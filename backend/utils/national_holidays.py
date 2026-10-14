@@ -14,6 +14,7 @@ import json
 import logging
 import urllib.request
 import urllib.error
+import threading
 from datetime import datetime, date, timedelta
 
 logger = logging.getLogger(__name__)
@@ -398,17 +399,81 @@ def _write_disk_cache(year: int, holidays: list):
         logger.warning(f"Gagal menyimpan cache berkas hari libur {year}: {e}")
 
 
+_bg_sync_lock = threading.Lock()
+_bg_sync_active = set()
+
+
+def _fetch_all_tiers_sync(year: int) -> list:
+    """
+    Menjalankan penarikan API libur nasional multi-tier secara lengkap (Google Calendar, Kresnasatya, Nager.Date, Vercel).
+    """
+    google_holidays = _fetch_from_google_calendar(year)
+    kresna_holidays = _fetch_from_kresnasatya(year)
+
+    date_map = {}
+    if google_holidays:
+        for item in google_holidays:
+            date_map[item['tanggal_mulai']] = item
+
+    if kresna_holidays:
+        for item in kresna_holidays:
+            d = item['tanggal_mulai']
+            if d not in date_map:
+                date_map[d] = item
+            else:
+                date_map[d]['sumber'] = f"{date_map[d]['sumber']} & kresnasatya/api-harilibur (GitHub 240+ Stars)"
+
+    if not date_map:
+        nager_holidays = _fetch_from_nager_date(year)
+        for item in nager_holidays:
+            date_map[item['tanggal_mulai']] = item
+
+    if not date_map:
+        vercel_holidays = _fetch_from_api_hari_libur(year)
+        for item in vercel_holidays:
+            date_map[item['tanggal_mulai']] = item
+
+    if date_map:
+        final_list = sorted(date_map.values(), key=lambda x: x['tanggal_mulai'])
+        _MEMORY_CACHE[year] = {"data": final_list, "timestamp": datetime.now()}
+        _write_disk_cache(year, final_list)
+        return final_list
+    return []
+
+
+def _trigger_background_fetch(year: int):
+    """
+    Menjalankan sinkronisasi API publik di background thread agar tidak menahan
+    main thread saat koneksi internet lambat / DNS lagging.
+    """
+    with _bg_sync_lock:
+        if year in _bg_sync_active:
+            return
+        _bg_sync_active.add(year)
+
+    def _worker():
+        try:
+            _fetch_all_tiers_sync(year)
+        except Exception as e:
+            logger.warning(f"Background holiday fetch failed for {year}: {e}")
+        finally:
+            with _bg_sync_lock:
+                _bg_sync_active.discard(year)
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+
 def get_national_holidays_for_year(year: int, force_refresh: bool = False) -> list:
     """
     Mengambil daftar hari libur nasional dan cuti bersama resmi untuk suatu tahun.
     
-    Arsitektur Multi-Tier dengan Sumber API Terpopuler & Terpercaya:
-    1. Google Calendar Official Feed (Dikelola langsung oleh Google secara berkelanjutan, lengkap SKB 3 Menteri + Cuti Bersama)
-    2. kresnasatya/api-harilibur (Repositori GitHub #1 terpopuler untuk libur nasional Indonesia, ★ 240+ Stars)
-    3. Nager.Date API (Repositori GitHub #1 libur global, ★ 1.500+ Stars)
-    4. api-hari-libur.vercel.app (Cadangan SKB 3 Menteri)
-    5. Cache disk lokal (static/cache_holidays/holidays_{year}.json, TTL 7 hari)
-    6. Katalog baseline offline jika server tanpa koneksi internet sama sekali.
+    Arsitektur Multi-Tier Non-Blocking:
+    1. Cek Memory Cache (24 jam) -> Instan (<1ms)
+    2. Cek Disk Cache (static/cache_holidays/holidays_{year}.json, TTL 7 hari) -> Cepat (<2ms)
+    3. Jika force_refresh=True (misal Admin klik sync), jalankan sinkronisasi API multi-tier di foreground.
+    4. Jika belum ada cache & koneksi dingin, kembalikan offline baseline instan (<1ms) dan jalankan
+       penyegaran API di background daemon thread agar request tidak pernah freeze/timeout.
     """
     now = datetime.now()
 
@@ -425,54 +490,23 @@ def get_national_holidays_for_year(year: int, force_refresh: bool = False) -> li
             _MEMORY_CACHE[year] = {"data": disk_data, "timestamp": now}
             return disk_data
 
-    # 3. Pengambilan API Multi-Tier
-    # Langkah A: Ambil dari Google Calendar Feed (Lengkap SKB 3 Menteri + Cuti Bersama)
-    google_holidays = _fetch_from_google_calendar(year)
-    
-    # Langkah B: Ambil dari kresnasatya/api-harilibur (GitHub ★ 240+ Stars)
-    kresna_holidays = _fetch_from_kresnasatya(year)
+    # 3. Jika force_refresh diminta (Admin Action), jalankan secara sinkron di foreground
+    if force_refresh:
+        synced_data = _fetch_all_tiers_sync(year)
+        if synced_data:
+            return synced_data
 
-    # Gabungkan data untuk mendapatkan hasil paling lengkap dan terverifikasi
-    date_map = {}
+    # 4. Jika cache kosong & pemanggilan non-force: Hindari freeze thread utama!
+    # Picu sinkronisasi di background thread dan kembalikan baseline lokal instan
+    _trigger_background_fetch(year)
 
-    if google_holidays:
-        for item in google_holidays:
-            date_map[item['tanggal_mulai']] = item
-
-    if kresna_holidays:
-        for item in kresna_holidays:
-            d = item['tanggal_mulai']
-            if d not in date_map:
-                date_map[d] = item
-            else:
-                # Tandai sumber ganda yang saling memverifikasi
-                date_map[d]['sumber'] = f"{date_map[d]['sumber']} & kresnasatya/api-harilibur (GitHub 240+ Stars)"
-
-    # Jika kedua sumber utama belum menghasilkan data, coba fallback sekunder
-    if not date_map:
-        nager_holidays = _fetch_from_nager_date(year)
-        for item in nager_holidays:
-            date_map[item['tanggal_mulai']] = item
-
-    if not date_map:
-        vercel_holidays = _fetch_from_api_hari_libur(year)
-        for item in vercel_holidays:
-            date_map[item['tanggal_mulai']] = item
-
-    # Jika berhasil mendapatkan data dari API
-    if date_map:
-        final_list = sorted(date_map.values(), key=lambda x: x['tanggal_mulai'])
-        _MEMORY_CACHE[year] = {"data": final_list, "timestamp": now}
-        _write_disk_cache(year, final_list)
-        return final_list
-
-    # 4. Jika offline / gagal menghubungi seluruh API, baca dari Disk Cache tanpa batasan TTL
+    # Coba disk cache basi terlebih dahulu jika ada
     disk_data = _read_disk_cache(year)
     if disk_data and len(disk_data) > 0:
         _MEMORY_CACHE[year] = {"data": disk_data, "timestamp": now}
         return disk_data
 
-    # 5. Fallback baseline offline darurat
+    # Fallback baseline offline darurat (instan)
     baseline = OFFLINE_BASELINE_HOLIDAYS.get(year, [])
     fallback_result = []
     for idx, b in enumerate(baseline):

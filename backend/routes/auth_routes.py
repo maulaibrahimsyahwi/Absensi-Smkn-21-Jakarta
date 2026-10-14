@@ -547,10 +547,11 @@ def get_personal_siswa_rekap():
 
     tepat_waktu = sum(1 for h in harian_records if 'Tepat Waktu' in (h.status or ''))
     terlambat = sum(1 for h in harian_records if 'Terlambat' in (h.status or ''))
+    dispensasi = sum(1 for h in harian_records if 'Dispensasi' in (h.status or ''))
     pjj = sum(1 for h in harian_records if '(PJJ)' in (h.status or ''))
     sakit = sum(1 for h in harian_records if h.status == 'Sakit')
     izin = sum(1 for h in harian_records if h.status == 'Izin')
-    total_hadir = tepat_waktu + terlambat
+    total_hadir = tepat_waktu + terlambat + dispensasi
 
     now_dt = datetime.now()
     h_status = get_holiday_status(now_dt)
@@ -570,6 +571,7 @@ def get_personal_siswa_rekap():
             "total_hadir": total_hadir,
             "tepat_waktu": tepat_waktu,
             "terlambat": terlambat,
+            "dispensasi": dispensasi,
             "pjj": pjj,
             "sakit": sakit,
             "izin": izin,

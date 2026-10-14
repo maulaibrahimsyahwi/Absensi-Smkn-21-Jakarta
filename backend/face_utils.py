@@ -174,10 +174,13 @@ def verify_face(base64_image, known_encodings_list, siswa_ids):
         if norm_q > 0:
             q = q / norm_q
 
-        known_mat = np.array(known_encodings_list, dtype=np.float32)
-        norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        known_mat = known_mat / norms
+        if isinstance(known_encodings_list, np.ndarray) and getattr(known_encodings_list, '_is_normalized', False):
+            known_mat = known_encodings_list
+        else:
+            known_mat = np.array(known_encodings_list, dtype=np.float32)
+            norms = np.linalg.norm(known_mat, axis=1, keepdims=True)
+            norms[norms == 0] = 1.0
+            known_mat = known_mat / norms
 
         scores = np.dot(known_mat, q)
         best_idx = int(np.argmax(scores))

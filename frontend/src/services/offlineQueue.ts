@@ -15,7 +15,7 @@ import {
 const LEGACY_STORAGE_KEY = "smkn21_offline_attendance_queue";
 const TOKEN_KEY = "smkn21_auth_token";
 const MAX_AGE_MS = 24 * 60 * 60 * 1000; // Foto biometrik offline dibatasi maksimal 24 jam demi privasi (UU PDP)
-const CHUNK_SIZE = 20; // Ukuran batch foto per request sinkronisasi
+const CHUNK_SIZE = 5; // Ukuran batch foto per request sinkronisasi (mencegah HTTP 413 Payload Too Large)
 
 export interface OfflineAttendanceEntry {
   id: string; // Kunci idempotensi unik per rekaman

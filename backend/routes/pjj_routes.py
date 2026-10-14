@@ -70,6 +70,7 @@ def get_pjj_status():
 
 
 @pjj_bp.route('/api/pjj/cek_siswa', methods=['GET'])
+@token_required
 def cek_siswa_pjj():
     """
     Memeriksa apakah siswa atau kelas tertentu diizinkan melakukan presensi dari rumah (PJJ) hari ini.
