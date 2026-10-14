@@ -15,7 +15,7 @@ start_auto_backup_scheduler()
 @role_required(['admin'])
 def trigger_backup():
     """
-    Fitur Khusus Admin: Memicu pembuatan cadangan instan database SQLite (Disaster Recovery).
+    Fitur Khusus Admin: Memicu pembuatan cadangan instan database PostgreSQL (Disaster Recovery).
     """
     res = create_db_backup(max_keep=30)
     status_code = 200 if res.get('success') else 500
@@ -29,7 +29,7 @@ def trigger_backup():
             action='BACKUP_DATABASE',
             target_type='Database',
             target_id=res.get('filename'),
-            keterangan=f"Membuat cadangan database manual: {res.get('filename')} ({res.get('size_kb')} KB)"
+            keterangan=f"Membuat snapshot database PostgreSQL manual: {res.get('filename')} ({res.get('size_kb')} KB)"
         )
 
     return jsonify(res), status_code
@@ -52,13 +52,14 @@ def get_backups():
 @role_required(['admin'])
 def download_backup(filename):
     """
-    Fitur Khusus Admin: Mengunduh berkas cadangan database SQLite secara aman untuk off-site storage.
+    Fitur Khusus Admin: Mengunduh berkas cadangan database PostgreSQL secara aman untuk off-site storage.
     """
     # Sanitasi nama berkas (mencegah path traversal)
     safe_filename = os.path.basename(filename)
     filepath = os.path.join(BACKUP_DIR, safe_filename)
 
-    if not os.path.exists(filepath) or not safe_filename.endswith('.db'):
+    allowed_exts = ('.json', '.sql', '.db', '.gz')
+    if not os.path.exists(filepath) or not safe_filename.endswith(allowed_exts):
         return jsonify({"success": False, "message": "Berkas cadangan tidak ditemukan."}), 404
 
     current_u = getattr(request, 'current_user', {})
@@ -86,13 +87,17 @@ def download_backup(filename):
 def get_storage_stats():
     """
     Mengambil metrik statistik penggunaan ruang penyimpanan (Disk Storage & Database)
-    meliputi ukuran database SQLite, folder upload surat izin, berkas cadangan, dan log audit.
+    meliputi ukuran basis data PostgreSQL, folder upload surat izin, berkas cadangan, dan log audit.
     """
-    from config import BASE_DIR, DATABASE_PATH
-    from models import AuditLog
+    from config import BASE_DIR
+    from models import db, AuditLog
 
-    # 1. Database Size
-    db_size = os.path.getsize(DATABASE_PATH) if os.path.exists(DATABASE_PATH) else 0
+    # 1. Database Size PostgreSQL
+    try:
+        res = db.session.execute(db.text("SELECT pg_database_size(current_database());")).scalar()
+        db_size = int(res) if res else 0
+    except Exception:
+        db_size = 0
 
     # 2. Upload Surat Size
     upload_surat_dir = os.path.join(BASE_DIR, 'static', 'uploads', 'surat')
@@ -118,6 +123,7 @@ def get_storage_stats():
     # 4. Audit Log Count
     from datetime import datetime, timedelta
     old_cutoff = datetime.now() - timedelta(days=90)
+    audit_count = AuditLog.query.count()
     audit_old_count = AuditLog.query.filter(AuditLog.created_at < old_cutoff).count()
 
     def format_size(bytes_val):
@@ -143,7 +149,7 @@ def get_storage_stats():
         "database": {
             "size_bytes": db_size,
             "size_formatted": format_size(db_size),
-            "file": os.path.basename(DATABASE_PATH)
+            "engine": "PostgreSQL 17 (Supabase Pooler)"
         },
         "surat_uploads": {
             "count": surat_count,
@@ -176,7 +182,7 @@ def run_storage_cleanup():
     """
     Menjalankan housekeeping dan rotasi cache:
     1. Membersihkan log audit usang (> N hari).
-    2. Menjalankan SQLite VACUUM untuk mengklaim ulang ruang disk yang terfragmentasi.
+    2. Menjalankan PostgreSQL VACUUM ANALYZE untuk mereklaim ruang storage dan optimasi indeks per tabel.
     """
     from datetime import datetime, timedelta
     from models import db, AuditLog
@@ -195,14 +201,17 @@ def run_storage_cleanup():
         db.session.commit()
         cleaned_actions.append(f"Membersihkan {deleted_audit} baris log audit (> {days} hari)")
 
-    # 2. SQLite VACUUM
+    # 2. PostgreSQL VACUUM ANALYZE
     if vacuum_db:
         try:
-            db.session.execute(db.text("VACUUM;"))
-            db.session.commit()
-            cleaned_actions.append("Optimasi database VACUUM selesai")
+            with db.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                conn.execute(db.text("VACUUM ANALYZE absensi_harian;"))
+                conn.execute(db.text("VACUUM ANALYZE audit_logs;"))
+                conn.execute(db.text("VACUUM ANALYZE pelanggaran_siswa;"))
+                conn.execute(db.text("VACUUM ANALYZE siswa;"))
+            cleaned_actions.append("Optimasi basis data PostgreSQL (VACUUM ANALYZE) selesai")
         except Exception as e:
-            cleaned_actions.append(f"VACUUM dilewati ({str(e)})")
+            cleaned_actions.append(f"VACUUM ANALYZE dilewati ({str(e)})")
 
     current_u = getattr(request, 'current_user', {})
     record_audit_log(

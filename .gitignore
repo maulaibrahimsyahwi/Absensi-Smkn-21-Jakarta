@@ -47,6 +47,8 @@ backend/absensi.db-shm
 *.sqlite3-shm
 
 # Dump database & backup lokal
+backend/backups/
+backups/
 *.sql
 *.sql.gz
 *.bak

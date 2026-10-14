@@ -72,7 +72,7 @@ export default function ModalDisasterRecovery({
           type: "success",
           message:
             res.data.message ||
-            "Snapshot backup database SQLite berhasil dibuat!",
+            "Snapshot cadangan database PostgreSQL berhasil dibuat!",
         });
         fetchBackups();
       } else {
@@ -99,7 +99,7 @@ export default function ModalDisasterRecovery({
       const res = await api.get(`/admin/backup/download/${encodeURIComponent(filename)}`, {
         responseType: "blob",
       });
-      const blob = new Blob([res.data], { type: "application/x-sqlite3" });
+      const blob = new Blob([res.data], { type: "application/octet-stream" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;

@@ -12,45 +12,42 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 # Muat variabel lingkungan dari file .env jika ada
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# Konfigurasi Database (Mendukung SQLite lokal & PostgreSQL/MySQL produksi)
-DATABASE_PATH = os.path.join(BASE_DIR, 'absensi.db')
-_raw_db_url = os.environ.get('DATABASE_URL', '').strip()
+# Konfigurasi Database Utama: 100% PostgreSQL (Supabase High-Concurrency Pooler)
+# Default menggunakan Supabase Transaction Pooler (Port 6543)
+DEFAULT_POSTGRES_URL = "postgresql://postgres.yjlhpmdlxptuxxnlzxsj:maulaibrahim2004@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+
+_raw_db_url = (os.environ.get('DATABASE_URL') or DEFAULT_POSTGRES_URL).strip()
 if _raw_db_url.startswith('postgres://'):
     _raw_db_url = _raw_db_url.replace('postgres://', 'postgresql://', 1)
 
+# Pastikan driver PostgreSQL terpasang (psycopg2 atau pg8000)
 if _raw_db_url.startswith('postgresql://') and '+pg8000' not in _raw_db_url and '+psycopg' not in _raw_db_url:
     try:
         import psycopg2  # noqa: F401
     except Exception:
-        # Gunakan pg8000 jika psycopg2 DLL diblokir oleh Windows Application Control
+        # Gunakan pg8000 jika psycopg2 tidak tersedia / DLL diblokir oleh OS
         _raw_db_url = _raw_db_url.replace('postgresql://', 'postgresql+pg8000://', 1)
 
 # Jika menggunakan Supabase Pooler pada port 5432 (Session Mode max 15 klien),
-# alihkan otomatis ke port 6543 (Transaction Mode) agar anti-freeze dan mendukung banyak request konkuren
+# alihkan otomatis ke port 6543 (Transaction Mode) agar anti-freeze dan mendukung ribuan request konkuren
 if 'pooler.supabase.com:5432' in _raw_db_url:
     _raw_db_url = _raw_db_url.replace('pooler.supabase.com:5432', 'pooler.supabase.com:6543')
 
-SQLALCHEMY_DATABASE_URI = _raw_db_url or ('sqlite:///' + DATABASE_PATH)
+# Larang keras penggunaan SQLite di seluruh level aplikasi
+if 'sqlite' in _raw_db_url.lower():
+    raise RuntimeError("CRITICAL DATABASE CONFIG ERROR: SQLite telah dihapus dari sistem SMKN 21. Harap gunakan PostgreSQL!")
+
+SQLALCHEMY_DATABASE_URI = _raw_db_url
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-# Konfigurasi Concurrency Engine (Mencegah connection exhaustion & dropped sockets)
-if 'sqlite' in SQLALCHEMY_DATABASE_URI:
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "connect_args": {
-            "timeout": 30,  # Tunggu hingga 30 detik untuk antrean write-lock
-            "check_same_thread": False
-        },
-        "pool_pre_ping": True,
-    }
-else:
-    # Connection Pool untuk PostgreSQL / Supabase PgBouncer (Aman terhadap batas koneksi)
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": 10,
-        "max_overflow": 10,
-        "pool_recycle": 300,   # Segarkan koneksi idle setiap 5 menit agar tidak di-drop pooler
-        "pool_pre_ping": True,  # Cek keaktifan koneksi sebelum digunakan
-        "pool_timeout": 30,    # Batas toleransi antrean koneksi
-    }
+# Connection Pool untuk PostgreSQL / Supabase PgBouncer (Aman terhadap batas koneksi & anti-freeze)
+SQLALCHEMY_ENGINE_OPTIONS = {
+    "pool_size": 15,
+    "max_overflow": 20,
+    "pool_recycle": 300,   # Segarkan koneksi idle setiap 5 menit agar tidak di-drop pooler
+    "pool_pre_ping": True,  # Cek keaktifan koneksi sebelum digunakan
+    "pool_timeout": 30,    # Batas toleransi antrean koneksi
+}
 
 
 # Pastikan zona waktu proses backend berjalan di Asia/Jakarta (WIB) jika didukung OS

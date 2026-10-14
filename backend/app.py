@@ -2,8 +2,6 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_compress import Compress
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
 
 from config import (
     SQLALCHEMY_DATABASE_URI,
@@ -42,18 +40,6 @@ app.config['MAX_CONTENT_LENGTH'] = 12 * 1024 * 1024
 app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
-
-# Event Listener Concurrency SQLite: Mengaktifkan mode WAL dan 30s busy timeout per koneksi worker
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    if 'sqlite' in app.config.get('SQLALCHEMY_DATABASE_URI', ''):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode = WAL;")
-        cursor.execute("PRAGMA synchronous = NORMAL;")
-        cursor.execute("PRAGMA busy_timeout = 30000;")  # 30 detik antrean lock
-        cursor.execute("PRAGMA cache_size = -64000;")   # 64MB RAM cache
-        cursor.execute("PRAGMA temp_store = MEMORY;")
-        cursor.close()
 
 # Inisialisasi Ekstensi Keamanan & CORS
 CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}}, supports_credentials=True)
@@ -122,22 +108,12 @@ limiter.exempt(realtime_bp)
 # CLI Command untuk inisialisasi basis data secara eksplisit
 @app.cli.command("init-db")
 def init_db_command():
-    """Inisialisasi basis data dan jalankan migrasi skema dinamis."""
+    """Inisialisasi basis data PostgreSQL dan jalankan migrasi skema dinamis."""
     run_db_migrations(app)
-    print("Inisialisasi basis data dan migrasi selesai.")
+    print("Inisialisasi basis data PostgreSQL dan migrasi selesai.")
 
-# Jalankan migrasi otomatis hanya jika SQLite lokal belum dibuat atau diinstruksikan via env AUTO_MIGRATE=1
-_db_uri = app.config.get('SQLALCHEMY_DATABASE_URI', '')
-_should_migrate = False
-if 'sqlite' in _db_uri:
-    _db_file = _db_uri.replace('sqlite:///', '')
-    if not os.path.exists(_db_file):
-        _should_migrate = True
-if os.environ.get('AUTO_MIGRATE') == '1':
-    _should_migrate = True
-
-if _should_migrate:
-    run_db_migrations(app)
+# Inisialisasi basis data PostgreSQL & pastikan seluruh skema dan relasi siap
+run_db_migrations(app)
 
 
 # Middleware: Proteksi Dokumen Medis Sensitif (UU PDP No. 27/2022)

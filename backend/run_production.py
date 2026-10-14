@@ -29,7 +29,7 @@ if __name__ == "__main__":
     print(f"[START] MENJALANKAN SERVER PRODUKSI SMKN 21 (Waitress WSGI)")
     print(f"[CONFIG] Host: {host} | Port: {port}")
     print(f"[WORKER] Threads: {threads} (Parallel Request Processing)")
-    print(f"[READY] Concurrency Ready: Multi-Core OpenCV + WAL Mode SQLite")
+    print(f"[READY] Concurrency Ready: Multi-Core OpenCV + High-Performance PostgreSQL (Supabase Pooler)")
     print("================================================================")
 
     serve(

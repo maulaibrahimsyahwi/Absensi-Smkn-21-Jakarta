@@ -75,7 +75,7 @@ export default function ModalHousekeepingStorage({
 
     const isConfirmed = window.confirm(
       `Konfirmasi Housekeeping:\nLog audit keamanan yang lebih lama dari ${daysToKeep} hari akan dihapus permanen${
-        runVacuum ? " dan database SQLite akan di-VACUUM (deframgmentasi)" : ""
+        runVacuum ? " dan basis data PostgreSQL akan dioptimasi (VACUUM ANALYZE)" : ""
       }.\n\nLanjutkan proses pembersihan?`,
     );
     if (!isConfirmed) return;
@@ -186,7 +186,7 @@ export default function ModalHousekeepingStorage({
                     {stats.database_size_mb} MB
                   </p>
                   <p className="text-[10px] text-slate-400 truncate">
-                    SQLite DB
+                    PostgreSQL DB
                   </p>
                 </div>
 
@@ -267,7 +267,7 @@ export default function ModalHousekeepingStorage({
               </p>
             </div>
 
-            {/* Opsi SQLite VACUUM */}
+            {/* Opsi PostgreSQL VACUUM */}
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-start gap-3">
               <input
                 type="checkbox"
@@ -281,11 +281,11 @@ export default function ModalHousekeepingStorage({
                 className="text-xs cursor-pointer select-none"
               >
                 <span className="font-bold text-slate-900 block">
-                  Jalankan Reklaim Ruang Harddisk (SQLite VACUUM)
+                  Jalankan Optimasi Basis Data (PostgreSQL VACUUM ANALYZE)
                 </span>
                 <span className="text-slate-500 block text-[11px] mt-0.5 leading-relaxed">
-                  Menghapus fragmentasi data dan mengembalikan ruang kosong
-                  database kembali ke sistem operasi.
+                  Merefresh indeks relasi, membersihkan dead tuples (fragmentasi),
+                  dan mengoptimalkan kecepatan query database pada jam sibuk.
                 </span>
               </label>
             </div>
