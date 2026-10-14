@@ -462,6 +462,7 @@ def verify_harian():
 
             absen = AbsensiHarian(
                 siswa_id=siswa_id,
+                kelas=siswa.kelas,
                 status=status,
                 waktu=now_dt,
                 device_id=device_id or None,
@@ -579,12 +580,16 @@ def verify_perpus():
         result = verify_face(image_data, encodings, siswa_ids)
         if result['success']:
             siswa_id = result['siswa_id']
-            kunjungan = AbsensiPerpustakaan(siswa_id=siswa_id, keperluan=keperluan)
+            siswa = Siswa.query.get(siswa_id)
+            kunjungan = AbsensiPerpustakaan(
+                siswa_id=siswa_id,
+                kelas=siswa.kelas if siswa else None,
+                keperluan=keperluan
+            )
             db.session.add(kunjungan)
             db.session.commit()
             notify_data_changed("presensi")
             
-            siswa = Siswa.query.get(siswa_id)
             return jsonify({
                 "success": True,
                 "message": f"Kunjungan Tercatat: {siswa.nama} ({siswa.kelas}) - {keperluan}"
@@ -822,6 +827,7 @@ def sync_offline():
 
                     kunjungan = AbsensiPerpustakaan(
                         siswa_id=siswa.id,
+                        kelas=siswa.kelas,
                         waktu=record_dt,
                         keperluan=keperluan
                     )
@@ -878,6 +884,7 @@ def sync_offline():
 
                 absen = AbsensiHarian(
                     siswa_id=siswa.id,
+                    kelas=siswa.kelas,
                     status=clean_status_final,
                     waktu=record_dt,
                     latitude=latitude,

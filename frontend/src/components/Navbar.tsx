@@ -77,31 +77,6 @@ export default function Navbar(): React.JSX.Element {
           </div>
         </Link>
 
-        {/* Desktop Nav Items (Laptop/Desktop >= 1024px) */}
-        {navItems.length > 0 && (
-          <nav
-            aria-label="Navigasi utama"
-            className="hidden lg:flex flex-1 items-center justify-center gap-1 min-w-0 mx-4"
-          >
-            {navItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                title={item.desc}
-                aria-current={item.active ? "page" : undefined}
-                className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all ${
-                  item.active
-                    ? "bg-blue-50 text-blue-700 shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                {item.icon}
-                <span className="truncate">{item.shortLabel}</span>
-              </Link>
-            ))}
-          </nav>
-        )}
-
         {/* Right Actions: Profile Button & Desktop Dropdown */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
           {isAuthenticated ? (

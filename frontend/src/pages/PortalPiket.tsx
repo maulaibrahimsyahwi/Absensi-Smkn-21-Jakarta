@@ -27,7 +27,9 @@ import ModalPresensiManual from "../components/piket/ModalPresensiManual";
 import ModalForceMajeure from "../components/piket/ModalForceMajeure";
 import ModalDispensasiMassal from "../components/piket/ModalDispensasiMassal";
 import SignaturePadModal from "../components/SignaturePadModal";
-import ToastNotification, { ToastNotificationProps } from "../components/common/ToastNotification";
+import ToastNotification, {
+  ToastNotificationProps,
+} from "../components/common/ToastNotification";
 import ConfirmSheet from "../components/ui/ConfirmSheet";
 import NotificationDropdown from "../components/NotificationDropdown";
 import { liburService } from "../services/liburService";
@@ -72,10 +74,14 @@ export default function PortalPiket() {
   // Modal States
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [profileModalTab, setProfileModalTab] = useState<string>("profil");
-  const [isSignatureModalOpen, setIsSignatureModalOpen] = useState<boolean>(false);
+  const [isSignatureModalOpen, setIsSignatureModalOpen] =
+    useState<boolean>(false);
   const [selectedSlip, setSelectedSlip] = useState<any>(null);
-  const [notification, setNotification] = useState<ToastNotificationProps["notification"]>(null);
-  const [liburStatus, setLiburStatus] = useState<HolidayStatusResponse | null>(null);
+  const [notification, setNotification] =
+    useState<ToastNotificationProps["notification"]>(null);
+  const [liburStatus, setLiburStatus] = useState<HolidayStatusResponse | null>(
+    null,
+  );
   const [previewSuratData, setPreviewSuratData] = useState<any>(null);
 
   // State Mode Darurat Jaringan (+30 Menit Toleransi Presensi)
@@ -95,7 +101,9 @@ export default function PortalPiket() {
 
   // State Notifikasi Izin Siswa untuk Guru Piket
   const [pengajuanList, setPengajuanList] = useState<any[]>([]);
-  const [dismissedNotifIds, setDismissedNotifIds] = useState<(string | number)[]>(() => {
+  const [dismissedNotifIds, setDismissedNotifIds] = useState<
+    (string | number)[]
+  >(() => {
     try {
       const raw = localStorage.getItem(`read_piket_notif_${user?.id}`);
       return raw ? JSON.parse(raw) : [];
@@ -244,9 +252,15 @@ export default function PortalPiket() {
     }
   };
 
-  const handleKonfirmasiPelanggaran = async (id: number | string, tindakan: "setujui" | "tolak") => {
+  const handleKonfirmasiPelanggaran = async (
+    id: number | string,
+    tindakan: "setujui" | "tolak",
+  ) => {
     try {
-      const res = await api.post(`/pelanggaran/${id}/konfirmasi`, { aksi: tindakan, tindakan });
+      const res = await api.post(`/pelanggaran/${id}/konfirmasi`, {
+        aksi: tindakan,
+        tindakan,
+      });
       if (res.data?.success) {
         setNotification({
           type: "success",
@@ -317,24 +331,6 @@ export default function PortalPiket() {
 
           {/* Sisi Kanan: Dropdown Notifikasi & Profil (Desktop) */}
           <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => openProfile("profil")}
-              title="Profil Pengguna & Pengaturan Akun"
-              className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition-all backdrop-blur-md shadow-xs active:scale-95 cursor-pointer"
-            >
-              {user?.foto_profil ? (
-                <img
-                  src={user.foto_profil}
-                  alt={user?.nama || "Profil"}
-                  className="w-5 h-5 rounded-lg object-cover border border-white/40 shadow-xs"
-                />
-              ) : (
-                <User className="w-4 h-4 text-blue-200" />
-              )}
-              <span>Profil</span>
-            </button>
-
             <NotificationDropdown
               notifications={pengajuanList}
               dismissedIds={dismissedNotifIds}
@@ -545,7 +541,9 @@ export default function PortalPiket() {
               <p className="text-xl sm:text-2xl md:text-3xl font-black text-blue-700">
                 {summaryData.total_izin_hari_ini}
               </p>
-              <span className="text-[11px] font-semibold text-blue-600">Diterbitkan</span>
+              <span className="text-[11px] font-semibold text-blue-600">
+                Diterbitkan
+              </span>
             </div>
           </Link>
 
@@ -564,7 +562,9 @@ export default function PortalPiket() {
               <p className="text-xl sm:text-2xl md:text-3xl font-black text-amber-700">
                 {summaryData.total_terlambat_hari_ini}
               </p>
-              <span className="text-[11px] font-semibold text-amber-600">Siswa</span>
+              <span className="text-[11px] font-semibold text-amber-600">
+                Siswa
+              </span>
             </div>
           </Link>
 
@@ -583,7 +583,9 @@ export default function PortalPiket() {
               <p className="text-xl sm:text-2xl md:text-3xl font-black text-purple-700">
                 {summaryData.pengajuan_izin_menunggu}
               </p>
-              <span className="text-[11px] font-semibold text-purple-600">Perlu Verifikasi</span>
+              <span className="text-[11px] font-semibold text-purple-600">
+                Perlu Verifikasi
+              </span>
             </div>
           </Link>
 
@@ -602,7 +604,9 @@ export default function PortalPiket() {
               <p className="text-xl sm:text-2xl md:text-3xl font-black text-rose-700">
                 {summaryData.pelanggaran_hari_ini}
               </p>
-              <span className="text-[11px] font-semibold text-rose-600">Kasus</span>
+              <span className="text-[11px] font-semibold text-rose-600">
+                Kasus
+              </span>
             </div>
           </Link>
         </div>
@@ -699,7 +703,8 @@ export default function PortalPiket() {
               Suite Darurat & Dispensasi Meja Piket
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Penanganan langsung kendala presensi, izin delegasi, dan pemutihan keterlambatan
+              Penanganan langsung kendala presensi, izin delegasi, dan pemutihan
+              keterlambatan
             </p>
           </div>
         </div>
@@ -714,7 +719,9 @@ export default function PortalPiket() {
               <PenLine className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-xs sm:text-sm text-blue-950">Presensi Manual</p>
+              <p className="font-bold text-xs sm:text-sm text-blue-950">
+                Presensi Manual
+              </p>
               <p className="text-[11px] text-blue-700 mt-0.5 leading-tight">
                 Input kehadiran bagi siswa berkendala kamera / perangkat
               </p>
@@ -730,7 +737,9 @@ export default function PortalPiket() {
               <Users className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-xs sm:text-sm text-emerald-950">Dispensasi Massal</p>
+              <p className="font-bold text-xs sm:text-sm text-emerald-950">
+                Dispensasi Massal
+              </p>
               <p className="text-[11px] text-emerald-700 mt-0.5 leading-tight">
                 Penerbitan dispensasi kolektif lomba, OSIS, & upacara
               </p>
@@ -746,7 +755,9 @@ export default function PortalPiket() {
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <p className="font-bold text-xs sm:text-sm text-amber-950">Force Majeure</p>
+              <p className="font-bold text-xs sm:text-sm text-amber-950">
+                Force Majeure
+              </p>
               <p className="text-[11px] text-amber-700 mt-0.5 leading-tight">
                 Pemutihan keterlambatan massal cuaca ekstrem & transit
               </p>
@@ -770,13 +781,19 @@ export default function PortalPiket() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Laporan pelanggaran dan prestasi yang dicatat mandiri oleh siswa
+                  Laporan pelanggaran dan prestasi yang dicatat mandiri oleh
+                  siswa
+                  {pendingPelanggaran.length > 2 && (
+                    <span className="text-slate-400 ml-1">
+                      • Gulir untuk melihat semua
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+          <div className="max-h-[380px] sm:max-h-[440px] overflow-y-auto overscroll-contain divide-y divide-slate-100 border border-slate-200/80 rounded-2xl">
             {pendingPelanggaran.map((item) => {
               const isPrestasi = item.kategori === "Prestasi";
               return (
@@ -789,7 +806,9 @@ export default function PortalPiket() {
                       <span className="font-bold text-sm text-slate-900">
                         {item.nama_siswa}
                       </span>
-                      <span className="text-xs text-slate-500">{item.kelas}</span>
+                      <span className="text-xs text-slate-500">
+                        {item.kelas}
+                      </span>
                       {isPrestasi ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                           Prestasi (+{item.poin} Poin)
@@ -1041,16 +1060,16 @@ export default function PortalPiket() {
       >
         {modeDarurat ? (
           <p className="text-xs sm:text-sm text-slate-600">
-            Apakah Anda yakin ingin menonaktifkan Mode Darurat Jaringan? Jam masuk
-            dan aturan keterlambatan presensi gerbang sekolah akan diberlakukan normal
-            kembali sesuai jadwal operasional sekolah.
+            Apakah Anda yakin ingin menonaktifkan Mode Darurat Jaringan? Jam
+            masuk dan aturan keterlambatan presensi gerbang sekolah akan
+            diberlakukan normal kembali sesuai jadwal operasional sekolah.
           </p>
         ) : (
           <div className="space-y-3">
             <p className="text-xs sm:text-sm text-slate-600">
-              Gunakan mode ini ketika koneksi internet, WiFi gerbang, atau server
-              mengalami kendala. Pilih durasi toleransi keterlambatan tambahan bagi
-              siswa yang melakukan presensi:
+              Gunakan mode ini ketika koneksi internet, WiFi gerbang, atau
+              server mengalami kendala. Pilih durasi toleransi keterlambatan
+              tambahan bagi siswa yang melakukan presensi:
             </p>
             <div className="grid grid-cols-3 gap-2 pt-1">
               {[15, 30, 45].map((m) => (
@@ -1069,8 +1088,9 @@ export default function PortalPiket() {
               ))}
             </div>
             <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 leading-relaxed">
-              Siswa yang hadir dalam rentang waktu toleransi tambahan ini tidak akan
-              tercatat terlambat ataupun terkena pengurangan poin kedisiplinan.
+              Siswa yang hadir dalam rentang waktu toleransi tambahan ini tidak
+              akan tercatat terlambat ataupun terkena pengurangan poin
+              kedisiplinan.
             </p>
           </div>
         )}
@@ -1081,7 +1101,7 @@ export default function PortalPiket() {
         isOpen={isPresensiManualOpen}
         onClose={() => setIsPresensiManualOpen(false)}
         onSuccess={(msg) => {
-          setNotification({ type: "success", title: "Presensi Manual", message: msg });
+          setNotification({ type: "success", message: msg });
           fetchSummary();
         }}
       />
@@ -1091,7 +1111,7 @@ export default function PortalPiket() {
         isOpen={isForceMajeureOpen}
         onClose={() => setIsForceMajeureOpen(false)}
         onSuccess={(msg) => {
-          setNotification({ type: "success", title: "Force Majeure", message: msg });
+          setNotification({ type: "success", message: msg });
           fetchSummary();
         }}
       />
@@ -1101,7 +1121,7 @@ export default function PortalPiket() {
         isOpen={isDispensasiMassalOpen}
         onClose={() => setIsDispensasiMassalOpen(false)}
         onSuccess={(msg) => {
-          setNotification({ type: "success", title: "Dispensasi Massal", message: msg });
+          setNotification({ type: "success", message: msg });
           fetchSummary();
         }}
       />

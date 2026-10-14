@@ -9,8 +9,8 @@ export const PRIVACY = {
   fotoOfflineSementara: true,
   /** Kanal permintaan subjek data, mis. email atau nomor TU. */
   kontak: "",
-  /** Mis. "90 hari setelah status siswa menjadi Alumni". */
-  masaHapus: "",
+  /** Mis. "365 hari setelah status siswa menjadi Alumni". */
+  masaHapus: "365 hari setelah status siswa menjadi Alumni",
 };
 
 export default PRIVACY;

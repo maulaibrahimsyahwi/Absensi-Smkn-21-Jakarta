@@ -85,7 +85,9 @@ export default function ModalExportLaporanSudin({
   const [bulan, setBulan] = useState(currentMonth);
   const [tahun, setTahun] = useState(currentYear);
   const [hariEfektif, setHariEfektif] = useState(22);
-  const [kepalaSekolah, setKepalaSekolah] = useState("Drs. H. Supriyadi, M.Pd.");
+  const [kepalaSekolah, setKepalaSekolah] = useState(
+    "Tuti Masrihani, S.Pd, M.M",
+  );
   const [nipKepalaSekolah, setNipKepalaSekolah] = useState(
     "19680512 199403 1 005",
   );
@@ -216,20 +218,20 @@ export default function ModalExportLaporanSudin({
         "",
         "Petugas Pengelola Presensi,",
       ]);
-      aoaData.push(["", "Kepala SMK Negeri 21 Jakarta", "", "", "", "", "", ""]);
-      aoaData.push([]);
-      aoaData.push([]);
-      aoaData.push([]);
       aoaData.push([
         "",
-        kepalaSekolah,
+        "Kepala SMK Negeri 21 Jakarta",
         "",
         "",
         "",
         "",
         "",
-        namaPetugas,
+        "",
       ]);
+      aoaData.push([]);
+      aoaData.push([]);
+      aoaData.push([]);
+      aoaData.push(["", kepalaSekolah, "", "", "", "", "", namaPetugas]);
       aoaData.push([
         "",
         `NIP. ${nipKepalaSekolah}`,
@@ -256,7 +258,11 @@ export default function ModalExportLaporanSudin({
       ];
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `Sudin_${meta.nama_bulan}_${meta.tahun}`);
+      XLSX.utils.book_append_sheet(
+        wb,
+        ws,
+        `Sudin_${meta.nama_bulan}_${meta.tahun}`,
+      );
       XLSX.writeFile(
         wb,
         `Laporan_Bulanan_Sudin_Disdik_${meta.nama_bulan}_${meta.tahun}_SMKN21.xlsx`,
@@ -304,12 +310,9 @@ export default function ModalExportLaporanSudin({
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
       doc.setTextColor(80, 80, 80);
-      doc.text(
-        `NPSN: ${meta.npsn} | ${meta.alamat}`,
-        pageWidth / 2,
-        33,
-        { align: "center" },
-      );
+      doc.text(`NPSN: ${meta.npsn} | ${meta.alamat}`, pageWidth / 2, 33, {
+        align: "center",
+      });
 
       // Garis Ganda Pemisah Kop
       doc.setLineWidth(0.8);
@@ -418,7 +421,9 @@ export default function ModalExportLaporanSudin({
       });
 
       // Sign-off block
-      const lastTableFinalY = (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 53;
+      const lastTableFinalY =
+        (doc as unknown as { lastAutoTable?: { finalY?: number } })
+          .lastAutoTable?.finalY ?? 53;
       const finalY = lastTableFinalY + 8;
       const pageHeight = doc.internal.pageSize.getHeight();
       const signY = finalY > pageHeight - 35 ? 15 : finalY;
@@ -473,7 +478,8 @@ export default function ModalExportLaporanSudin({
                 Ekspor Laporan Bulanan Standar Sudin Disdik DKI
               </h3>
               <p className="text-xs text-blue-200 mt-0.5">
-                Format Rekapitulasi Suku Dinas Pendidikan Wilayah II Jakarta Pusat
+                Format Rekapitulasi Suku Dinas Pendidikan Wilayah II Jakarta
+                Pusat
               </p>
             </div>
           </div>
@@ -587,7 +593,7 @@ export default function ModalExportLaporanSudin({
 
               <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200">
                 <span className="text-[10px] font-bold text-amber-800 uppercase block">
-                  Total Absen (S+I+A)
+                  Total Absen
                 </span>
                 <p className="text-xl font-black text-amber-900 mt-0.5">
                   {data.ringkasan_sekolah.total_absen}
@@ -617,9 +623,11 @@ export default function ModalExportLaporanSudin({
           <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
             <div className="bg-slate-100 px-4 py-2.5 border-b border-slate-200 flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800">
-                Pratinjau Matriks Kehadiran Per Kelas
+                Pratinjau Kehadiran Per Kelas
               </span>
-              {loading && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+              {loading && (
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+              )}
             </div>
 
             <div className="max-h-56 overflow-y-auto">
@@ -646,7 +654,9 @@ export default function ModalExportLaporanSudin({
                       <td className="px-3 py-1.5 font-bold text-slate-800">
                         {item.kelas}
                       </td>
-                      <td className="px-2 py-1.5 text-center">{item.total_siswa}</td>
+                      <td className="px-2 py-1.5 text-center">
+                        {item.total_siswa}
+                      </td>
                       <td className="px-2 py-1.5 text-center text-emerald-700 font-semibold">
                         {item.hadir}
                       </td>
@@ -675,7 +685,8 @@ export default function ModalExportLaporanSudin({
           {/* Action Buttons */}
           <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100">
             <span className="text-[11px] text-slate-500">
-              Dokumen telah dilengkapi Kop Surat Resmi DKI Jakarta & format baku Sudin.
+              Dokumen telah dilengkapi Kop Surat Resmi DKI Jakarta & format baku
+              Sudin.
             </span>
 
             <div className="flex items-center gap-2.5 w-full sm:w-auto">

@@ -13,10 +13,13 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Konfigurasi Database Utama: 100% PostgreSQL (Supabase High-Concurrency Pooler)
-# Default menggunakan Supabase Transaction Pooler (Port 6543)
-DEFAULT_POSTGRES_URL = "postgresql://postgres.yjlhpmdlxptuxxnlzxsj:maulaibrahim2004@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+_raw_db_url = os.environ.get('DATABASE_URL', '').strip()
+if not _raw_db_url:
+    raise RuntimeError(
+        "CRITICAL CONFIG ERROR: DATABASE_URL environment variable is not set! "
+        "Pastikan file backend/.env telah dibuat dan memiliki variabel DATABASE_URL."
+    )
 
-_raw_db_url = (os.environ.get('DATABASE_URL') or DEFAULT_POSTGRES_URL).strip()
 if _raw_db_url.startswith('postgres://'):
     _raw_db_url = _raw_db_url.replace('postgres://', 'postgresql://', 1)
 

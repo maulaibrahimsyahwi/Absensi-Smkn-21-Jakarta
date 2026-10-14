@@ -1,7 +1,9 @@
 import os
 import json
 import glob
-from datetime import datetime
+import zipfile
+import shutil
+from datetime import datetime, date
 from config import BASE_DIR
 
 BACKUP_DIR = os.path.join(BASE_DIR, 'backups')
@@ -20,6 +22,78 @@ def _serialize_model_instance(obj):
     return row_data
 
 
+def _deserialize_row(model_cls, row_dict):
+    """Mengonversi dictionary snapshot kembali ke tipe data native SQLAlchemy model."""
+    cleaned = {}
+    col_map = {c.name: c for c in model_cls.__table__.columns}
+    for k, v in row_dict.items():
+        if k not in col_map:
+            continue
+        col = col_map[k]
+        if v is None:
+            cleaned[k] = None
+            continue
+
+        type_str = str(col.type).upper()
+        if 'DATETIME' in type_str:
+            if isinstance(v, str):
+                try:
+                    cleaned[k] = datetime.fromisoformat(v)
+                except Exception:
+                    cleaned[k] = v
+            else:
+                cleaned[k] = v
+        elif 'DATE' in type_str:
+            if isinstance(v, str):
+                try:
+                    cleaned[k] = date.fromisoformat(v[:10])
+                except Exception:
+                    cleaned[k] = v
+            else:
+                cleaned[k] = v
+        elif 'BOOLEAN' in type_str:
+            cleaned[k] = bool(v)
+        elif 'INTEGER' in type_str:
+            try:
+                cleaned[k] = int(v)
+            except Exception:
+                cleaned[k] = v
+        elif 'FLOAT' in type_str:
+            try:
+                cleaned[k] = float(v)
+            except Exception:
+                cleaned[k] = v
+        else:
+            cleaned[k] = v
+    return cleaned
+
+
+def _get_ordered_models():
+    """
+    Mengembalikan daftar tuple (table_name, model_class) yang terurut berdasarkan
+    hierarki ketergantungan relasi Foreign Key (Topological Order).
+    Tabel induk diurutkan pertama, tabel anak/transaksi berikutnya.
+    """
+    from models import (
+        User, Siswa, HariLibur, PengaturanJadwal, PengaturanPJJ,
+        AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket,
+        PelanggaranSiswa, AuditLog
+    )
+    return [
+        ('users', User),
+        ('siswa', Siswa),
+        ('hari_libur', HariLibur),
+        ('pengaturan_jadwal', PengaturanJadwal),
+        ('pengaturan_pjj', PengaturanPJJ),
+        ('absensi_harian', AbsensiHarian),
+        ('absensi_perpustakaan', AbsensiPerpustakaan),
+        ('pengajuan_izin', PengajuanIzin),
+        ('izin_piket', IzinPiket),
+        ('pelanggaran_siswa', PelanggaranSiswa),
+        ('audit_logs', AuditLog)
+    ]
+
+
 def create_db_backup(max_keep=30):
     """
     Membuat snapshot cadangan basis data PostgreSQL secara aman (Disaster Recovery).
@@ -29,29 +103,10 @@ def create_db_backup(max_keep=30):
     :return: dict status keberhasilan, path berkas, ukuran, dan timestamp
     """
     try:
-        from models import (
-            User, Siswa, AbsensiHarian, AbsensiPerpustakaan,
-            PengajuanIzin, IzinPiket, PelanggaranSiswa, HariLibur,
-            PengaturanPJJ, PengaturanJadwal, AuditLog
-        )
-
+        registered_models = _get_ordered_models()
         timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_filename = f"absensi_backup_pg_{timestamp_str}.json"
         backup_filepath = os.path.join(BACKUP_DIR, backup_filename)
-
-        registered_models = [
-            ('users', User),
-            ('siswa', Siswa),
-            ('absensi_harian', AbsensiHarian),
-            ('absensi_perpustakaan', AbsensiPerpustakaan),
-            ('pengajuan_izin', PengajuanIzin),
-            ('izin_piket', IzinPiket),
-            ('pelanggaran_siswa', PelanggaranSiswa),
-            ('hari_libur', HariLibur),
-            ('pengaturan_pjj', PengaturanPJJ),
-            ('pengaturan_jadwal', PengaturanJadwal),
-            ('audit_logs', AuditLog)
-        ]
 
         data_payload = {}
         total_rows = 0
@@ -111,14 +166,191 @@ def create_db_backup(max_keep=30):
         }
 
 
+def create_full_archive_backup(max_keep=10):
+    """
+    Membuat arsip sistem penuh (.zip) yang mencakup:
+    1. Snapshot basis data PostgreSQL (.json)
+    2. Berkas fisik upload surat (/static/uploads/surat)
+    3. Berkas surat edaran (/static/uploads/surat_edaran)
+    4. Tanda tangan & avatar digital (/static/uploads/signatures, /static/uploads/avatars)
+    """
+    try:
+        # Buat snapshot DB terlebih dahulu
+        db_res = create_db_backup(max_keep=max_keep * 3)
+        if not db_res.get('success'):
+            return db_res
+
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_filename = f"absensi_full_archive_{timestamp_str}.zip"
+        zip_filepath = os.path.join(BACKUP_DIR, zip_filename)
+
+        with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # 1. Masukkan berkas snapshot JSON database
+            zipf.write(db_res['filepath'], arcname="database_snapshot.json")
+
+            # 2. Masukkan folder uploads fisik jika ada
+            uploads_dir = os.path.join(BASE_DIR, 'static', 'uploads')
+            if os.path.exists(uploads_dir):
+                for root, _, files in os.walk(uploads_dir):
+                    for file in files:
+                        full_p = os.path.join(root, file)
+                        rel_p = os.path.relpath(full_p, BASE_DIR)
+                        zipf.write(full_p, arcname=rel_p)
+
+        file_size_kb = round(os.path.getsize(zip_filepath) / 1024, 2)
+        return {
+            "success": True,
+            "filename": zip_filename,
+            "filepath": zip_filepath,
+            "size_kb": file_size_kb,
+            "message": f"Arsip sistem penuh (Database + Uploads) berhasil dibuat ({file_size_kb} KB)."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Gagal membuat arsip sistem penuh: {str(e)}"
+        }
+
+
+def restore_db_from_backup(backup_target, mode='replace'):
+    """
+    Memulihkan (restore) basis data dari berkas snapshot JSON atau arsip ZIP.
+    Menghormati urutan foreign-key (FK dependencies) dan mereset sequence ID PostgreSQL.
+    
+    :param backup_target: Nama berkas di folder backups atau path absolut berkas .json / .zip
+    :param mode: 'replace' (hapus data lama lalu isi ulang) atau 'merge' (tambah baris baru)
+    :return: dict status keberhasilan dan ringkasan pemulihan per tabel
+    """
+    from models import db
+    from utils.helpers import invalidate_face_cache
+
+    try:
+        if not os.path.isabs(backup_target):
+            filepath = os.path.join(BACKUP_DIR, os.path.basename(backup_target))
+        else:
+            filepath = backup_target
+
+        if not os.path.exists(filepath):
+            return {
+                "success": False,
+                "message": f"Berkas cadangan '{os.path.basename(backup_target)}' tidak ditemukan."
+            }
+
+        extracted_uploads = 0
+        snapshot_json_data = None
+
+        # 1. Evaluasi apakah berkas berbentuk ZIP atau JSON murni
+        if zipfile.is_zipfile(filepath):
+            with zipfile.ZipFile(filepath, 'r') as zipf:
+                # Cari berkas snapshot json di dalam zip
+                json_candidates = [n for n in zipf.namelist() if n.endswith('.json')]
+                if not json_candidates:
+                    return {
+                        "success": False,
+                        "message": "Arsip ZIP tidak memuat berkas snapshot database (.json)."
+                    }
+                target_json_name = "database_snapshot.json" if "database_snapshot.json" in json_candidates else json_candidates[0]
+                with zipf.open(target_json_name) as jf:
+                    snapshot_json_data = json.load(jf)
+
+                # Ekstrak berkas uploads jika ada
+                for item in zipf.namelist():
+                    if item.startswith('static/uploads/') and not item.endswith('/'):
+                        dest_path = os.path.join(BASE_DIR, item)
+                        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                        with zipf.open(item) as sf, open(dest_path, 'wb') as df:
+                            shutil.copyfileobj(sf, df)
+                        extracted_uploads += 1
+        else:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                snapshot_json_data = json.load(f)
+
+        if not snapshot_json_data or 'tables' not in snapshot_json_data:
+            return {
+                "success": False,
+                "message": "Format berkas cadangan tidak valid (kunci 'tables' tidak ditemukan)."
+            }
+
+        tables_data = snapshot_json_data['tables']
+        ordered_models = _get_ordered_models()
+
+        # 2. Jika mode replace: Bersihkan tabel dengan urutan terbalik (Anak dahulu -> Induk terakhir)
+        if mode == 'replace':
+            for table_name, model_cls in reversed(ordered_models):
+                db.session.query(model_cls).delete()
+            db.session.flush()
+
+        # 3. Masukkan baris data baru dengan urutan ketergantungan (Induk dahulu -> Anak terakhir)
+        restored_counts = {}
+        total_restored = 0
+
+        for table_name, model_cls in ordered_models:
+            table_rows = tables_data.get(table_name, [])
+            count_table = 0
+            for row_dict in table_rows:
+                cleaned = _deserialize_row(model_cls, row_dict)
+                instance = model_cls(**cleaned)
+                db.session.add(instance)
+                count_table += 1
+            db.session.flush()
+            restored_counts[table_name] = count_table
+            total_restored += count_table
+
+        db.session.commit()
+
+        # 4. Reset PostgreSQL Auto-Increment Sequences agar penambahan baris baru tidak konflik ID
+        seq_resets = 0
+        if db.engine.dialect.name == 'postgresql':
+            for table_name, model_cls in ordered_models:
+                col_names = [c.name for c in model_cls.__table__.columns]
+                if 'id' in col_names:
+                    try:
+                        sql = db.text(f"""
+                            SELECT setval(
+                                pg_get_serial_sequence('{table_name}', 'id'),
+                                COALESCE((SELECT MAX(id) FROM {table_name}), 1),
+                                (SELECT MAX(id) FROM {table_name}) IS NOT NULL
+                            );
+                        """)
+                        db.session.execute(sql)
+                        seq_resets += 1
+                    except Exception:
+                        pass
+            db.session.commit()
+
+        # 5. Invalidate face recognition cache in memory
+        try:
+            invalidate_face_cache()
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "filename": os.path.basename(filepath),
+            "mode": mode,
+            "total_restored": total_restored,
+            "restored_tables": restored_counts,
+            "extracted_uploads": extracted_uploads,
+            "sequences_reset": seq_resets,
+            "message": f"Pemulihan basis data berhasil ({total_restored} baris dipulihkan pada {len(restored_counts)} tabel)."
+        }
+
+    except Exception as e:
+        db.session.rollback()
+        return {
+            "success": False,
+            "message": f"Gagal memulihkan database: {str(e)}"
+        }
+
+
 def list_db_backups():
     """
     Mengambil daftar seluruh berkas cadangan database yang tersedia beserta ukurannya.
-    Mendukung berkas JSON dan legacy DB.
+    Mendukung berkas JSON dan ZIP.
     """
     try:
         all_backups = sorted(
-            glob.glob(os.path.join(BACKUP_DIR, "absensi_backup_*.*")),
+            glob.glob(os.path.join(BACKUP_DIR, "absensi_*.*")),
             key=os.path.getmtime,
             reverse=True
         )
@@ -126,6 +358,7 @@ def list_db_backups():
         for bp in all_backups:
             items.append({
                 "filename": os.path.basename(bp),
+                "is_archive": bp.endswith('.zip'),
                 "size_kb": round(os.path.getsize(bp) / 1024, 2),
                 "created_at": datetime.fromtimestamp(os.path.getmtime(bp)).strftime("%Y-%m-%d %H:%M:%S")
             })
@@ -182,3 +415,4 @@ def start_auto_backup_scheduler():
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
+

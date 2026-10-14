@@ -2,16 +2,20 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Users,
   Search,
-  CheckSquare,
-  Square,
-  AlertTriangle,
   CheckCircle2,
-  Loader2,
-  X,
+  AlertTriangle,
+  RotateCcw,
+  Sparkles,
+  UserCheck,
 } from "lucide-react";
 import api from "../../services/api";
 import { DAFTAR_KELAS_SMKN21 } from "../../constants/schoolData";
 import { Siswa } from "../../types/auth";
+import Sheet, { SheetHeader, SheetBody, SheetFooter } from "../ui/Sheet";
+import CustomDropdown, { DropdownOption } from "../CustomDropdown";
+import Button from "../ui/Button";
+import InlineAlert from "../ui/InlineAlert";
+import Field, { INPUT_CLASS } from "../ui/Field";
 
 export interface ModalDispensasiMassalProps {
   isOpen: boolean;
@@ -19,18 +23,23 @@ export interface ModalDispensasiMassalProps {
   onSuccess?: (message: string) => void;
 }
 
+const TIPE_IZIN_OPTIONS: DropdownOption[] = [
+  { value: "Izin Meninggalkan Kelas", label: "Izin Meninggalkan Kelas" },
+  { value: "Izin Masuk", label: "Izin Masuk (Terlambat Khusus)" },
+];
+
 export default function ModalDispensasiMassal({
   isOpen,
   onClose,
   onSuccess,
 }: ModalDispensasiMassalProps): React.JSX.Element | null {
-  if (!isOpen) return null;
-
   const [allStudents, setAllStudents] = useState<Siswa[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [search, setSearch] = useState("");
   const [filterKelas, setFilterKelas] = useState("ALL");
-  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number | string>>(
+    new Set(),
+  );
 
   const [namaKegiatan, setNamaKegiatan] = useState("");
   const [tipeIzin, setTipeIzin] = useState("Izin Meninggalkan Kelas");
@@ -41,15 +50,21 @@ export default function ModalDispensasiMassal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
+  const kelasOptions: DropdownOption[] = useMemo(() => [
+    { value: "ALL", label: "Semua Kelas" },
+    ...DAFTAR_KELAS_SMKN21.map((k) => ({ value: k, label: k })),
+  ], []);
+
   // Ambil daftar siswa aktif
   useEffect(() => {
+    if (!isOpen) return;
     let isMounted = true;
     setLoadingStudents(true);
     api
       .get("/siswa", { params: { limit: 1000 } })
       .then((res) => {
         if (isMounted && res.data) {
-          const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          const raw = Array.isArray(res.data) ? res.data : res.data?.data || [];
           const activeOnly = raw.filter((s: any) => s.status !== "Alumni");
           setAllStudents(activeOnly);
         }
@@ -64,7 +79,7 @@ export default function ModalDispensasiMassal({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isOpen]);
 
   // Filter siswa
   const filteredStudents = useMemo(() => {
@@ -132,15 +147,21 @@ export default function ModalDispensasiMassal({
 
       if (res.data?.success) {
         if (onSuccess) {
-          onSuccess(res.data.message || `Dispensasi diterbitkan untuk ${selectedIds.size} siswa.`);
+          onSuccess(
+            res.data.message ||
+              `Dispensasi diterbitkan untuk ${selectedIds.size} siswa.`,
+          );
         }
         onClose();
       } else {
-        setErrorMsg(res.data?.message || "Gagal menerbitkan dispensasi massal.");
+        setErrorMsg(
+          res.data?.message || "Gagal menerbitkan dispensasi massal.",
+        );
       }
     } catch (err: any) {
       setErrorMsg(
-        err.response?.data?.message || "Terjadi kendala saat menerbitkan dispensasi massal.",
+        err.response?.data?.message ||
+          "Terjadi kendala saat menerbitkan dispensasi massal.",
       );
     } finally {
       setSubmitting(false);
@@ -148,241 +169,223 @@ export default function ModalDispensasiMassal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95">
-        {/* Header */}
-        <div className="p-4 sm:p-5 bg-slate-900 text-white flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-600/30 text-purple-400 flex items-center justify-center flex-shrink-0">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="font-bold text-xs sm:text-sm">
-                Penerbitan Dispensasi Massal Delegasi / Lomba
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                LKS, O2SN, FL2SN, Paskibra, atau Tugas Resmi Sekolah
-              </p>
-            </div>
+    <Sheet
+      isOpen={isOpen}
+      onClose={onClose}
+      size="lg"
+      labelledBy="dispensasi-massal-title"
+    >
+      <SheetHeader
+        id="dispensasi-massal-title"
+        title="Dispensasi Massal Delegasi & Lomba"
+        subtitle="LKS, O2SN, Paskibra, OSIS, atau Tugas Resmi Sekolah"
+        icon={
+          <div className="p-2.5 rounded-2xl bg-purple-500/15 text-purple-700 border border-purple-500/20 shadow-xs">
+            <Users className="w-5 h-5" />
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        }
+        onClose={onClose}
+      />
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs">
-          {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <SheetBody>
+          <div className="space-y-4 text-xs">
+            {errorMsg && (
+              <InlineAlert type="error" title="Perhatian">
+                {errorMsg}
+              </InlineAlert>
+            )}
 
-          {/* Form Informasi Kegiatan */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                Nama Kegiatan / Delegasi <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={namaKegiatan}
-                onChange={(e) => setNamaKegiatan(e.target.value)}
-                placeholder="Contoh: LKS Web Tech Wilayah Jakpus"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 text-xs"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                Guru Pendamping / Pembina <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={guruPendamping}
-                onChange={(e) => setGuruPendamping(e.target.value)}
-                placeholder="Nama guru / pembina penanggung jawab"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 text-xs"
-                required
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                Keperluan Dispensasi
-              </label>
-              <select
-                value={tipeIzin}
-                onChange={(e) => setTipeIzin(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 text-xs"
-              >
-                <option value="Izin Meninggalkan Kelas">Izin Meninggalkan Kelas</option>
-                <option value="Izin Masuk">Izin Masuk</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="block font-bold text-slate-700 uppercase tracking-wider text-[10px]">
-                Jam Pelajaran Ke-
-              </label>
-              <input
-                type="text"
-                value={jamKe}
-                onChange={(e) => setJamKe(e.target.value)}
-                placeholder="Contoh: 1 - Selesai atau 3 s/d 6"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500/20 text-xs"
-              />
-            </div>
-          </div>
-
-          {/* Area Pemilihan Siswa Delegasi */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="font-bold text-slate-800 uppercase tracking-wider text-[11px] block">
-                  Pilih Siswa Delegasi ({selectedIds.size} Terpilih)
-                </label>
-                <span className="text-[10px] text-slate-500">
-                  Centang siswa yang berpartisipasi dalam delegasi ini
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleSelectAllVisible}
-                  className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition cursor-pointer"
-                >
-                  Pilih Semua Tampak
-                </button>
-                {selectedIds.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleClearSelection}
-                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-[10px] font-bold transition cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Filter Kelas & Search */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div className="sm:col-span-2 relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            {/* Form Informasi Kegiatan */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <Field label="Nama Kegiatan / Delegasi" required>
                 <input
                   type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Cari nama atau NIS siswa..."
-                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                  value={namaKegiatan}
+                  onChange={(e) => setNamaKegiatan(e.target.value)}
+                  placeholder="Contoh: LKS Web Tech Wilayah Jakarta Pusat"
+                  className={INPUT_CLASS}
+                  required
                 />
-              </div>
-              <div>
-                <select
-                  value={filterKelas}
-                  onChange={(e) => setFilterKelas(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs"
-                >
-                  <option value="ALL">Semua Kelas</option>
-                  {DAFTAR_KELAS_SMKN21.map((k) => (
-                    <option key={k} value={k}>
-                      {k}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              </Field>
+
+              <Field label="Guru Pendamping / Pembina" required>
+                <input
+                  type="text"
+                  value={guruPendamping}
+                  onChange={(e) => setGuruPendamping(e.target.value)}
+                  placeholder="Nama guru penanggung jawab"
+                  className={INPUT_CLASS}
+                  required
+                />
+              </Field>
+
+              <Field label="Keperluan Dispensasi">
+                <CustomDropdown
+                  value={tipeIzin}
+                  onChange={setTipeIzin}
+                  options={TIPE_IZIN_OPTIONS}
+                  className="w-full"
+                />
+              </Field>
+
+              <Field label="Jam Pelajaran Ke-">
+                <input
+                  type="text"
+                  value={jamKe}
+                  onChange={(e) => setJamKe(e.target.value)}
+                  placeholder="Contoh: 1 - Selesai atau 3 s/d 6"
+                  className={INPUT_CLASS}
+                />
+              </Field>
             </div>
 
-            {/* Daftar Siswa (Checklist Box) */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto bg-slate-50/50 divide-y divide-slate-100">
-              {loadingStudents ? (
-                <div className="p-6 text-center text-slate-400 flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
-                  <span>Memuat data siswa...</span>
+            {/* Area Pemilihan Siswa Delegasi */}
+            <div className="space-y-3 pt-3 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <label className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+                      Pilih Siswa Delegasi
+                    </label>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                      {selectedIds.size} Terpilih
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Centang siswa yang berpartisipasi dalam tugas delegasi ini
+                  </p>
                 </div>
-              ) : filteredStudents.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs">
-                  Tidak ada data siswa yang cocok dengan filter.
-                </div>
-              ) : (
-                filteredStudents.map((s) => {
-                  const isChecked = selectedIds.has(s.id);
-                  return (
-                    <div
-                      key={s.id}
-                      onClick={() => toggleSelectStudent(s.id)}
-                      className={`p-2.5 flex items-center justify-between transition cursor-pointer ${
-                        isChecked ? "bg-purple-50/80" : "hover:bg-slate-100/70"
-                      }`}
+
+                <div className="flex items-center gap-1.5 self-start sm:self-center">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllVisible}
+                    className="press px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Pilih Semua ({filteredStudents.length})
+                  </button>
+                  {selectedIds.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleClearSelection}
+                      className="press px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {isChecked ? (
-                          <CheckSquare className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-800 text-xs truncate">
-                            {s.nama}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-mono">
-                            NIS: {s.nis} • {s.kelas}
-                          </p>
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filter Kelas & Search */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="sm:col-span-2 relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Cari nama atau NIS siswa..."
+                    className={`${INPUT_CLASS} pl-10`}
+                  />
+                </div>
+                <div>
+                  <CustomDropdown
+                    value={filterKelas}
+                    onChange={setFilterKelas}
+                    options={kelasOptions}
+                    placeholder="Filter Kelas"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Daftar Siswa (Elevated Checklist Cards) */}
+              <div className="border border-slate-200/80 rounded-2xl overflow-hidden max-h-56 overflow-y-auto overscroll-contain bg-slate-50/40 divide-y divide-slate-100/90 shadow-inner">
+                {loadingStudents ? (
+                  <div className="p-8 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-medium">Memuat data siswa SMKN 21...</span>
+                  </div>
+                ) : filteredStudents.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    Tidak ada data siswa yang cocok dengan kriteria pencarian.
+                  </div>
+                ) : (
+                  filteredStudents.map((s) => {
+                    const isChecked = selectedIds.has(s.id);
+                    return (
+                      <div
+                        key={s.id}
+                        onClick={() => toggleSelectStudent(s.id)}
+                        className={`p-3 flex items-center justify-between transition-all cursor-pointer ${
+                          isChecked
+                            ? "bg-purple-50/90 hover:bg-purple-100/70"
+                            : "hover:bg-slate-100/70 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-5 h-5 rounded-lg border flex items-center justify-center transition-all shrink-0 ${
+                              isChecked
+                                ? "bg-purple-600 border-purple-600 text-white shadow-xs shadow-purple-600/30"
+                                : "border-slate-300 bg-white"
+                            }`}
+                          >
+                            {isChecked && <CheckCircle2 className="w-3.5 h-3.5" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 text-xs truncate">
+                              {s.nama}
+                            </p>
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                              NIS: {s.nis} &bull; <span className="font-semibold text-slate-700">{s.kelas}</span>
+                            </p>
+                          </div>
                         </div>
+                        {isChecked && (
+                          <span className="text-[10px] font-extrabold text-purple-700 px-2 py-0.5 rounded-full bg-purple-100/80 border border-purple-200 shrink-0">
+                            Terpilih
+                          </span>
+                        )}
                       </div>
-                      {isChecked && (
-                        <span className="text-[10px] font-bold text-purple-700 px-2 py-0.5 rounded-full bg-purple-100">
-                          Terpilih
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
+        </SheetBody>
 
-          {/* Footer Tombol Simpan */}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-            <span className="text-[11px] text-slate-500 font-semibold">
-              Total {selectedIds.size} slip E-Dispensasi akan otomatis dibuat.
+        <SheetFooter>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+            <span className="text-xs text-slate-500 font-medium">
+              Total <b>{selectedIds.size} slip E-Dispensasi</b> akan otomatis dibuat resmi.
             </span>
-            <div className="flex items-center gap-2">
-              <button
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <Button
                 type="button"
+                variant="outline"
+                disabled={submitting}
                 onClick={onClose}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer"
               >
                 Batal
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
-                disabled={submitting || selectedIds.size === 0}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl transition flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                variant="primary"
+                loading={submitting}
+                disabled={selectedIds.size === 0}
+                icon={<UserCheck className="w-4 h-4" />}
+                className="bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md shadow-purple-600/20"
               >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Menerbitkan...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Terbitkan ({selectedIds.size} Siswa)</span>
-                  </>
-                )}
-              </button>
+                Terbitkan ({selectedIds.size} Siswa)
+              </Button>
             </div>
           </div>
-        </form>
-      </div>
-    </div>
+        </SheetFooter>
+      </form>
+    </Sheet>
   );
 }

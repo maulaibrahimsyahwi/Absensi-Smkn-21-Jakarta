@@ -17,7 +17,8 @@ sys.path.insert(0, BASE_DIR)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-from config import DATABASE_PATH
+# Path berkas SQLite sumber (jika masih ada berkas lama)
+DATABASE_PATH = os.environ.get('SQLITE_DATABASE_PATH', os.path.join(BASE_DIR, 'absensi.db'))
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 from models import (

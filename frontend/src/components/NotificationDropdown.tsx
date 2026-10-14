@@ -447,26 +447,6 @@ function SwipeableNotificationItem({
                 </button>
               </div>
             )}
-
-            {/* Aksi Khusus Guru Piket untuk item Menunggu */}
-            {isPiket && isMenunggu && onNavigate && (
-              <div className="pt-1.5 flex items-center justify-between gap-2">
-                <span className="text-[10px] text-amber-700 font-medium">
-                  Perlu persetujuan piket
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsOpen(false);
-                    onNavigate();
-                  }}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md shadow-2xs transition-all cursor-pointer"
-                >
-                  <span>Tinjau</span>
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>

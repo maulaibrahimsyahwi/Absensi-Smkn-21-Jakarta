@@ -4,6 +4,7 @@ from models import db, PelanggaranSiswa, Siswa, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
 from utils.realtime_bus import notify_data_changed
+from utils.file_storage import save_base64_file
 
 pelanggaran_bp = Blueprint('pelanggaran_bp', __name__)
 
@@ -105,7 +106,7 @@ def catat_pelanggaran_terlambat(siswa, waktu, sumber="Presensi Harian", petugas=
         return existing
 
     # Tanda tangan pengakuan keterlambatan hanya diisi jika siswa membubuhkan langsung
-    ttd = tanda_tangan_siswa or ""
+    ttd = save_base64_file(tanda_tangan_siswa, subfolder='signatures', prefix=f"sig_terlambat_{siswa.nis}") or ""
 
     waktu_dt = waktu if isinstance(waktu, datetime) else datetime.combine(waktu, datetime.now().time())
     ket = f"Otomatis tercatat ({sumber})"
@@ -336,6 +337,7 @@ def create_pelanggaran():
         curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
         curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
+        saved_sig = save_base64_file(tanda_tangan_siswa, subfolder='signatures', prefix=f"sig_pelanggaran_{nis}")
         record = PelanggaranSiswa(
             siswa_id=siswa_id,
             nis=nis or "-",
@@ -348,7 +350,7 @@ def create_pelanggaran():
             tahun_ajaran=curr_ta,
             semester=curr_sem,
             nama_penanggung_jawab=nama_penanggung_jawab,
-            tanda_tangan_siswa=tanda_tangan_siswa,
+            tanda_tangan_siswa=saved_sig,
             status_verifikasi=status_verifikasi,
             keterangan=keterangan or None
         )

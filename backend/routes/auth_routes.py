@@ -24,6 +24,7 @@ from utils.passwords import (
     needs_password_change
 )
 from utils.audit_trail import record_audit_log
+from utils.file_storage import save_base64_file, delete_uploaded_file
 
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
@@ -317,25 +318,27 @@ def save_signature():
                         "message": "Kata sandi salah. Pembaruan tanda tangan digital ditolak."
                     }), 401
 
-            siswa.tanda_tangan = signature
+            saved_sig = save_base64_file(signature, subfolder='signatures', prefix=f"sig_{role}_{user_id}")
+            siswa.tanda_tangan = saved_sig
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {siswa.nama} berhasil disimpan.",
                 "has_signature": True,
-                "tanda_tangan": signature
+                "tanda_tangan": saved_sig
             })
         else:
             user = User.query.get(user_id)
             if not user:
                 return jsonify({"success": False, "message": "Data petugas tidak ditemukan."}), 404
-            user.tanda_tangan = signature
+            saved_sig = save_base64_file(signature, subfolder='signatures', prefix=f"sig_{role}_{user_id}")
+            user.tanda_tangan = saved_sig
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Tanda tangan digital untuk {user.nama} berhasil disimpan.",
                 "has_signature": True,
-                "tanda_tangan": signature
+                "tanda_tangan": saved_sig
             })
     except Exception as e:
         db.session.rollback()
@@ -423,27 +426,32 @@ def save_foto_profil():
             }), 403
 
     try:
+        saved_avatar = save_base64_file(foto_profil, subfolder='avatars', prefix=f"avatar_{role}_{user_id}")
         if role == 'siswa':
             siswa = Siswa.query.get(user_id)
             if not siswa:
                 return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
-            siswa.foto_profil = foto_profil
+            if siswa.foto_profil and siswa.foto_profil != saved_avatar:
+                delete_uploaded_file(siswa.foto_profil)
+            siswa.foto_profil = saved_avatar
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Foto profil untuk {siswa.nama} berhasil diperbarui!",
-                "foto_profil": foto_profil
+                "foto_profil": saved_avatar
             })
         else:
             user = User.query.get(user_id)
             if not user:
                 return jsonify({"success": False, "message": "Data pengguna tidak ditemukan."}), 404
-            user.foto_profil = foto_profil
+            if user.foto_profil and user.foto_profil != saved_avatar:
+                delete_uploaded_file(user.foto_profil)
+            user.foto_profil = saved_avatar
             db.session.commit()
             return jsonify({
                 "success": True,
                 "message": f"Foto profil untuk {user.nama} berhasil diperbarui!",
-                "foto_profil": foto_profil
+                "foto_profil": saved_avatar
             })
     except Exception as e:
         db.session.rollback()
@@ -477,6 +485,8 @@ def delete_foto_profil():
             siswa = Siswa.query.get(user_id)
             if not siswa:
                 return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
+            if siswa.foto_profil:
+                delete_uploaded_file(siswa.foto_profil)
             siswa.foto_profil = None
             db.session.commit()
             return jsonify({
@@ -487,6 +497,8 @@ def delete_foto_profil():
             user = User.query.get(user_id)
             if not user:
                 return jsonify({"success": False, "message": "Data pengguna tidak ditemukan."}), 404
+            if user.foto_profil:
+                delete_uploaded_file(user.foto_profil)
             user.foto_profil = None
             db.session.commit()
             return jsonify({

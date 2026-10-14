@@ -18,9 +18,11 @@ if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
     }
 }
 
-# Tentukan script backend yang akan dijalankan
-$backendScript = if ($Mode -in @("dev", "development")) { "app.py" } else { "run_production.py" }
-$modeLabel = if ($Mode -in @("dev", "development")) { "DEVELOPMENT (Flask Debug & Auto-Reload)" } else { "PRODUKSI (Waitress WSGI High-Concurrency)" }
+# Tentukan mode peluncuran backend dan frontend
+$isProd = $Mode -notin @("dev", "development")
+$backendScript = if ($isProd) { "run_production.py" } else { "app.py" }
+$frontendCmd = if ($isProd) { "npm run preview" } else { "npm run dev" }
+$modeLabel = if ($isProd) { "PRODUKSI (Waitress WSGI + Vite Production Preview Bundle)" } else { "DEVELOPMENT (Flask Debug & Vite Dev Server Auto-Reload)" }
 
 $backendExe = Join-Path $PSScriptRoot "backend\venv\Scripts\python.exe"
 $backendDir = Join-Path $PSScriptRoot "backend"
@@ -32,6 +34,7 @@ Write-Host "================================================================" -F
 Write-Host "Mode Peluncuran: $modeLabel" -ForegroundColor Green
 Write-Host "Status Tampilan: $(if ($Visible) { 'Jendela Terminal Terbuka' } else { 'Latar Belakang (Tanpa Jendela PowerShell Tambahan)' })" -ForegroundColor Gray
 Write-Host "Script Backend : backend\$backendScript" -ForegroundColor Gray
+Write-Host "Script Frontend: $frontendCmd" -ForegroundColor Gray
 Write-Host "----------------------------------------------------------------" -ForegroundColor DarkGray
 
 # 1. Bersihkan proses lama yang menggunakan port 5000 / 5173
@@ -63,13 +66,26 @@ if (-not $localIp) {
     $localIp = "127.0.0.1"
 }
 
+# Jika mode produksi, pastikan folder frontend/dist tersedia
+if ($isProd) {
+    $distPath = Join-Path $frontendDir "dist"
+    if (-not (Test-Path $distPath)) {
+        Write-Host "[BUILD] Membangun bundle frontend produksi pertama kali (npm run build)..." -ForegroundColor Yellow
+        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run build" -WorkingDirectory $frontendDir -Wait -NoNewWindow -PassThru
+        if ($proc.ExitCode -ne 0) {
+            Write-Host "[WARN] Gagal build bundle frontend, kembali ke mode dev server..." -ForegroundColor Red
+            $frontendCmd = "npm run dev"
+        }
+    }
+}
+
 # 3. Jalankan Backend & Frontend
 if ($Visible) {
     Write-Host "[1/2] Menjalankan Backend ($backendScript) dengan jendela terlihat..." -ForegroundColor Green
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Backend SMKN 21 ($backendScript)'; Set-Location '$backendDir'; .\venv\Scripts\python.exe $backendScript"
 
-    Write-Host "[2/2] Menjalankan Frontend (Vite) dengan jendela terlihat..." -ForegroundColor Green
-    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Frontend SMKN 21 (Vite)'; Set-Location '$frontendDir'; npm run dev"
+    Write-Host "[2/2] Menjalankan Frontend ($frontendCmd) dengan jendela terlihat..." -ForegroundColor Green
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Frontend SMKN 21 ($frontendCmd)'; Set-Location '$frontendDir'; $frontendCmd"
 } else {
     # Mode Latar Belakang MURNI (CreateNoWindow = True, Tanpa PowerShell Tambahan)
     Write-Host "[1/2] Menjalankan Backend ($backendScript) di latar belakang..." -ForegroundColor Green
@@ -82,10 +98,10 @@ if ($Visible) {
     $backendPsi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
     $null = [System.Diagnostics.Process]::Start($backendPsi)
 
-    Write-Host "[2/2] Menjalankan Frontend (Vite) di latar belakang..." -ForegroundColor Green
+    Write-Host "[2/2] Menjalankan Frontend ($frontendCmd) di latar belakang..." -ForegroundColor Green
     $frontendPsi = New-Object System.Diagnostics.ProcessStartInfo
     $frontendPsi.FileName = "cmd.exe"
-    $frontendPsi.Arguments = "/c npm run dev"
+    $frontendPsi.Arguments = "/c $frontendCmd"
     $frontendPsi.WorkingDirectory = $frontendDir
     $frontendPsi.CreateNoWindow = $true
     $frontendPsi.UseShellExecute = $false

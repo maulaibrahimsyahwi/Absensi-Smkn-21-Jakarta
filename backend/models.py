@@ -120,6 +120,7 @@ class AbsensiHarian(db.Model):
     __tablename__ = 'absensi_harian'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
+    kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat presensi
     waktu = db.Column(db.DateTime, default=datetime.now, index=True)
     status = db.Column(db.String(20), nullable=False)  # "Tepat Waktu", "Terlambat", "Sakit", "Izin", "Hadir (Dispensasi Medis)"
     device_id = db.Column(db.String(64), nullable=True, index=True)  # Fingerprint ID perangkat
@@ -141,17 +142,13 @@ class AbsensiHarian(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    @property
-    def kelas(self):
-        return self.siswa.kelas if self.siswa else "-"
-
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
             "nis": self.nis,
             "nama": self.nama,
-            "kelas": self.kelas,
+            "kelas": self.kelas or (self.siswa.kelas if self.siswa else "-"),
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
             "status": self.status,
             "latitude": self.latitude,
@@ -172,6 +169,7 @@ class AbsensiPerpustakaan(db.Model):
     __tablename__ = 'absensi_perpustakaan'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
+    kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat kunjungan
     waktu = db.Column(db.DateTime, default=datetime.now, index=True)
     keperluan = db.Column(db.String(100), nullable=False)  # "Meminjam Buku", "Mengembalikan Buku", dll
     
@@ -185,17 +183,13 @@ class AbsensiPerpustakaan(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    @property
-    def kelas(self):
-        return self.siswa.kelas if self.siswa else "-"
-
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
             "nis": self.nis,
             "nama": self.nama,
-            "kelas": self.kelas,
+            "kelas": self.kelas or (self.siswa.kelas if self.siswa else "-"),
             "waktu": self.waktu.strftime("%Y-%m-%d %H:%M:%S"),
             "keperluan": self.keperluan
         }
@@ -208,6 +202,7 @@ class PengajuanIzin(db.Model):
     __tablename__ = 'pengajuan_izin'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
+    kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat mengajukan izin
     jenis = db.Column(db.String(20), nullable=False)  # "Sakit" atau "Izin"
     tanggal_mulai = db.Column(db.Date, nullable=False)
     tanggal_selesai = db.Column(db.Date, nullable=False)
@@ -231,10 +226,6 @@ class PengajuanIzin(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    @property
-    def kelas(self):
-        return self.siswa.kelas if self.siswa else "-"
-
     def to_dict(self):
         maps_url = None
         if self.latitude is not None and self.longitude is not None:
@@ -245,7 +236,7 @@ class PengajuanIzin(db.Model):
             "siswa_id": self.siswa_id,
             "nis": self.siswa.nis if self.siswa else "-",
             "nama": self.siswa.nama if self.siswa else "Siswa Dihapus",
-            "kelas": self.siswa.kelas if self.siswa else "-",
+            "kelas": self.kelas or (self.siswa.kelas if self.siswa else "-"),
             "jenis": self.jenis,
             "tanggal_mulai": self.tanggal_mulai.strftime("%Y-%m-%d"),
             "tanggal_selesai": self.tanggal_selesai.strftime("%Y-%m-%d"),
@@ -269,6 +260,7 @@ class IzinPiket(db.Model):
     __tablename__ = 'izin_piket'
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
+    kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat izin diterbitkan
     hari = db.Column(db.String(20), nullable=False)  # "Senin", "Selasa", dll
     tanggal = db.Column(db.Date, nullable=False, index=True)
     tipe = db.Column(db.String(50), nullable=False)  # "Izin Masuk" atau "Izin Meninggalkan Kelas"
@@ -289,17 +281,13 @@ class IzinPiket(db.Model):
     def nama(self):
         return self.siswa.nama if self.siswa else "Siswa Dihapus"
 
-    @property
-    def kelas(self):
-        return self.siswa.kelas if self.siswa else "-"
-
     def to_dict(self):
         return {
             "id": self.id,
             "siswa_id": self.siswa_id,
             "nis": self.nis,
             "nama": self.nama,
-            "kelas": self.kelas,
+            "kelas": self.kelas or (self.siswa.kelas if self.siswa else "-"),
             "hari": self.hari,
             "tanggal": self.tanggal.strftime("%Y-%m-%d"),
             "tanggal_formatted": self.tanggal.strftime("%d/%m/%Y"),

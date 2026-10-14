@@ -8,12 +8,13 @@ export const SCHOOL_PROFILE = {
   namaResmiKop: "SMK NEGERI 21 JAKARTA",
   provinsi: "PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA",
   dinas: "DINAS PENDIDIKAN",
-  alamat: "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat 10630",
+  alamat:
+    "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat 10630",
   alamatKop:
     "Jl. Siaga I Gg. Swadaya III, Kebon Kosong, Kemayoran, Jakarta Pusat 10630 | Telp: (021) 4246513",
   telepon: "(021) 4246513",
   email: "smknegeri21jakarta@gmail.com",
-  npsn: "20101594",
+  npsn: "20100162",
   nomorDokumen: "SMKN21/PDP-BIO/2026/01",
   berlaku: "Tahun Ajaran 2026/2027",
   kontak: "Tata Usaha (smknegeri21jakarta@gmail.com / (021) 4246513)",

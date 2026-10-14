@@ -7,6 +7,7 @@ from utils.audit_trail import record_audit_log
 from config import SEKOLAH_POLYGON, SEKOLAH_LATITUDE, SEKOLAH_LONGITUDE, MAX_RADIUS_SEKOLAH
 from utils.helpers import is_point_in_polygon, calculate_distance_meters
 from utils.realtime_bus import notify_data_changed
+from utils.file_storage import save_base64_file
 
 piket_bp = Blueprint('piket', __name__)
 
@@ -76,14 +77,18 @@ def create_izin_piket():
         nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
         hari = nama_hari[tgl.weekday()]
 
-    tanda_tangan_petugas = data.get('tanda_tangan_petugas')
-    tanda_tangan_siswa = data.get('tanda_tangan_siswa')
+    raw_petugas_sig = data.get('tanda_tangan_petugas')
+    raw_siswa_sig = data.get('tanda_tangan_siswa')
 
-    if not tanda_tangan_petugas:
+    if not raw_petugas_sig:
         return jsonify({
             "success": False,
             "message": "Guru Piket wajib menyertakan tanda tangan digital sebelum menerbitkan surat izin."
         }), 400
+
+    tanda_tangan_petugas = save_base64_file(raw_petugas_sig, subfolder='signatures', prefix="sig_piket_petugas")
+    tanda_tangan_siswa = save_base64_file(raw_siswa_sig, subfolder='signatures', prefix=f"sig_piket_{siswa.nis}") if raw_siswa_sig else None
+
 
     # Validasi Geofence Guru Piket: Hanya boleh diterbitkan jika perangkat piket berada di lingkungan SMKN 21
     latitude = data.get('latitude')
@@ -105,6 +110,7 @@ def create_izin_piket():
     try:
         baru = IzinPiket(
             siswa_id=siswa.id,
+            kelas=siswa.kelas,
             hari=hari,
             tanggal=tgl,
             tipe=tipe,
@@ -525,6 +531,7 @@ def record_presensi_manual():
     else:
         new_absen = AbsensiHarian(
             siswa_id=siswa.id,
+            kelas=siswa.kelas,
             status=status_input,
             waktu=now_dt,
             sumber="manual_piket",
@@ -680,6 +687,7 @@ def apply_dispensasi_massal():
         # 1. Catat surat izin dispensasi piket
         izin = IzinPiket(
             siswa_id=siswa.id,
+            kelas=siswa.kelas,
             hari=nama_hari,
             tanggal=today_val,
             tipe="Izin Masuk" if "Masuk" in tipe else "Izin Meninggalkan Kelas",
@@ -699,6 +707,7 @@ def apply_dispensasi_massal():
         if not absen:
             new_absen = AbsensiHarian(
                 siswa_id=siswa.id,
+                kelas=siswa.kelas,
                 status="Dispensasi",
                 waktu=now_dt,
                 sumber="dispensasi_massal",

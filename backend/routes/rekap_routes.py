@@ -454,6 +454,7 @@ def generate_alpa_today():
             if s.id not in siswa_absen_ids and s.id not in siswa_izin_ids:
                 alpa_record = AbsensiHarian(
                     siswa_id=s.id,
+                    kelas=s.kelas,
                     status="Alpa",
                     waktu=now_dt
                 )

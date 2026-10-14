@@ -1,7 +1,14 @@
 import os
 from flask import Blueprint, jsonify, send_from_directory, request
 from utils.auth_middleware import token_required, role_required
-from utils.backup_utils import create_db_backup, list_db_backups, BACKUP_DIR, start_auto_backup_scheduler
+from utils.backup_utils import (
+    create_db_backup,
+    create_full_archive_backup,
+    restore_db_from_backup,
+    list_db_backups,
+    BACKUP_DIR,
+    start_auto_backup_scheduler
+)
 from utils.audit_trail import record_audit_log
 
 backup_bp = Blueprint('backup', __name__)
@@ -35,6 +42,78 @@ def trigger_backup():
     return jsonify(res), status_code
 
 
+@backup_bp.route('/api/admin/backup/create_archive', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def trigger_archive_backup():
+    """
+    Fitur Khusus Admin: Membuat arsip sistem penuh (.zip) berisi snapshot database PostgreSQL dan berkas uploads fisik.
+    """
+    res = create_full_archive_backup(max_keep=10)
+    status_code = 200 if res.get('success') else 500
+
+    if res.get('success'):
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role='admin',
+            user_name=current_u.get('identifier', 'Admin'),
+            action='BACKUP_SYSTEM_ARCHIVE',
+            target_type='System',
+            target_id=res.get('filename'),
+            keterangan=f"Membuat arsip sistem penuh (Database + Uploads): {res.get('filename')} ({res.get('size_kb')} KB)"
+        )
+
+    return jsonify(res), status_code
+
+
+@backup_bp.route('/api/admin/backup/restore', methods=['POST'])
+@token_required
+@role_required(['admin'])
+def trigger_restore():
+    """
+    Fitur Khusus Admin: Memulihkan database dari berkas cadangan JSON atau arsip ZIP.
+    Mendukung pemilihan nama berkas yang ada di server atau pengunggahan berkas langsung.
+    """
+    data = request.form.to_dict() if request.form else (request.json or {})
+    mode = data.get('mode', 'replace')
+
+    # Periksa apakah ada file diunggah langsung melalui form data
+    if 'file' in request.files:
+        uploaded_file = request.files['file']
+        if uploaded_file.filename:
+            safe_fname = os.path.basename(uploaded_file.filename)
+            if not safe_fname.endswith(('.json', '.zip')):
+                return jsonify({"success": False, "message": "Format berkas harus .json atau .zip"}), 400
+            target_path = os.path.join(BACKUP_DIR, f"uploaded_{safe_fname}")
+            uploaded_file.save(target_path)
+            res = restore_db_from_backup(target_path, mode=mode)
+        else:
+            return jsonify({"success": False, "message": "Berkas yang diunggah tidak memiliki nama valid."}), 400
+    else:
+        filename = data.get('filename')
+        if not filename:
+            return jsonify({"success": False, "message": "Nama berkas cadangan (filename) wajib ditentukan."}), 400
+        safe_fname = os.path.basename(filename)
+        res = restore_db_from_backup(safe_fname, mode=mode)
+
+    status_code = 200 if res.get('success') else 500
+
+    if res.get('success'):
+        current_u = getattr(request, 'current_user', {})
+        record_audit_log(
+            user_id=current_u.get('user_id'),
+            role='admin',
+            user_name=current_u.get('identifier', 'Admin'),
+            action='RESTORE_DATABASE',
+            target_type='Database',
+            target_id=res.get('filename'),
+            keterangan=f"Memulihkan basis data dari {res.get('filename')}: {res.get('total_restored')} rekaman dipulihkan (mode: {res.get('mode')})"
+        )
+
+    return jsonify(res), status_code
+
+
 @backup_bp.route('/api/admin/backup/list', methods=['GET'])
 @backup_bp.route('/api/admin/backup', methods=['GET'])
 @token_required
@@ -58,7 +137,7 @@ def download_backup(filename):
     safe_filename = os.path.basename(filename)
     filepath = os.path.join(BACKUP_DIR, safe_filename)
 
-    allowed_exts = ('.json', '.sql', '.db', '.gz')
+    allowed_exts = ('.json', '.zip', '.sql', '.db', '.gz')
     if not os.path.exists(filepath) or not safe_filename.endswith(allowed_exts):
         return jsonify({"success": False, "message": "Berkas cadangan tidak ditemukan."}), 404
 

@@ -425,7 +425,6 @@ export default function Login() {
                 >
                   {loadingAuth ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
                       <span>Memverifikasi...</span>
                     </>
                   ) : (

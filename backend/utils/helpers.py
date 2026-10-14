@@ -2,8 +2,20 @@ import re
 import math
 import json
 from datetime import datetime, time, timedelta
-from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
+from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK, WIB
 from models import Siswa
+
+def now_wib():
+    """
+    Mengembalikan waktu sekarang dalam Waktu Indonesia Barat (WIB = UTC+7)
+    sebagai naive datetime tanpa tzinfo yang konsisten di Windows, Linux, dan Container Cloud.
+    Mencegah bug perbedaan 7 jam ketika sistem host berjalan di zona waktu UTC.
+    """
+    return datetime.now(WIB).replace(tzinfo=None)
+
+def today_wib():
+    """Mengembalikan tanggal hari ini dalam zona waktu WIB."""
+    return now_wib().date()
 
 def validate_siswa_input(nis, nama, kelas):
     """
@@ -99,7 +111,7 @@ def get_holiday_status(dt=None):
     2. Hari Libur Terjadwal (tipe_hari = 'libur') -> Libur semester, libur nasional, cuti bersama, libur khusus.
     3. Akhir Pekan Alami (Sabtu & Minggu) jika tidak ada konfigurasi khusus.
     """
-    now = dt if dt is not None else datetime.now()
+    now = dt if dt is not None else now_wib()
     cur_date = now.date() if isinstance(now, datetime) else now
     nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][now.weekday()]
     is_weekend_cal = now.weekday() >= 5
@@ -215,7 +227,7 @@ def get_active_schedule(dt=None):
     Mendukung penyesuaian khusus (Normal, Puasa, Ujian, Hari Jumat)
     dan Mode Darurat Jaringan dengan toleransi keterlambatan.
     """
-    now = dt if dt is not None else datetime.now()
+    now = dt if dt is not None else now_wib()
     w_mulai = WAKTU_MULAI_MASUK
     w_batas = WAKTU_BATAS_MASUK
     mode_darurat = False
@@ -268,7 +280,7 @@ def is_presensi_open(dt=None):
     Mengecek apakah presensi harian sudah dibuka pada hari sekolah aktif.
     Menggunakan konfigurasi jam mulai dinamis dari database.
     """
-    now = dt if dt is not None else datetime.now()
+    now = dt if dt is not None else now_wib()
     if not is_school_day(now):
         return False
     sched = get_active_schedule(now)
@@ -280,7 +292,7 @@ def check_status_kehadiran(dt=None):
     Menentukan status kehadiran harian siswa ('Tepat Waktu' atau 'Terlambat')
     berdasarkan batas jam masuk dinamis (termasuk toleransi Mode Darurat Jaringan jika aktif).
     """
-    now = dt if dt is not None else datetime.now()
+    now = dt if dt is not None else now_wib()
     sched = get_active_schedule(now)
     if now.time() <= sched["waktu_batas"]:
         return "Tepat Waktu"
@@ -301,7 +313,7 @@ def is_kelas_pjj(kelas_str, dt=None):
         if not cfg or not cfg.is_active:
             return False, ""
 
-        now = dt if dt is not None else datetime.now()
+        now = dt if dt is not None else now_wib()
         cur_date = now.date() if isinstance(now, datetime) else now
 
         # Jika hari ini adalah hari libur sekolah atau akhir pekan, Mode PJJ tidak berlaku

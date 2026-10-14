@@ -15,37 +15,14 @@ izin_bp = Blueprint('izin', __name__)
 UPLOAD_SURAT_DIR = os.path.join(BASE_DIR, 'static', 'uploads', 'surat')
 os.makedirs(UPLOAD_SURAT_DIR, exist_ok=True)
 
+from utils.file_storage import save_base64_file
+
 def save_base64_surat(base64_str, folder=UPLOAD_SURAT_DIR, prefix='surat'):
     """
     Menyimpan data URI base64 ke berkas file fisik di disk server.
     Mengembalikan path relatif URL untuk disimpan di database (misal: /static/uploads/surat/surat_xxx.jpg).
     """
-    if not base64_str or not isinstance(base64_str, str):
-        return None
-    
-    # Jika sudah berupa path URL atau bukan data URI base64, kembalikan apa adanya
-    if not base64_str.startswith('data:image'):
-        return base64_str
-
-    try:
-        header, encoded = base64_str.split(',', 1)
-        ext = 'jpg'
-        if 'png' in header:
-            ext = 'png'
-        elif 'webp' in header:
-            ext = 'webp'
-        
-        file_bytes = base64.b64decode(encoded)
-        filename = f"{prefix}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}.{ext}"
-        filepath = os.path.join(folder, filename)
-        
-        with open(filepath, 'wb') as f:
-            f.write(file_bytes)
-            
-        return f"/static/uploads/surat/{filename}"
-    except Exception as e:
-        print("Gagal menyimpan berkas surat fisik:", e)
-        return base64_str  # Fallback to original string if decode fails
+    return save_base64_file(base64_str, subfolder='surat', prefix=prefix)
 
 # ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
 
@@ -156,16 +133,18 @@ def submit_pengajuan_izin():
 
     try:
         # Simpan foto surat keterangan fisik di folder disk server (menghemat RAM & database)
-        file_path_surat = save_base64_surat(surat_bukti, folder=UPLOAD_SURAT_DIR, prefix=f"surat_{siswa.nis}")
+        file_path_surat = save_base64_surat(surat_bukti, prefix=f"surat_{siswa.nis}")
+        saved_ttd = save_base64_file(tanda_tangan_siswa, subfolder='signatures', prefix=f"sig_izin_{siswa.nis}")
 
         pengajuan = PengajuanIzin(
             siswa_id=siswa.id,
+            kelas=siswa.kelas,
             jenis=jenis,
             tanggal_mulai=tgl_mulai,
             tanggal_selesai=tgl_selesai,
             alasan=alasan,
             surat_bukti=file_path_surat,
-            tanda_tangan_siswa=tanda_tangan_siswa,
+            tanda_tangan_siswa=saved_ttd,
             latitude=latitude,
             longitude=longitude,
             lokasi_teks=lokasi_teks,
@@ -246,6 +225,7 @@ def verifikasi_pengajuan_izin(id):
                     else:
                         absensi_baru = AbsensiHarian(
                             siswa_id=pengajuan.siswa_id,
+                            kelas=pengajuan.kelas or (pengajuan.siswa.kelas if pengajuan.siswa else None),
                             waktu=datetime.combine(curr, time(7, 0, 0)),
                             status=pengajuan.jenis
                         )

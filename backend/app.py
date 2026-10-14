@@ -120,18 +120,31 @@ run_db_migrations(app)
 @app.before_request
 def protect_medical_records():
     """
-    Melindungi berkas surat izin / surat keterangan dokter dari akses langsung tanpa otorisasi.
+    Melindungi berkas surat izin / surat keterangan dokter dari akses langsung tanpa otorisasi (UU PDP).
+    Mendukung otorisasi via Header 'Authorization: Bearer <token>' maupun query string '?token=<token>'
+    agar tag <img> dan tautan tab baru dapat menampilkan dokumen secara aman dan terverifikasi.
     """
     if request.path.startswith('/static/uploads/surat/'):
         auth = request.headers.get("Authorization")
-        if not auth or not auth.strip().startswith("Bearer "):
+        token = None
+        if auth and auth.strip().startswith("Bearer "):
+            token = auth.strip().split(" ")[1]
+        elif request.args.get("token"):
+            token = request.args.get("token").strip()
+
+        if not token:
             return jsonify({
                 "success": False,
                 "message": "Akses dokumen medis rahasia wajib menyertakan token otorisasi yang sah."
             }), 403
         try:
-            token = auth.strip().split(" ")[1]
-            jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=["HS256"])
+            role = payload.get("role")
+            if not role:
+                return jsonify({
+                    "success": False,
+                    "message": "Sesi token tidak memiliki kredensial peran yang sah."
+                }), 403
         except Exception:
             return jsonify({
                 "success": False,

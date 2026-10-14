@@ -111,6 +111,7 @@ _liveness_lock = threading.Lock()
 _liveness_tracker = defaultdict(dict)
 _used_liveness_nonces = {}  # {nonce: timestamp}
 _last_nonce_cleanup = 0
+_last_tracker_cleanup = 0
 
 def create_liveness_token(user_id):
     """
@@ -185,6 +186,7 @@ def detect_face():
 @biometrik_bp.route('/api/detect_liveness', methods=['POST'])
 @token_required
 def detect_liveness():
+    global _last_tracker_cleanup
     data = request.json or {}
     image_data = data.get('image')
     if not image_data:
@@ -198,6 +200,17 @@ def detect_liveness():
     now_t = time_module.time()
 
     with _liveness_lock:
+        # Pembersihan otomatis memori RAM (TTL Eviction) untuk sesi tidak aktif > 120 detik
+        if now_t - _last_tracker_cleanup > 30:
+            cutoff_tracker = now_t - 120
+            stale_uids = [
+                uid for uid, st in list(_liveness_tracker.items())
+                if not st or st.get('last_update', 0) < cutoff_tracker
+            ]
+            for uid in stale_uids:
+                _liveness_tracker.pop(uid, None)
+            _last_tracker_cleanup = now_t
+
         if result.get('face_detected'):
             eye_state = result.get('eye_state')
             user_state = _liveness_tracker[user_id]
@@ -231,7 +244,7 @@ def detect_liveness():
                             token = create_liveness_token(user_id)
                             result['liveness_token'] = token
                             result['liveness_verified'] = True
-                            user_state.clear()
+                            _liveness_tracker.pop(user_id, None)
                 else:
                     # Tahap 1: Rekam mata terbuka awal
                     user_state['initial_open'] = now_t

@@ -13,12 +13,14 @@ def migrate_postgres_columns(conn):
     pg_commands = [
         # Siswa
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Aktif';",
-        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS password VARCHAR(100);",
+        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS password VARCHAR(255);",
+        "ALTER TABLE siswa ALTER COLUMN password TYPE VARCHAR(255);",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS tanda_tangan TEXT;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS foto_profil TEXT;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS tanggal_lulus TIMESTAMP;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS jenis_kelamin VARCHAR(20) DEFAULT 'Laki-laki';",
-        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS active_session_token VARCHAR(64);",
+        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS active_session_token VARCHAR(128);",
+        "ALTER TABLE siswa ALTER COLUMN active_session_token TYPE VARCHAR(128);",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS nisn VARCHAR(20);",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;",
@@ -26,12 +28,15 @@ def migrate_postgres_columns(conn):
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS medical_exemption_alasan VARCHAR(255);",
         # Users
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS foto_profil TEXT;",
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token VARCHAR(64);",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token VARCHAR(128);",
+        "ALTER TABLE users ALTER COLUMN active_session_token TYPE VARCHAR(128);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;",
         # Izin Piket
+        "ALTER TABLE izin_piket ADD COLUMN IF NOT EXISTS kelas VARCHAR(50);",
         "ALTER TABLE izin_piket ADD COLUMN IF NOT EXISTS tanda_tangan_petugas TEXT;",
         "ALTER TABLE izin_piket ADD COLUMN IF NOT EXISTS tanda_tangan_siswa TEXT;",
         # Pengajuan Izin
+        "ALTER TABLE pengajuan_izin ADD COLUMN IF NOT EXISTS kelas VARCHAR(50);",
         "ALTER TABLE pengajuan_izin ADD COLUMN IF NOT EXISTS tanda_tangan_siswa TEXT;",
         # Pelanggaran Siswa
         "ALTER TABLE pelanggaran_siswa ADD COLUMN IF NOT EXISTS status_verifikasi VARCHAR(30) DEFAULT 'Disetujui';",
@@ -39,6 +44,7 @@ def migrate_postgres_columns(conn):
         "ALTER TABLE pelanggaran_siswa ADD COLUMN IF NOT EXISTS tahun_ajaran VARCHAR(20) DEFAULT '2026/2027';",
         "ALTER TABLE pelanggaran_siswa ADD COLUMN IF NOT EXISTS semester VARCHAR(10) DEFAULT 'Ganjil';",
         # Absensi Harian
+        "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS kelas VARCHAR(50);",
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS device_id VARCHAR(64);",
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS is_flagged_proxy BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS proxy_note VARCHAR(255);",
@@ -47,9 +53,16 @@ def migrate_postgres_columns(conn):
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS latitude FLOAT;",
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS longitude FLOAT;",
         "ALTER TABLE absensi_harian ADD COLUMN IF NOT EXISTS sumber VARCHAR(20) DEFAULT 'online';",
+        # Absensi Perpustakaan
+        "ALTER TABLE absensi_perpustakaan ADD COLUMN IF NOT EXISTS kelas VARCHAR(50);",
         # Pengaturan Jadwal
         "ALTER TABLE pengaturan_jadwal ADD COLUMN IF NOT EXISTS tahun_ajaran VARCHAR(20) DEFAULT '2026/2027';",
         "ALTER TABLE pengaturan_jadwal ADD COLUMN IF NOT EXISTS semester VARCHAR(10) DEFAULT 'Ganjil';",
+        # Backfill snapshot kelas jika masih NULL
+        "UPDATE absensi_harian ah SET kelas = s.kelas FROM siswa s WHERE ah.siswa_id = s.id AND (ah.kelas IS NULL OR ah.kelas = '');",
+        "UPDATE absensi_perpustakaan ap SET kelas = s.kelas FROM siswa s WHERE ap.siswa_id = s.id AND (ap.kelas IS NULL OR ap.kelas = '');",
+        "UPDATE pengajuan_izin pi SET kelas = s.kelas FROM siswa s WHERE pi.siswa_id = s.id AND (pi.kelas IS NULL OR pi.kelas = '');",
+        "UPDATE izin_piket ip SET kelas = s.kelas FROM siswa s WHERE ip.siswa_id = s.id AND (ip.kelas IS NULL OR ip.kelas = '');",
     ]
     for cmd in pg_commands:
         try:
