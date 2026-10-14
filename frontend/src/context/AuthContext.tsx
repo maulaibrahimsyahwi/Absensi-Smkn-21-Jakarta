@@ -6,7 +6,7 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-import api from "../services/api";
+import api, { resetAuthInterceptorState } from "../services/api";
 import { liburService } from "../services/liburService";
 import { User, UserRole, normalizeUser } from "../types";
 import {
@@ -296,6 +296,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (res.data && res.data.success) {
+        resetAuthInterceptorState();
         if (res.data.token) {
           localStorage.setItem(TOKEN_KEY, res.data.token);
         }
@@ -343,6 +344,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
    * Logout pengguna: bersihkan semua jejak sesi dan cabut token di server
    */
   const logout = useCallback(() => {
+    resetAuthInterceptorState();
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) {
       api

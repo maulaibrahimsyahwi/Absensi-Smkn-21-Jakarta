@@ -71,6 +71,11 @@ const SESSION_KEYS = [
 let isRedirecting = false;
 let conflictShown = false;
 
+export const resetAuthInterceptorState = (): void => {
+  isRedirecting = false;
+  conflictShown = false;
+};
+
 // Interceptor respons untuk menangani sesi kedaluwarsa & akun dihapus (HTTP 401)
 api.interceptors.response.use(
   (response) => response,
@@ -121,6 +126,15 @@ api.interceptors.response.use(
         /perangkat lain|sesi ini telah diakhiri/i.test(msg);
 
       if (isConflict && !isLoginRequest) {
+        // Hapus token sesi dari localStorage agar background sync & realtime tidak terus membombardir server
+        SESSION_KEYS.forEach((key) => {
+          try {
+            localStorage.removeItem(key);
+          } catch (_e) {
+            // Ignore error
+          }
+        });
+
         if (!conflictShown) {
           conflictShown = true;
           if (typeof window !== "undefined") {
@@ -130,7 +144,7 @@ api.interceptors.response.use(
                   errorCode: "SESSION_TERMINATED",
                   message:
                     msg ||
-                    "Akun Anda telah login di perangkat lain. Sesi pada perangkat ini telah diakhiri.",
+                    "Akun Anda telah login di perangkat lain. Sesi pada perangkat ini telah diakhiri demi keamanan data Anda.",
                 },
               }),
             );
