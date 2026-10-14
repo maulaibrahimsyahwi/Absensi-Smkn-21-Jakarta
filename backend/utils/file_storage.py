@@ -14,7 +14,7 @@ for d in [UPLOADS_BASE, SIGNATURES_DIR, AVATARS_DIR, SURAT_DIR, SURAT_EDARAN_DIR
     os.makedirs(d, exist_ok=True)
 
 
-def save_base64_file(base64_str, subfolder='signatures', prefix='file'):
+def save_base64_file(base64_str, subfolder='signatures', prefix='file', watermark_text=None):
     """
     Menyimpan data URI Base64 ke berkas fisik disk server secara aman.
     Mencegah membengkaknya basis data PostgreSQL akibat string Base64 yang masif.
@@ -22,6 +22,7 @@ def save_base64_file(base64_str, subfolder='signatures', prefix='file'):
     :param base64_str: String data URI base64 (e.g. data:image/png;base64,...) atau path yang sudah tersimpan
     :param subfolder: Subdirektori di dalam /static/uploads (e.g. 'signatures', 'avatars', 'surat')
     :param prefix: Prefix nama berkas
+    :param watermark_text: Teks watermark kontekstual untuk mencegah penyalahgunaan dokumen (UU PDP)
     :return: Path URL relatif (e.g. /static/uploads/signatures/sig_123.png) atau string asli jika bukan base64
     """
     if not base64_str or not isinstance(base64_str, str):
@@ -43,6 +44,51 @@ def save_base64_file(base64_str, subfolder='signatures', prefix='file'):
         os.makedirs(target_dir, exist_ok=True)
 
         file_bytes = base64.b64decode(encoded)
+
+        # Kepatuhan UU PDP No. 27/2022: Watermarking Dokumen Medis & Surat Izin
+        if watermark_text:
+            try:
+                import cv2
+                import numpy as np
+                np_arr = np.frombuffer(file_bytes, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    h, w = img.shape[:2]
+                    overlay = img.copy()
+
+                    font = cv2.FONT_HERSHEY_SIMPLEX
+                    scale = max(0.45, min(w / 750.0, 1.1))
+                    thickness = max(1, int(scale * 2))
+
+                    (tw, th), _ = cv2.getTextSize(watermark_text, font, scale, thickness)
+                    tx = max(10, (w - tw) // 2)
+                    ty = max(th + 10, h // 2)
+
+                    # Watermark teks di tengah
+                    cv2.putText(overlay, watermark_text, (tx, ty), font, scale, (0, 0, 220), thickness, cv2.LINE_AA)
+
+                    # Footer proteksi tambahan
+                    footer_text = "VERIFIKASI RESMI SMKN 21 JAKARTA - TIDAK BERLAKU DI LUAR SEKOLAH"
+                    f_scale = max(0.35, min(w / 1100.0, 0.75))
+                    (fw, fh), _ = cv2.getTextSize(footer_text, font, f_scale, 1)
+                    fx = max(10, (w - fw) // 2)
+                    fy = h - 12
+
+                    cv2.rectangle(overlay, (0, max(0, h - 30)), (w, h), (20, 20, 20), -1)
+                    cv2.putText(overlay, footer_text, (fx, fy), font, f_scale, (255, 255, 255), 1, cv2.LINE_AA)
+
+                    # Alpha blend overlay 30% ke gambar asli
+                    alpha = 0.32
+                    cv2.addWeighted(overlay, alpha, img, 1.0 - alpha, 0, img)
+
+                    encode_ext = '.jpg' if ext == 'jpg' else ('.webp' if ext == 'webp' else '.png')
+                    params = [cv2.IMWRITE_JPEG_QUALITY, 85] if ext == 'jpg' else []
+                    success, enc_buf = cv2.imencode(encode_ext, img, params)
+                    if success:
+                        file_bytes = enc_buf.tobytes()
+            except Exception as e_wm:
+                print(f"[WATERMARK WARNING] Gagal memberi watermark dokumen: {e_wm}")
+
         filename = f"{prefix}_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}.{ext}"
         filepath = os.path.join(target_dir, filename)
 

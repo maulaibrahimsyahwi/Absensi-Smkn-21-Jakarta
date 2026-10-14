@@ -18,12 +18,15 @@ os.makedirs(UPLOAD_SURAT_DIR, exist_ok=True)
 
 from utils.file_storage import save_base64_file
 
-def save_base64_surat(base64_str, folder=UPLOAD_SURAT_DIR, prefix='surat'):
+def save_base64_surat(base64_str, folder=UPLOAD_SURAT_DIR, prefix='surat', watermark_text=None):
     """
     Menyimpan data URI base64 ke berkas file fisik di disk server.
     Mengembalikan path relatif URL untuk disimpan di database (misal: /static/uploads/surat/surat_xxx.jpg).
+    Menyematkan watermark proteksi konteks SMKN 21 otomatis untuk kepatuhan UU PDP No. 27/2022.
     """
-    return save_base64_file(base64_str, subfolder='surat', prefix=prefix)
+    if watermark_text is None:
+        watermark_text = f"HANYA UNTUK VERIFIKASI IZIN SMKN 21 - {datetime.now().strftime('%d/%m/%Y')}"
+    return save_base64_file(base64_str, subfolder='surat', prefix=prefix, watermark_text=watermark_text)
 
 # ================= PENGAJUAN IZIN & SAKIT (PORTAL MANDIRI & VERIFIKASI) =================
 
