@@ -73,7 +73,7 @@ def register_face():
             other_s_ids = []
             for ot in other_students:
                 try:
-                    raw = json.loads(ot.face_encoding)
+                    raw = ot.get_encoding()
                     if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list):
                         for e in raw:
                             other_encs.append(e)
@@ -114,8 +114,8 @@ def register_face():
                             )
                         }), 400
 
-        # Simpan array multi-sample biometrik wajah ke database
-        siswa.face_encoding = json.dumps(encodings)
+        # Simpan array multi-sample biometrik wajah ke database secara terenkripsi (UU PDP Pasal 35)
+        siswa.set_encoding(encodings)
         db.session.commit()
         invalidate_face_cache()
         return jsonify({

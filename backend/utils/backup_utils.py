@@ -127,8 +127,11 @@ def create_db_backup(max_keep=30):
             "tables": data_payload
         }
 
+        from utils.crypto_utils import encrypt_json_payload
+        encrypted_backup_payload = encrypt_json_payload(full_snapshot)
+
         with open(backup_filepath, 'w', encoding='utf-8') as f:
-            json.dump(full_snapshot, f, ensure_ascii=False, indent=2)
+            f.write(encrypted_backup_payload)
 
         file_size_kb = round(os.path.getsize(backup_filepath) / 1024, 2)
 
@@ -249,9 +252,11 @@ def restore_db_from_backup(backup_target, mode='replace'):
                         "success": False,
                         "message": "Arsip ZIP tidak memuat berkas snapshot database (.json)."
                     }
+                from utils.crypto_utils import decrypt_json_payload
                 target_json_name = "database_snapshot.json" if "database_snapshot.json" in json_candidates else json_candidates[0]
                 with zipf.open(target_json_name) as jf:
-                    snapshot_json_data = json.load(jf)
+                    raw_text = jf.read().decode('utf-8')
+                    snapshot_json_data = decrypt_json_payload(raw_text)
 
                 # Ekstrak berkas uploads jika ada
                 for item in zipf.namelist():
@@ -262,8 +267,10 @@ def restore_db_from_backup(backup_target, mode='replace'):
                             shutil.copyfileobj(sf, df)
                         extracted_uploads += 1
         else:
+            from utils.crypto_utils import decrypt_json_payload
             with open(filepath, 'r', encoding='utf-8') as f:
-                snapshot_json_data = json.load(f)
+                raw_text = f.read()
+                snapshot_json_data = decrypt_json_payload(raw_text)
 
         if not snapshot_json_data or 'tables' not in snapshot_json_data:
             return {
@@ -287,10 +294,27 @@ def restore_db_from_backup(backup_target, mode='replace'):
         for table_name, model_cls in ordered_models:
             table_rows = tables_data.get(table_name, [])
             count_table = 0
+            if not table_rows:
+                continue
+
+            existing_map = {}
+            if mode == 'merge':
+                incoming_ids = [r.get('id') for r in table_rows if r.get('id') is not None]
+                if incoming_ids and hasattr(model_cls, 'id'):
+                    existing_objs = model_cls.query.filter(model_cls.id.in_(incoming_ids)).all()
+                    existing_map = {obj.id: obj for obj in existing_objs}
+
             for row_dict in table_rows:
                 cleaned = _deserialize_row(model_cls, row_dict)
-                instance = model_cls(**cleaned)
-                db.session.add(instance)
+                row_id = cleaned.get('id')
+                if mode == 'merge' and row_id in existing_map:
+                    existing = existing_map[row_id]
+                    for col, val in cleaned.items():
+                        if col != 'id':
+                            setattr(existing, col, val)
+                else:
+                    instance = model_cls(**cleaned)
+                    db.session.add(instance)
                 count_table += 1
             db.session.flush()
             restored_counts[table_name] = count_table

@@ -433,7 +433,7 @@ def get_flattened_known_faces():
     siswa_ids = []
     for s in siswa_list:
         try:
-            raw = json.loads(s.face_encoding)
+            raw = s.get_encoding()
             # Check if multi-sample (list of lists)
             if isinstance(raw, list) and len(raw) > 0 and isinstance(raw[0], list):
                 for enc in raw:

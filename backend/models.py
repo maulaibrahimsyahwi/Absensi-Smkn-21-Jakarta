@@ -16,19 +16,38 @@ class User(db.Model):
     role = db.Column(db.String(20), nullable=False, default="piket")  # "admin" atau "piket"
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG signature
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil
-    two_factor_secret = db.Column(db.String(128), nullable=True)
+    two_factor_secret = db.Column(db.Text, nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    last_totp_step = db.Column(db.BigInteger, nullable=True)  # Anti-Replay protection counter
     active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force change password
     created_at = db.Column(db.DateTime, default=datetime.now)
 
+    def get_two_factor_secret(self):
+        if not self.two_factor_secret:
+            return None
+        from utils.crypto_utils import decrypt_field
+        return decrypt_field(self.two_factor_secret)
+
+    def set_two_factor_secret(self, secret):
+        if not secret:
+            self.two_factor_secret = None
+        else:
+            from utils.crypto_utils import encrypt_field
+            self.two_factor_secret = encrypt_field(secret)
+
     def to_dict(self, include_signature=False):
+        sig = None
+        if include_signature and self.tanda_tangan:
+            from utils.crypto_utils import decrypt_field
+            sig = decrypt_field(self.tanda_tangan)
+
         return {
             "id": self.id,
             "username": self.username,
             "nama": self.nama,
             "role": self.role,
-            "tanda_tangan": self.tanda_tangan if include_signature else None,
+            "tanda_tangan": sig,
             "has_signature": bool(self.tanda_tangan),
             "foto_profil": self.foto_profil,
             "two_factor_enabled": bool(self.two_factor_enabled),
@@ -53,8 +72,9 @@ class Siswa(db.Model):
     tanda_tangan = db.Column(db.Text, nullable=True)  # Base64 PNG digital signature siswa
     foto_profil = db.Column(db.Text, nullable=True)   # Base64 JPEG/PNG avatar foto profil siswa
     face_encoding = db.Column(db.Text, nullable=True)  # Stored as JSON string (single encoding or list of encodings)
-    two_factor_secret = db.Column(db.String(128), nullable=True)
+    two_factor_secret = db.Column(db.Text, nullable=True)
     two_factor_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    last_totp_step = db.Column(db.BigInteger, nullable=True)  # Anti-Replay protection counter
     active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force password change
     nisn = db.Column(db.String(20), nullable=True, index=True)  # Nomor Induk Siswa Nasional (Dapodik)
@@ -64,8 +84,33 @@ class Siswa(db.Model):
     
     def get_encoding(self):
         if self.face_encoding:
-            return json.loads(self.face_encoding)
+            from utils.crypto_utils import decrypt_field
+            raw = decrypt_field(self.face_encoding)
+            try:
+                return json.loads(raw)
+            except Exception:
+                return None
         return None
+
+    def set_encoding(self, encodings):
+        if encodings is None:
+            self.face_encoding = None
+        else:
+            from utils.crypto_utils import encrypt_field
+            self.face_encoding = encrypt_field(json.dumps(encodings))
+
+    def get_two_factor_secret(self):
+        if not self.two_factor_secret:
+            return None
+        from utils.crypto_utils import decrypt_field
+        return decrypt_field(self.two_factor_secret)
+
+    def set_two_factor_secret(self, secret):
+        if not secret:
+            self.two_factor_secret = None
+        else:
+            from utils.crypto_utils import encrypt_field
+            self.two_factor_secret = encrypt_field(secret)
 
     def is_alumni_expired(self):
         """
@@ -82,13 +127,20 @@ class Siswa(db.Model):
         sample_count = 0
         if self.face_encoding:
             try:
-                data = json.loads(self.face_encoding)
+                from utils.crypto_utils import decrypt_field
+                raw = decrypt_field(self.face_encoding)
+                data = json.loads(raw)
                 if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
                     sample_count = len(data)
                 elif isinstance(data, list):
                     sample_count = 1
             except Exception:
                 sample_count = 1
+
+        sig = None
+        if include_signature and self.tanda_tangan:
+            from utils.crypto_utils import decrypt_field
+            sig = decrypt_field(self.tanda_tangan)
 
         return {
             "id": self.id,
@@ -100,7 +152,7 @@ class Siswa(db.Model):
             "status": self.status or "Aktif",
             "tanggal_lulus": self.tanggal_lulus.strftime("%Y-%m-%d %H:%M:%S") if self.tanggal_lulus else None,
             "is_alumni_expired": self.is_alumni_expired(),
-            "tanda_tangan": self.tanda_tangan if include_signature else None,
+            "tanda_tangan": sig,
             "has_signature": bool(self.tanda_tangan),
             "foto_profil": self.foto_profil,
             "terdaftar": bool(self.face_encoding),

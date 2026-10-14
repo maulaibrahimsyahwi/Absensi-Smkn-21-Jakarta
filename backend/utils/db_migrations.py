@@ -26,11 +26,15 @@ def migrate_postgres_columns(conn):
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS medical_exemption_until DATE;",
         "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS medical_exemption_alasan VARCHAR(255);",
+        "ALTER TABLE siswa ADD COLUMN IF NOT EXISTS last_totp_step BIGINT;",
+        "ALTER TABLE siswa ALTER COLUMN two_factor_secret TYPE TEXT;",
         # Users
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS foto_profil TEXT;",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_token VARCHAR(128);",
         "ALTER TABLE users ALTER COLUMN active_session_token TYPE VARCHAR(128);",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_totp_step BIGINT;",
+        "ALTER TABLE users ALTER COLUMN two_factor_secret TYPE TEXT;",
         # Izin Piket
         "ALTER TABLE izin_piket ADD COLUMN IF NOT EXISTS kelas VARCHAR(50);",
         "ALTER TABLE izin_piket ADD COLUMN IF NOT EXISTS tanda_tangan_petugas TEXT;",
@@ -129,6 +133,60 @@ def sync_legacy_data():
         print(f"[SYNC WARNING] Kendala sinkronisasi keterlambatan: {e_sync}")
 
 
+def migrate_encrypt_sensitive_data():
+    """
+    Kepatuhan UU PDP No. 27/2022 Pasal 35:
+    Mengenkripsi rekaman data biometrik (face_encoding), kunci TOTP (two_factor_secret),
+    dan tanda tangan digital yang masih tersimpan dalam format teks biasa (plaintext) di PostgreSQL.
+    """
+    try:
+        from utils.crypto_utils import encrypt_field, CIPHER_PREFIX
+        from models import Siswa, User
+
+        updated_siswa = 0
+        siswa_list = Siswa.query.filter(
+            (Siswa.face_encoding != None) |
+            (Siswa.two_factor_secret != None) |
+            (Siswa.tanda_tangan != None)
+        ).all()
+        for s in siswa_list:
+            changed = False
+            if s.face_encoding and not s.face_encoding.startswith(CIPHER_PREFIX):
+                s.face_encoding = encrypt_field(s.face_encoding)
+                changed = True
+            if s.two_factor_secret and not s.two_factor_secret.startswith(CIPHER_PREFIX):
+                s.two_factor_secret = encrypt_field(s.two_factor_secret)
+                changed = True
+            if s.tanda_tangan and not s.tanda_tangan.startswith(CIPHER_PREFIX):
+                s.tanda_tangan = encrypt_field(s.tanda_tangan)
+                changed = True
+            if changed:
+                updated_siswa += 1
+
+        updated_users = 0
+        user_list = User.query.filter(
+            (User.two_factor_secret != None) |
+            (User.tanda_tangan != None)
+        ).all()
+        for u in user_list:
+            changed = False
+            if u.two_factor_secret and not u.two_factor_secret.startswith(CIPHER_PREFIX):
+                u.two_factor_secret = encrypt_field(u.two_factor_secret)
+                changed = True
+            if u.tanda_tangan and not u.tanda_tangan.startswith(CIPHER_PREFIX):
+                u.tanda_tangan = encrypt_field(u.tanda_tangan)
+                changed = True
+            if changed:
+                updated_users += 1
+
+        if updated_siswa > 0 or updated_users > 0:
+            db.session.commit()
+            print(f"[SECURITY ENCRYPTION] Berhasil mengamankan data sensitif at-rest: {updated_siswa} siswa, {updated_users} staf.")
+    except Exception as e_crypto:
+        db.session.rollback()
+        print(f"[SECURITY WARNING] Kendala migrasi enkripsi at-rest: {e_crypto}")
+
+
 def run_db_migrations(app):
     """
     Menjalankan seluruh tahapan migrasi dan inisialisasi basis data PostgreSQL secara terstruktur.
@@ -142,5 +200,6 @@ def run_db_migrations(app):
             seed_default_staff()
             seed_default_schedule()
             sync_legacy_data()
+            migrate_encrypt_sensitive_data()
         except Exception as e:
             print(f"[MIGRATION WARNING] Kendala inisialisasi/migrasi PostgreSQL: {e}")

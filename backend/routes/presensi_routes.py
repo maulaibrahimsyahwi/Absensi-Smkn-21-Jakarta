@@ -356,7 +356,7 @@ def verify_harian():
             }), 403
 
         try:
-            stored_encodings = json.loads(target_siswa.face_encoding) if target_siswa.face_encoding else []
+            stored_encodings = target_siswa.get_encoding() if target_siswa.face_encoding else []
             if not isinstance(stored_encodings, list) or len(stored_encodings) == 0:
                 if not is_medical_exempt:
                     raise ValueError("Encoding kosong")
@@ -758,7 +758,7 @@ def sync_offline():
                     target = Siswa.query.get(expected_siswa_id)
                     if target and target.face_encoding:
                         try:
-                            stored = json.loads(target.face_encoding)
+                            stored = target.get_encoding()
                             encs = stored if isinstance(stored, list) else []
                             ids = [target.id] * len(encs)
                             match = verify_face(image_data, encs, ids)
