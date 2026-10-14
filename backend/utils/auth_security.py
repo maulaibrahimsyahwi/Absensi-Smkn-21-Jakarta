@@ -4,35 +4,49 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from models import db
 
 # Account lockout tracking (in-memory, reset saat restart server)
-_login_attempts = defaultdict(list)  # {username: [timestamp, ...]}
+_login_attempts = defaultdict(list)  # {f"{username}:{ip_address}": [timestamp, ...]}
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION_SECONDS = 900  # 15 menit
 
 
-def check_account_locked(username):
+def _get_lockout_key(username, ip_address=None):
+    """Membuat kunci unik berbasis username dan IP address agar mencegah DoS lockout antar perangkat."""
+    u = str(username).strip().lower()
+    if ip_address:
+        return f"{u}:{str(ip_address).strip()}"
+    return u
+
+
+def check_account_locked(username, ip_address=None):
     """
-    Memeriksa apakah akun terkunci akibat terlalu banyak percobaan login gagal berturut-turut.
+    Memeriksa apakah akun/IP terkunci akibat terlalu banyak percobaan login gagal berturut-turut.
     Mengembalikan tuple: (is_locked: bool, remaining_seconds: int)
     """
     now = time_module.time()
+    key = _get_lockout_key(username, ip_address)
     # Bersihkan percobaan yang sudah melebihi durasi batas kunci
-    _login_attempts[username] = [
-        t for t in _login_attempts[username] if now - t < LOCKOUT_DURATION_SECONDS
+    _login_attempts[key] = [
+        t for t in _login_attempts[key] if now - t < LOCKOUT_DURATION_SECONDS
     ]
-    if len(_login_attempts[username]) >= MAX_LOGIN_ATTEMPTS:
-        remaining = int(LOCKOUT_DURATION_SECONDS - (now - _login_attempts[username][0]))
+    if len(_login_attempts[key]) >= MAX_LOGIN_ATTEMPTS:
+        remaining = int(LOCKOUT_DURATION_SECONDS - (now - _login_attempts[key][0]))
         return True, remaining
     return False, 0
 
 
-def record_failed_attempt(username):
-    """Mencatat stempel waktu percobaan login yang gagal."""
-    _login_attempts[username].append(time_module.time())
+def record_failed_attempt(username, ip_address=None):
+    """Mencatat stempel waktu percobaan login yang gagal untuk pasangan username dan IP."""
+    key = _get_lockout_key(username, ip_address)
+    _login_attempts[key].append(time_module.time())
 
 
-def clear_login_attempts(username):
+def clear_login_attempts(username, ip_address=None):
     """Menghapus seluruh rekaman percobaan gagal setelah login berhasil."""
-    _login_attempts.pop(username, None)
+    key = _get_lockout_key(username, ip_address)
+    _login_attempts.pop(key, None)
+    # Bersihkan juga kunci username murni jika ada
+    u = str(username).strip().lower()
+    _login_attempts.pop(u, None)
 
 
 def verify_and_upgrade_password(account, input_pass, is_siswa=False):

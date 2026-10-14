@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
+from models import db, User, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket, PengaturanJadwal
 from utils.totp_utils import generate_totp_secret, verify_totp, get_totp_uri, get_qr_url
 from utils.auth_middleware import generate_token, token_required, role_required, decode_token, invalidate_account_cache
 from collections import defaultdict
@@ -34,6 +34,7 @@ def login():
     password = str(data.get('password', '')).strip()
     role_requested = str(data.get('role', '')).strip().lower()
     totp_code = str(data.get('totp_code', '')).strip()
+    client_ip = request.remote_addr or '127.0.0.1'
 
     # Anti-bot honeypot check (field ini disembunyikan dari manusia)
     if data.get('hp_field') or data.get('website_hp'):
@@ -44,13 +45,13 @@ def login():
     if not password:
         return jsonify({"success": False, "message": "Password wajib diisi."}), 400
 
-    # Pengecekan lockout akun (brute-force protection)
-    is_locked, remaining = _check_account_locked(username)
+    # Pengecekan lockout akun berbasis username & IP (anti-DoS lockout)
+    is_locked, remaining = _check_account_locked(username, ip_address=client_ip)
     if is_locked:
         minutes = max(1, (remaining + 59) // 60)
         return jsonify({
             "success": False,
-            "message": f"Akun terkunci sementara karena terlalu banyak percobaan login gagal. Silakan coba kembali dalam {minutes} menit."
+            "message": f"Percobaan login terlalu sering dari perangkat ini. Silakan coba kembali dalam {minutes} menit."
         }), 429
 
     def handle_siswa_login(siswa):
@@ -64,7 +65,7 @@ def login():
 
         # Validasi password siswa dengan auto-migrasi hash
         if not verify_and_upgrade_password(siswa, password, is_siswa=True):
-            _record_failed_attempt(username)
+            _record_failed_attempt(username, ip_address=client_ip)
             return jsonify({
                 "success": False, 
                 "message": "NIS atau kata sandi yang Anda masukkan salah."
@@ -80,14 +81,14 @@ def login():
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
             if not verify_totp(siswa.two_factor_secret, totp_code):
-                _record_failed_attempt(username)
+                _record_failed_attempt(username, ip_address=client_ip)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
 
-        _clear_attempts(username)
+        _clear_attempts(username, ip_address=client_ip)
 
         is_alumni_user = getattr(siswa, 'status', 'Aktif') == 'Alumni'
         welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
@@ -136,7 +137,7 @@ def login():
 
     def handle_user_login(user):
         if not verify_and_upgrade_password(user, password, is_siswa=False):
-            _record_failed_attempt(username)
+            _record_failed_attempt(username, ip_address=client_ip)
             return jsonify({"success": False, "message": "Username atau kata sandi yang Anda masukkan salah."}), 401
         
         if role_requested in ['admin', 'piket'] and role_requested != user.role:
@@ -155,14 +156,14 @@ def login():
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
             if not verify_totp(user.two_factor_secret, totp_code):
-                _record_failed_attempt(username)
+                _record_failed_attempt(username, ip_address=client_ip)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
 
-        _clear_attempts(username)
+        _clear_attempts(username, ip_address=client_ip)
 
         role_label = "Administrator" if user.role == "admin" else "Guru Piket"
 
@@ -203,7 +204,7 @@ def login():
                     "success": False, 
                     "message": f"Akun '{username}' terdaftar sebagai Guru Piket / Admin. Silakan pilih tab 'Guru Piket & Admin' di atas."
                 }), 400
-            _record_failed_attempt(username)
+            _record_failed_attempt(username, ip_address=client_ip)
             return jsonify({
                 "success": False, 
                 "message": "Akun siswa dengan NIS tersebut tidak ditemukan."
@@ -220,7 +221,7 @@ def login():
                     "success": False, 
                     "message": f"NIS '{username}' terdaftar sebagai Siswa ({siswa.nama}). Silakan pilih tab 'Siswa' di atas."
                 }), 400
-            _record_failed_attempt(username)
+            _record_failed_attempt(username, ip_address=client_ip)
             return jsonify({
                 "success": False, 
                 "message": "Akun Guru Piket / Admin dengan username tersebut tidak ditemukan."
@@ -241,7 +242,7 @@ def login():
     if siswa:
         return handle_siswa_login(siswa)
 
-    _record_failed_attempt(username)
+    _record_failed_attempt(username, ip_address=client_ip)
     return jsonify({"success": False, "message": "Akun tidak ditemukan. Periksa kembali Username atau NIS Anda."}), 404
 
 
@@ -539,9 +540,29 @@ def get_personal_siswa_rekap():
     if not siswa:
         return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
 
-    # Hitung statistik kehadiran siswa
-    harian_records = AbsensiHarian.query.filter_by(siswa_id=siswa.id).all()
-    perpus_records = AbsensiPerpustakaan.query.filter_by(siswa_id=siswa.id).all()
+    # Ambil pengaturan jadwal aktif untuk tahun ajaran dan semester berjalan
+    active_sched = PengaturanJadwal.query.first()
+    active_ta = active_sched.tahun_ajaran if active_sched else "2026/2027"
+    active_sem = active_sched.semester if active_sched else "Ganjil"
+
+    # Izinkan query parameter jika siswa/wali ingin melihat semester tertentu, default ke semester aktif
+    target_ta = request.args.get('tahun_ajaran', active_ta)
+    target_sem = request.args.get('semester', active_sem)
+
+    # Filter presensi harian per semester & tahun ajaran (Sargable Query)
+    harian_query = AbsensiHarian.query.filter_by(siswa_id=siswa.id)
+    if target_ta:
+        harian_query = harian_query.filter(
+            (AbsensiHarian.tahun_ajaran == target_ta) | 
+            ((AbsensiHarian.tahun_ajaran == None) & (target_ta == active_ta))
+        )
+    if target_sem:
+        harian_query = harian_query.filter(
+            (AbsensiHarian.semester == target_sem) | 
+            ((AbsensiHarian.semester == None) & (target_sem == active_sem))
+        )
+    harian_records = harian_query.order_by(AbsensiHarian.waktu.desc()).all()
+    perpus_records = AbsensiPerpustakaan.query.filter_by(siswa_id=siswa.id).order_by(AbsensiPerpustakaan.waktu.desc()).all()
     pengajuan_records = PengajuanIzin.query.filter_by(siswa_id=siswa.id).order_by(PengajuanIzin.created_at.desc()).all()
     piket_records = IzinPiket.query.filter_by(siswa_id=siswa.id).order_by(IzinPiket.created_at.desc()).all()
 
@@ -551,6 +572,7 @@ def get_personal_siswa_rekap():
     pjj = sum(1 for h in harian_records if '(PJJ)' in (h.status or ''))
     sakit = sum(1 for h in harian_records if h.status == 'Sakit')
     izin = sum(1 for h in harian_records if h.status == 'Izin')
+    alpa = sum(1 for h in harian_records if h.status == 'Alpa')
     total_hadir = tepat_waktu + terlambat + dispensasi
 
     now_dt = datetime.now()
@@ -559,6 +581,11 @@ def get_personal_siswa_rekap():
     return jsonify({
         "success": True,
         "siswa": siswa.to_dict(),
+        "periode": {
+            "tahun_ajaran": target_ta,
+            "semester": target_sem,
+            "is_active_semester": bool(target_ta == active_ta and target_sem == active_sem)
+        },
         "status_hari_ini": {
             "is_school_day": h_status["is_school_day"],
             "is_weekend": h_status["is_weekend"],
@@ -575,6 +602,7 @@ def get_personal_siswa_rekap():
             "pjj": pjj,
             "sakit": sakit,
             "izin": izin,
+            "alpa": alpa,
             "kunjungan_perpus": len(perpus_records)
         },
         "riwayat_pengajuan": [p.to_dict() for p in pengajuan_records],

@@ -17,12 +17,14 @@ def record_audit_log(user_id, role, user_name, action, target_type=None, target_
     - ip_address: IP address pemohon (opsional, jika kosong diambil dari request)
     """
     try:
-        if not ip_address and request:
-            forwarded = request.headers.get("X-Forwarded-For")
-            if forwarded:
-                ip_address = forwarded.split(",")[0].strip()
-            else:
-                ip_address = request.remote_addr or "127.0.0.1"
+        if not ip_address:
+            try:
+                # Menggunakan request.remote_addr yang telah divalidasi dan disanitasi oleh ProxyFix
+                ip_address = request.remote_addr if request else "127.0.0.1"
+            except Exception:
+                ip_address = "127.0.0.1"
+        if not ip_address:
+            ip_address = "127.0.0.1"
 
         log_entry = AuditLog(
             user_id=user_id,

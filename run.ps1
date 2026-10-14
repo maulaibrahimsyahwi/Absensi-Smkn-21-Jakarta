@@ -7,7 +7,9 @@ param(
     [ValidateSet("prod", "dev", "production", "development")]
     [string]$Mode = "prod",
     [switch]$Visible,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$EnableAutoRestart,
+    [switch]$DisableAutoRestart
 )
 
 if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
@@ -16,6 +18,52 @@ if (-not $PSScriptRoot -or $PSScriptRoot -eq "") {
     } else {
         $PSScriptRoot = (Get-Location).Path
     }
+}
+
+# --- Fitur Auto-Restart saat PC Menyala / Setelah Mati Lampu ---
+$startupFolder = [Environment]::GetFolderPath("Startup")
+$startupShortcut = Join-Path $startupFolder "SMKN21_Absensi_AutoStart.lnk"
+
+if ($EnableAutoRestart) {
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "   KONFIGURASI AUTO-RESTART SISTEM SMKN 21 JAKARTA" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Cyan
+    try {
+        # 1. Pasang Startup Shortcut (Bekerja untuk semua pengguna tanpa hak administrator khusus)
+        $wscript = New-Object -ComObject WScript.Shell
+        $shortcut = $wscript.CreateShortcut($startupShortcut)
+        $shortcut.TargetPath = "powershell.exe"
+        $shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\run.ps1`" -Mode prod -NoBrowser"
+        $shortcut.WorkingDirectory = $PSScriptRoot
+        $shortcut.Description = "Auto-start Sistem Absensi SMKN 21 Jakarta setelah restart atau mati lampu"
+        $shortcut.Save()
+        Write-Host "[OK] Startup Shortcut berhasil dibuat di folder Startup Windows:" -ForegroundColor Green
+        Write-Host "     $startupShortcut" -ForegroundColor Gray
+
+        # 2. Opsional: Buat Windows Scheduled Task jika hak Administrator tersedia
+        $taskName = "SMKN21_Absensi_Server"
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\run.ps1`" -Mode prod -NoBrowser" -WorkingDirectory $PSScriptRoot
+        $trigger = New-ScheduledTaskTrigger -AtLogOn
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 365)
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "Otomatis menjalankan Sistem Absensi SMKN 21 saat PC menyala" -Force -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "[OK] Windows Task Scheduler 'SMKN21_Absensi_Server' aktif." -ForegroundColor Green
+        Write-Host "Sistem akan otomatis berjalan setiap kali PC server dinyalakan / setelah mati lampu." -ForegroundColor Cyan
+    } catch {
+        Write-Host "[WARN] Gagal mengonfigurasi beberapa opsi auto-restart: $_" -ForegroundColor Yellow
+    }
+    Write-Host "================================================================" -ForegroundColor Cyan
+    exit 0
+}
+
+if ($DisableAutoRestart) {
+    Write-Host "Menonaktifkan auto-restart sistem..." -ForegroundColor Yellow
+    if (Test-Path $startupShortcut) {
+        Remove-Item $startupShortcut -Force -ErrorAction SilentlyContinue
+        Write-Host "[OK] Startup shortcut dihapus." -ForegroundColor Green
+    }
+    Unregister-ScheduledTask -TaskName "SMKN21_Absensi_Server" -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "[OK] Auto-restart berhasil dinonaktifkan." -ForegroundColor Green
+    exit 0
 }
 
 # Tentukan mode peluncuran backend dan frontend
@@ -109,9 +157,9 @@ if ($Visible) {
     $null = [System.Diagnostics.Process]::Start($frontendPsi)
 }
 
-# 4. Tunggu hingga layanan siap (Polling Port dengan Indikator)
+# 4. Tunggu hingga layanan siap (Polling Port & Health Endpoint dengan Indikator)
 Write-Host "----------------------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "Menunggu inisialisasi server & basis data..." -ForegroundColor Yellow
+Write-Host "Menunggu inisialisasi server, koneksi basis data & model AI..." -ForegroundColor Yellow
 
 $maxWaitSeconds = 40
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -127,10 +175,21 @@ while ($sw.Elapsed.TotalSeconds -lt $maxWaitSeconds) {
         }
     }
     if (-not $backendReady) {
-        $bConn = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
-        if ($bConn) {
-            $backendReady = $true
-            Write-Host "[OK] Backend siap di http://127.0.0.1:5000" -ForegroundColor Green
+        try {
+            $health = Invoke-RestMethod -Uri "http://127.0.0.1:5000/api/health" -Method Get -TimeoutSec 2 -ErrorAction Stop
+            if ($health.status -in @("healthy", "degraded")) {
+                $backendReady = $true
+                $dbLat = if ($health.checks.database.latency_ms) { "$($health.checks.database.latency_ms) ms" } else { "OK" }
+                $aiStat = $health.checks.biometric_ai.status
+                Write-Host "[OK] Backend siap di http://127.0.0.1:5000 (DB Latency: $dbLat | AI: $aiStat)" -ForegroundColor Green
+            }
+        } catch {
+            # Fallback jika healthcheck belum siap atau port sudah listening
+            $bConn = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+            if ($bConn -and $sw.Elapsed.TotalSeconds -gt 25) {
+                $backendReady = $true
+                Write-Host "[OK] Backend mendengarkan pada port 5000" -ForegroundColor Green
+            }
         }
     }
     if ($backendReady -and $frontendReady) {
@@ -146,9 +205,12 @@ Write-Host "================================================================" -F
 Write-Host "Akses Laptop / Komputer : https://localhost:5173" -ForegroundColor White
 Write-Host "Akses HP / Tablet (Wi-Fi): https://$($localIp):5173" -ForegroundColor Yellow
 Write-Host "API Backend Langsung     : http://127.0.0.1:5000" -ForegroundColor Gray
+Write-Host "Health Check Endpoint    : http://127.0.0.1:5000/api/health" -ForegroundColor Gray
+Write-Host "Berkas Log Server        : backend\logs\server.log (Rotasi 5MB)" -ForegroundColor Gray
 Write-Host "----------------------------------------------------------------" -ForegroundColor DarkGray
 Write-Host "Tips Menghentikan: Jalankan '.\stop.ps1' untuk mematikan semua layanan." -ForegroundColor Gray
 Write-Host "Tips Mode Dev    : Jalankan '.\run.ps1 -Mode dev' jika ingin Flask auto-reload." -ForegroundColor Gray
+Write-Host "Tips Auto-Restart: Jalankan '.\run.ps1 -EnableAutoRestart' agar otomatis start saat PC menyala." -ForegroundColor Gray
 Write-Host "================================================================`n" -ForegroundColor Cyan
 
 # 6. Buka browser otomatis jika tidak dinonaktifkan

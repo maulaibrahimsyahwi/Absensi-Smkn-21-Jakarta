@@ -1,4 +1,6 @@
 import os
+import time as time_module
+from datetime import datetime
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_compress import Compress
@@ -150,6 +152,62 @@ def protect_medical_records():
                 "success": False,
                 "message": "Sesi token tidak valid untuk mengakses dokumen medis ini."
             }), 403
+
+
+# Server Start Time untuk pelacakan Uptime
+SERVER_START_TIME = datetime.now()
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """
+    Endpoint healthcheck komprehensif untuk memantau status operasional server:
+    - Konektivitas ke basis data PostgreSQL (Supabase Pooler)
+    - Kesiapan model biometrik wajah OpenCV (YuNet & SFace)
+    - Waktu aktif (uptime) server
+    """
+    t0 = time_module.time()
+    db_ok = False
+    db_latency_ms = None
+    db_error = None
+
+    try:
+        from sqlalchemy import text
+        db.session.execute(text("SELECT 1")).scalar()
+        db_latency_ms = round((time_module.time() - t0) * 1000, 2)
+        db_ok = True
+    except Exception as e:
+        db_error = str(e)
+
+    ai_ok = False
+    try:
+        from face_utils import get_detector, get_recognizer
+        det = get_detector()
+        rec = get_recognizer()
+        ai_ok = bool(det is not None and rec is not None)
+    except Exception:
+        ai_ok = False
+
+    uptime_sec = int((datetime.now() - SERVER_START_TIME).total_seconds())
+
+    health_status = {
+        "status": "healthy" if db_ok else "degraded",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "uptime_seconds": uptime_sec,
+        "checks": {
+            "database": {
+                "status": "connected" if db_ok else "error",
+                "latency_ms": db_latency_ms,
+                "error": db_error
+            },
+            "biometric_ai": {
+                "status": "ready" if ai_ok else "unavailable",
+                "models": "OpenCV YuNet + SFace (ONNX)"
+            }
+        },
+        "version": "1.0.0"
+    }
+
+    return jsonify(health_status), (200 if db_ok else 503)
 
 
 # Middleware: Security Headers
