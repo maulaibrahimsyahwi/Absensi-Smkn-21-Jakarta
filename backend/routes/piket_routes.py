@@ -468,4 +468,269 @@ def update_jadwal():
     })
 
 
+# ================= MEJA PIKET SUITE (PRESENSI MANUAL, FORCE MAJEURE, DISPENSASI MASSAL) =================
+
+@piket_bp.route('/api/piket/presensi_manual', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def record_presensi_manual():
+    """
+    Fitur Guru Piket: Mencatat presensi kehadiran siswa darurat secara manual di meja piket
+    (misal: kamera/HP siswa rusak, kendala aplikasi, atau verifikasi langsung tatap muka).
+    """
+    data = request.json or {}
+    siswa_id = data.get('siswa_id')
+    nis = str(data.get('nis', '')).strip()
+    status_input = str(data.get('status', 'Hadir (Tepat Waktu)')).strip()
+    alasan = str(data.get('alasan_override', 'Verifikasi Tatap Muka Meja Piket')).strip()
+    catatan = str(data.get('catatan', '')).strip()
+
+    siswa = None
+    if siswa_id:
+        siswa = Siswa.query.get(siswa_id)
+    elif nis:
+        siswa = Siswa.query.filter_by(nis=nis).first()
+
+    if not siswa:
+        return jsonify({"success": False, "message": "Siswa tidak ditemukan."}), 404
+
+    now_dt = datetime.now()
+    today_val = now_dt.date()
+    start_today = datetime.combine(today_val, time.min)
+    end_today = datetime.combine(today_val, time.max)
+
+    current_u = getattr(request, 'current_user', {})
+    officer_name = current_u.get('identifier', 'Guru Piket')
+
+    cfg = PengaturanJadwal.query.first()
+    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
+    # Cek apakah sudah ada catatan presensi hari ini
+    existing = AbsensiHarian.query.filter(
+        AbsensiHarian.siswa_id == siswa.id,
+        AbsensiHarian.waktu >= start_today,
+        AbsensiHarian.waktu <= end_today
+    ).first()
+
+    note_text = f"Manual oleh {officer_name}: {alasan}"
+    if catatan:
+        note_text += f" ({catatan})"
+
+    if existing:
+        existing.status = status_input
+        existing.proxy_note = note_text
+        existing.sumber = "manual_piket"
+        db.session.commit()
+    else:
+        new_absen = AbsensiHarian(
+            siswa_id=siswa.id,
+            status=status_input,
+            waktu=now_dt,
+            sumber="manual_piket",
+            is_flagged_proxy=False,
+            proxy_note=note_text,
+            tahun_ajaran=curr_ta,
+            semester=curr_sem
+        )
+        db.session.add(new_absen)
+        db.session.commit()
+
+    if "Terlambat" in status_input:
+        catat_pelanggaran_terlambat(
+            siswa=siswa,
+            waktu=now_dt,
+            sumber="Manual Meja Piket",
+            petugas=officer_name,
+            alasan=note_text
+        )
+
+    record_audit_log(
+        user_id=current_u.get('user_id'),
+        role=current_u.get('role', 'piket'),
+        user_name=officer_name,
+        action='PRESENSI_MANUAL',
+        target_type='AbsensiHarian',
+        target_id=siswa.id,
+        keterangan=f"Presensi manual {siswa.nama} ({siswa.kelas}) status '{status_input}' oleh {officer_name}"
+    )
+
+    notify_data_changed("presensi")
+    notify_data_changed("piket")
+
+    return jsonify({
+        "success": True,
+        "message": f"Presensi manual untuk {siswa.nama} berhasil dicatat dengan status: {status_input}."
+    })
+
+
+@piket_bp.route('/api/piket/force_majeure', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def apply_force_majeure():
+    """
+    Fitur Guru Piket: Menerapkan dispensasi massal / pemutihan keterlambatan akibat kejadian force majeure
+    (hujan badai, banjir, keterlambatan armada KRL/Transjakarta, dsb).
+    Mengubah status 'Terlambat' menjadi 'Tepat Waktu (Dispensasi Force Majeure)' dan membatalkan poin pelanggarannya.
+    """
+    data = request.json or {}
+    tanggal_str = data.get('tanggal')
+    alasan = str(data.get('alasan', 'Force Majeure')).strip()
+
+    target_date = date.today()
+    if tanggal_str:
+        try:
+            target_date = datetime.strptime(str(tanggal_str).strip(), "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    start_day = datetime.combine(target_date, time.min)
+    end_day = datetime.combine(target_date, time.max)
+
+    current_u = getattr(request, 'current_user', {})
+    officer_name = current_u.get('identifier', 'Guru Piket')
+
+    # Ambil seluruh presensi terlambat pada hari tersebut
+    records_terlambat = AbsensiHarian.query.filter(
+        AbsensiHarian.waktu >= start_day,
+        AbsensiHarian.waktu <= end_day,
+        AbsensiHarian.status.like('%Terlambat%')
+    ).all()
+
+    total_terdampak = len(records_terlambat)
+    siswa_ids = [r.siswa_id for r in records_terlambat]
+
+    for rec in records_terlambat:
+        rec.status = "Tepat Waktu (Dispensasi Force Majeure)"
+        rec.proxy_note = f"Pemutihan Force Majeure oleh {officer_name}: {alasan}"
+
+    # Batalkan/hapus catatan pelanggaran terlambat otomatis pada tanggal tersebut
+    if siswa_ids:
+        PelanggaranSiswa.query.filter(
+            PelanggaranSiswa.siswa_id.in_(siswa_ids),
+            PelanggaranSiswa.tanggal_waktu >= start_day,
+            PelanggaranSiswa.tanggal_waktu <= end_day,
+            PelanggaranSiswa.jenis_pelanggaran == "Terlambat masuk sekolah"
+        ).delete(synchronize_session=False)
+
+    db.session.commit()
+
+    record_audit_log(
+        user_id=current_u.get('user_id'),
+        role=current_u.get('role', 'piket'),
+        user_name=officer_name,
+        action='FORCE_MAJEURE_DISPENSATION',
+        target_type='AbsensiHarian',
+        target_id=target_date.isoformat(),
+        keterangan=f"Pemutihan keterlambatan {total_terdampak} siswa akibat {alasan} oleh {officer_name}"
+    )
+
+    notify_data_changed("presensi")
+    notify_data_changed("pelanggaran")
+    notify_data_changed("piket")
+
+    return jsonify({
+        "success": True,
+        "message": f"Dispensasi Force Majeure berhasil diterapkan. Sebanyak {total_terdampak} siswa terlambat telah diputihkan.",
+        "total_terdampak": total_terdampak
+    })
+
+
+@piket_bp.route('/api/piket/dispensasi_massal', methods=['POST'])
+@token_required
+@role_required(['piket', 'admin'])
+def apply_dispensasi_massal():
+    """
+    Fitur Guru Piket: Menerbitkan dispensasi kegiatan perwakilan/delegasi sekolah massal
+    (lomba kejuruan, petugas upacara, OSIS, aksi sosial, atau acara dinas).
+    """
+    data = request.json or {}
+    siswa_ids = data.get('siswa_ids', [])
+    nama_kegiatan = str(data.get('nama_kegiatan', '')).strip()
+    tipe = str(data.get('tipe', 'Dispensasi Kegiatan Sekolah')).strip()
+    jam_ke = str(data.get('jam_ke', 'Sepanjang Hari Sekolah')).strip()
+    guru_pendamping = str(data.get('guru_pendamping', '')).strip()
+    keterangan = str(data.get('keterangan', '')).strip()
+
+    if not isinstance(siswa_ids, list) or len(siswa_ids) == 0:
+        return jsonify({"success": False, "message": "Pilih minimal satu siswa delegasi."}), 400
+
+    if not nama_kegiatan:
+        return jsonify({"success": False, "message": "Nama kegiatan atau delegasi wajib diisi."}), 400
+
+    current_u = getattr(request, 'current_user', {})
+    officer_name = current_u.get('identifier', 'Guru Piket')
+
+    now_dt = datetime.now()
+    today_val = now_dt.date()
+    nama_hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"][today_val.weekday()]
+    start_today = datetime.combine(today_val, time.min)
+    end_today = datetime.combine(today_val, time.max)
+
+    cfg = PengaturanJadwal.query.first()
+    curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
+    curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
+
+    created_count = 0
+    for s_id in siswa_ids:
+        siswa = Siswa.query.get(s_id)
+        if not siswa:
+            continue
+
+        # 1. Catat surat izin dispensasi piket
+        izin = IzinPiket(
+            siswa_id=siswa.id,
+            hari=nama_hari,
+            tanggal=today_val,
+            tipe="Izin Masuk" if "Masuk" in tipe else "Izin Meninggalkan Kelas",
+            jam_ke=jam_ke,
+            alasan=f"Dispensasi: {nama_kegiatan}" + (f" ({keterangan})" if keterangan else "") + (f" - Pendamping: {guru_pendamping}" if guru_pendamping else ""),
+            petugas_piket=officer_name
+        )
+        db.session.add(izin)
+
+        # 2. Jika siswa belum absensi hari ini, otomatis berikan status Dispensasi resmi
+        absen = AbsensiHarian.query.filter(
+            AbsensiHarian.siswa_id == siswa.id,
+            AbsensiHarian.waktu >= start_today,
+            AbsensiHarian.waktu <= end_today
+        ).first()
+
+        if not absen:
+            new_absen = AbsensiHarian(
+                siswa_id=siswa.id,
+                status="Dispensasi",
+                waktu=now_dt,
+                sumber="dispensasi_massal",
+                is_flagged_proxy=False,
+                proxy_note=f"Dispensasi {nama_kegiatan} oleh {officer_name}",
+                tahun_ajaran=curr_ta,
+                semester=curr_sem
+            )
+            db.session.add(new_absen)
+
+        created_count += 1
+
+    db.session.commit()
+
+    record_audit_log(
+        user_id=current_u.get('user_id'),
+        role=current_u.get('role', 'piket'),
+        user_name=officer_name,
+        action='DISPENSASI_MASSAL',
+        target_type='IzinPiket',
+        target_id=str(created_count),
+        keterangan=f"Dispensasi massal '{nama_kegiatan}' untuk {created_count} siswa oleh {officer_name}"
+    )
+
+    notify_data_changed("piket")
+    notify_data_changed("presensi")
+
+    return jsonify({
+        "success": True,
+        "message": f"Berhasil menerbitkan dispensasi massal '{nama_kegiatan}' untuk {created_count} siswa.",
+        "total": created_count
+    })
+
+
 

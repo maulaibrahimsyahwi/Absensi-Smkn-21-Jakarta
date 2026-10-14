@@ -496,4 +496,166 @@ def get_audit_logs():
     })
 
 
+@rekap_bp.route('/api/rekap/laporan_sudin', methods=['GET'])
+@token_required
+@role_required(['piket', 'admin'])
+def get_laporan_sudin():
+    """
+    Menyusun laporan bulanan berformat standar resmi Suku Dinas Pendidikan DKI Jakarta.
+    Parameter Query:
+    - bulan: int (1-12)
+    - tahun: int (e.g. 2026)
+    - hari_efektif: int (default 22)
+    - kelas: str (opsional filter per rombel)
+    """
+    now = datetime.now()
+    try:
+        bulan = int(request.args.get('bulan', now.month))
+    except (ValueError, TypeError):
+        bulan = now.month
+
+    try:
+        tahun = int(request.args.get('tahun', now.year))
+    except (ValueError, TypeError):
+        tahun = now.year
+
+    try:
+        hari_efektif = int(request.args.get('hari_efektif', 22))
+        if hari_efektif <= 0:
+            hari_efektif = 22
+    except (ValueError, TypeError):
+        hari_efektif = 22
+
+    kelas_filter = request.args.get('kelas')
+
+    nama_bulan_map = [
+        "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ]
+    nama_bulan = nama_bulan_map[bulan] if 1 <= bulan <= 12 else str(bulan)
+
+    # 1. Ambil seluruh siswa aktif
+    query_siswa = Siswa.query.filter((Siswa.status == 'Aktif') | (Siswa.status == None))
+    if kelas_filter and kelas_filter != 'ALL':
+        query_siswa = query_siswa.filter(Siswa.kelas == kelas_filter)
+    all_siswa = query_siswa.all()
+
+    siswa_stats = {}
+    kelas_siswa_map = {}
+    for s in all_siswa:
+        k = s.kelas or "Tanpa Kelas"
+        if k not in kelas_siswa_map:
+            kelas_siswa_map[k] = []
+        kelas_siswa_map[k].append(s.id)
+        siswa_stats[s.id] = {
+            "hadir": 0,
+            "sakit": 0,
+            "izin": 0,
+            "alpa": 0
+        }
+
+    # 2. Agregasi Absensi Harian via SQL GROUP BY
+    q_harian = db.session.query(
+        AbsensiHarian.siswa_id,
+        AbsensiHarian.status,
+        db.func.count(AbsensiHarian.id)
+    ).filter(
+        extract('year', AbsensiHarian.waktu) == tahun,
+        extract('month', AbsensiHarian.waktu) == bulan
+    ).group_by(AbsensiHarian.siswa_id, AbsensiHarian.status).all()
+
+    for sid, status_str, count_val in q_harian:
+        if sid in siswa_stats:
+            st = status_str or ""
+            if any(term in st for term in ["Hadir", "Tepat Waktu", "Terlambat", "Dispensasi", "(PJJ)", "(PKL)"]):
+                siswa_stats[sid]["hadir"] += count_val
+            elif "Sakit" in st:
+                siswa_stats[sid]["sakit"] += count_val
+            elif "Izin" in st:
+                siswa_stats[sid]["izin"] += count_val
+            elif "Alpa" in st:
+                siswa_stats[sid]["alpa"] += count_val
+
+    # 3. Hitung auto-alpa per siswa jika total hari tercatat kurang dari hari efektif
+    for sid, st in siswa_stats.items():
+        total_accounted = st["hadir"] + st["sakit"] + st["izin"]
+        if hari_efektif > total_accounted:
+            auto_alpa = hari_efektif - total_accounted
+            st["alpa"] = max(st["alpa"], auto_alpa)
+
+    # 4. Susun matriks rekapitulasi per kelas
+    rekap_per_kelas = []
+    tot_siswa = 0
+    tot_hadir = 0
+    tot_sakit = 0
+    tot_izin = 0
+    tot_alpa = 0
+    tot_absen = 0
+
+    for k in sorted(kelas_siswa_map.keys()):
+        s_ids = kelas_siswa_map[k]
+        k_siswa_count = len(s_ids)
+        k_hadir = sum(siswa_stats[sid]["hadir"] for sid in s_ids)
+        k_sakit = sum(siswa_stats[sid]["sakit"] for sid in s_ids)
+        k_izin = sum(siswa_stats[sid]["izin"] for sid in s_ids)
+        k_alpa = sum(siswa_stats[sid]["alpa"] for sid in s_ids)
+        k_absen = k_sakit + k_izin + k_alpa
+
+        target_total = k_siswa_count * hari_efektif
+        k_persen = round((k_hadir / target_total) * 100, 2) if target_total > 0 else 100.0
+
+        rekap_per_kelas.append({
+            "kelas": k,
+            "total_siswa": k_siswa_count,
+            "hari_efektif": hari_efektif,
+            "hadir": k_hadir,
+            "sakit": k_sakit,
+            "izin": k_izin,
+            "alpa": k_alpa,
+            "total_absen": k_absen,
+            "persentase_kehadiran": k_persen
+        })
+
+        tot_siswa += k_siswa_count
+        tot_hadir += k_hadir
+        tot_sakit += k_sakit
+        tot_izin += k_izin
+        tot_alpa += k_alpa
+        tot_absen += k_absen
+
+    tot_target = tot_siswa * hari_efektif
+    overall_persen = round((tot_hadir / tot_target) * 100, 2) if tot_target > 0 else 100.0
+
+    ringkasan_sekolah = {
+        "total_siswa": tot_siswa,
+        "total_kelas": len(kelas_siswa_map),
+        "total_hadir": tot_hadir,
+        "total_sakit": tot_sakit,
+        "total_izin": tot_izin,
+        "total_alpa": tot_alpa,
+        "total_absen": tot_absen,
+        "persentase_kehadiran": overall_persen
+    }
+
+    meta = {
+        "pemerintah": "PEMERINTAH PROVINSI DAERAH KHUSUS IBUKOTA JAKARTA",
+        "dinas": "DINAS PENDIDIKAN",
+        "sudin": "SUKU DINAS PENDIDIKAN WILAYAH II KOTA ADMINISTRASI JAKARTA PUSAT",
+        "sekolah": "SMK NEGERI 21 JAKARTA",
+        "npsn": "20101569",
+        "alamat": "Jl. Siaga I No. 2, Kemayoran, Jakarta Pusat",
+        "nama_bulan": nama_bulan,
+        "tahun": tahun,
+        "hari_efektif": hari_efektif
+    }
+
+    return jsonify({
+        "success": True,
+        "meta": meta,
+        "ringkasan_sekolah": ringkasan_sekolah,
+        "rekap_per_kelas": rekap_per_kelas
+    })
+
+
+
 

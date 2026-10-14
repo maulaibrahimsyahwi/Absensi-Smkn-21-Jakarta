@@ -18,6 +18,8 @@ import {
   Database,
   GraduationCap,
   Laptop,
+  HardDrive,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import api from "../services/api";
@@ -30,6 +32,8 @@ import ModalPengaturanPJJ from "../components/pjj/ModalPengaturanPJJ";
 import ModalKalenderLibur from "../components/libur/ModalKalenderLibur";
 import ModalTahunAjaran from "../components/admin/ModalTahunAjaran";
 import ModalDisasterRecovery from "../components/admin/ModalDisasterRecovery";
+import ModalHousekeepingStorage from "../components/admin/ModalHousekeepingStorage";
+import ModalExportLaporanSudin from "../components/admin/ModalExportLaporanSudin";
 import { liburService } from "../services/liburService";
 import { useRealtimeSubscription } from "../services/realtimeService";
 import { HolidayStatusResponse } from "../types/libur";
@@ -94,6 +98,8 @@ export default function PortalAdmin() {
   const [isTahunAjaranModalOpen, setIsTahunAjaranModalOpen] =
     useState<boolean>(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [isHousekeepingOpen, setIsHousekeepingOpen] = useState<boolean>(false);
+  const [isSudinModalOpen, setIsSudinModalOpen] = useState<boolean>(false);
   const [notification, setNotification] =
     useState<ToastNotificationProps["notification"]>(null);
 
@@ -633,6 +639,56 @@ export default function PortalAdmin() {
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </div>
           </button>
+
+          {/* Card: Optimasi & Housekeeping Storage */}
+          <button
+            type="button"
+            onClick={() => setIsHousekeepingOpen(true)}
+            className="group bg-gradient-to-r from-emerald-700 via-teal-700 to-cyan-800 hover:from-emerald-800 hover:to-cyan-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <HardDrive className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-sm sm:text-base truncate">
+                  Housekeeping Storage
+                </h3>
+                <p className="text-[11px] text-emerald-100 mt-0.5 truncate">
+                  Pangkas audit log & VACUUM DB
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Kelola</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
+
+          {/* Card: Laporan Bulanan Format Sudin */}
+          <button
+            type="button"
+            onClick={() => setIsSudinModalOpen(true)}
+            className="group bg-gradient-to-r from-blue-700 via-indigo-700 to-sky-800 hover:from-blue-800 hover:to-sky-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm hover:shadow-md transition-all flex items-center justify-between text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-white/15 rounded-xl backdrop-blur-xs shrink-0">
+                <Building2 className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-bold text-sm sm:text-base truncate">
+                  Laporan Bulanan Sudin
+                </h3>
+                <p className="text-[11px] text-blue-100 mt-0.5 truncate">
+                  Ekspor PDF & Excel resmi Sudin
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-200 group-hover:text-white transition-colors shrink-0 ml-2">
+              <span className="hidden sm:inline">Cetak</span>
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </button>
         </div>
       </div>
 
@@ -739,6 +795,24 @@ export default function PortalAdmin() {
       <ModalDisasterRecovery
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
+      />
+
+      {/* Modal Housekeeping & Storage Optimization */}
+      <ModalHousekeepingStorage
+        isOpen={isHousekeepingOpen}
+        onClose={() => setIsHousekeepingOpen(false)}
+        onSuccess={(msg) =>
+          setNotification({
+            type: "success",
+            message: msg,
+          })
+        }
+      />
+
+      {/* Modal Format Laporan Bulanan Sudin */}
+      <ModalExportLaporanSudin
+        isOpen={isSudinModalOpen}
+        onClose={() => setIsSudinModalOpen(false)}
       />
     </div>
   );

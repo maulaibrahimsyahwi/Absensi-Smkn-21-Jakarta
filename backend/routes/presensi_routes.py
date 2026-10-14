@@ -639,6 +639,8 @@ def sync_offline():
         try:
             with db.session.begin_nested():
                 mode = item.get('mode', 'kiosk')
+                tipe = item.get('tipe', 'harian')
+                keperluan = item.get('keperluan', 'Kunjungan Perpustakaan')
                 image_data = item.get('image')
                 expected_siswa_id = item.get('expected_siswa_id') or item.get('siswa_id')
                 device_id = item.get('device_id')
@@ -797,7 +799,45 @@ def sync_offline():
                         })
                         continue
 
-                # 3. Cek Duplikasi Presensi pada Tanggal Kejadian
+                # 3. Jalur Khusus Sinkronisasi Kunjungan Perpustakaan
+                if tipe == 'perpustakaan':
+                    window_start = record_dt - timedelta(minutes=5)
+                    window_end = record_dt + timedelta(minutes=5)
+                    existing_perpus = AbsensiPerpustakaan.query.filter(
+                        AbsensiPerpustakaan.siswa_id == siswa.id,
+                        AbsensiPerpustakaan.waktu >= window_start,
+                        AbsensiPerpustakaan.waktu <= window_end
+                    ).first()
+
+                    if existing_perpus:
+                        duplicate_count += 1
+                        results.append({
+                            "id": item_id,
+                            "status": "duplicate",
+                            "siswa_id": siswa.id,
+                            "nama": siswa.nama,
+                            "message": f"Kunjungan perpustakaan {siswa.nama} sudah tercatat pada {existing_perpus.waktu.strftime('%H:%M:%S')} WIB."
+                        })
+                        continue
+
+                    kunjungan = AbsensiPerpustakaan(
+                        siswa_id=siswa.id,
+                        waktu=record_dt,
+                        keperluan=keperluan
+                    )
+                    db.session.add(kunjungan)
+                    synced_count += 1
+                    results.append({
+                        "id": item_id,
+                        "status": "synced",
+                        "siswa_id": siswa.id,
+                        "nama": siswa.nama,
+                        "status_kehadiran": "Perpustakaan",
+                        "message": f"Kunjungan perpustakaan {siswa.nama} berhasil disinkronkan ({keperluan})."
+                    })
+                    continue
+
+                # 4. Cek Duplikasi Presensi Harian pada Tanggal Kejadian
                 existing = AbsensiHarian.query.filter(
                     AbsensiHarian.siswa_id == siswa.id,
                     AbsensiHarian.waktu >= t_start,

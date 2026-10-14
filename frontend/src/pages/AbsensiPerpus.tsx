@@ -288,6 +288,9 @@ export default function AbsensiPerpus() {
           accuracy: geoState.accuracy,
           expected_siswa_id: isSiswa ? user?.id ?? null : null,
           device_id: getDeviceId(),
+          tipe: "perpustakaan",
+          keperluan: finalKeperluan,
+          status: "Kunjungan Perpustakaan",
         });
         if (!saved) {
           setResult({

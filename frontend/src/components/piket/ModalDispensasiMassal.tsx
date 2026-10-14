@@ -48,8 +48,9 @@ export default function ModalDispensasiMassal({
     api
       .get("/siswa", { params: { limit: 1000 } })
       .then((res) => {
-        if (isMounted && res.data?.data) {
-          const activeOnly = res.data.data.filter((s: any) => s.status !== "Alumni");
+        if (isMounted && res.data) {
+          const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          const activeOnly = raw.filter((s: any) => s.status !== "Alumni");
           setAllStudents(activeOnly);
         }
       })

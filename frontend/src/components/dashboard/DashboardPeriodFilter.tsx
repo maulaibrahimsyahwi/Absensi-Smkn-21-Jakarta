@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, UserPlus, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, UserPlus, ClipboardCheck, Building2 } from "lucide-react";
 import CustomDropdown, { DropdownOption } from "../CustomDropdown";
 import ExportMenu, { EXPORT_FORMATS, ExportOption } from "../ui/ExportMenu";
 import SegmentedControl, { SegmentedOption } from "../ui/SegmentedControl";
@@ -16,6 +16,7 @@ interface DashboardPeriodFilterProps {
   tahunDropdownOptions: DropdownOption[];
   namaBulanTerpilih: string;
   onExport: (format: "pdf" | "xlsx" | "xls" | "csv") => void;
+  onOpenSudin?: () => void;
   isPiket?: boolean;
   backTarget?: string;
   loading?: boolean;
@@ -46,6 +47,7 @@ export default function DashboardPeriodFilter({
   tahunDropdownOptions,
   namaBulanTerpilih,
   onExport,
+  onOpenSudin,
   isPiket = false,
   backTarget,
 }: DashboardPeriodFilterProps) {
@@ -91,6 +93,19 @@ export default function DashboardPeriodFilter({
             </Link>
           ) : (
             ""
+          )}
+
+          {/* Tombol Laporan Bulanan Sudin */}
+          {onOpenSudin && (
+            <button
+              type="button"
+              onClick={onOpenSudin}
+              className="inline-flex min-h-11 items-center justify-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold rounded-xl bg-blue-50 border border-blue-200 text-blue-800 hover:bg-blue-100 transition-all shadow-2xs flex-1 sm:flex-none whitespace-nowrap cursor-pointer"
+              title="Laporan Bulanan Format Suku Dinas Pendidikan"
+            >
+              <Building2 className="w-4 h-4 shrink-0 text-blue-700" />
+              <span>Format Sudin</span>
+            </button>
           )}
 
           {/* Export Menu */}

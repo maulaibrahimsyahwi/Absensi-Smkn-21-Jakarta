@@ -39,6 +39,7 @@ import BukuPelanggaranTab from "../components/dashboard/tabs/BukuPelanggaranTab"
 import SuratLightboxModal from "../components/dashboard/modals/SuratLightBoxModal";
 import RejectIzinModal from "../components/dashboard/modals/RejectIzinModal";
 import SlipIzinPiketModal from "../components/piket/SlipIzinPiketModal";
+import ModalExportLaporanSudin from "../components/admin/ModalExportLaporanSudin";
 import { SkeletonTable } from "../components/common/Skeleton";
 
 const BULAN_OPTIONS = [
@@ -81,6 +82,7 @@ export default function Dashboard(): React.JSX.Element {
   const [selectedBulan, setSelectedBulan] = useState(currentNow.getMonth() + 1);
   const [selectedTahun, setSelectedTahun] = useState(currentNow.getFullYear());
   const [availableYears, setAvailableYears] = useState<number[]>(DEFAULT_YEARS);
+  const [isSudinModalOpen, setIsSudinModalOpen] = useState(false);
 
   // Ambil daftar tahun dinamis dari database
   useEffect(() => {
@@ -709,6 +711,7 @@ export default function Dashboard(): React.JSX.Element {
         loading={loading}
         onRefresh={fetchData}
         onExport={handleExport}
+        onOpenSudin={() => setIsSudinModalOpen(true)}
         isPiket={isPiket}
         isAdmin={isAdmin}
         backTarget={backTarget}
@@ -1185,6 +1188,12 @@ export default function Dashboard(): React.JSX.Element {
         initialSignature={user?.tanda_tangan}
         title="Tanda Tangan Digital Guru Piket"
         signerName={user?.nama || "Guru Piket"}
+      />
+
+      {/* Modal Ekspor Laporan Bulanan Format Sudin */}
+      <ModalExportLaporanSudin
+        isOpen={isSudinModalOpen}
+        onClose={() => setIsSudinModalOpen(false)}
       />
 
       {/* Floating Bottom-Right Toast Notification */}

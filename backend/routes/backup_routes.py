@@ -10,6 +10,7 @@ backup_bp = Blueprint('backup', __name__)
 start_auto_backup_scheduler()
 
 @backup_bp.route('/api/admin/backup/create', methods=['POST'])
+@backup_bp.route('/api/admin/backup', methods=['POST'])
 @token_required
 @role_required(['admin'])
 def trigger_backup():
@@ -35,6 +36,7 @@ def trigger_backup():
 
 
 @backup_bp.route('/api/admin/backup/list', methods=['GET'])
+@backup_bp.route('/api/admin/backup', methods=['GET'])
 @token_required
 @role_required(['admin'])
 def get_backups():
@@ -114,7 +116,9 @@ def get_storage_stats():
                 backup_size += os.path.getsize(fp)
 
     # 4. Audit Log Count
-    audit_count = AuditLog.query.count()
+    from datetime import datetime, timedelta
+    old_cutoff = datetime.now() - timedelta(days=90)
+    audit_old_count = AuditLog.query.filter(AuditLog.created_at < old_cutoff).count()
 
     def format_size(bytes_val):
         if bytes_val < 1024:
@@ -124,8 +128,18 @@ def get_storage_stats():
         else:
             return f"{bytes_val / (1024 * 1024):.2f} MB"
 
-    return jsonify({
-        "success": True,
+    db_mb = round(db_size / (1024 * 1024), 2)
+    surat_mb = round(surat_size / (1024 * 1024), 2)
+    backup_mb = round(backup_size / (1024 * 1024), 2)
+
+    stat_payload = {
+        "database_size_mb": db_mb,
+        "uploads_size_mb": surat_mb,
+        "uploads_file_count": surat_count,
+        "backups_size_mb": backup_mb,
+        "backups_count": backup_count,
+        "audit_logs_count": audit_count,
+        "audit_logs_old_count": audit_old_count,
         "database": {
             "size_bytes": db_size,
             "size_formatted": format_size(db_size),
@@ -146,6 +160,12 @@ def get_storage_stats():
         },
         "total_storage_bytes": db_size + surat_size + backup_size,
         "total_storage_formatted": format_size(db_size + surat_size + backup_size)
+    }
+
+    return jsonify({
+        "success": True,
+        "data": stat_payload,
+        **stat_payload
     })
 
 
@@ -155,17 +175,18 @@ def get_storage_stats():
 def run_storage_cleanup():
     """
     Menjalankan housekeeping dan rotasi cache:
-    1. Membersihkan log audit usang (> 180 hari).
+    1. Membersihkan log audit usang (> N hari).
     2. Menjalankan SQLite VACUUM untuk mengklaim ulang ruang disk yang terfragmentasi.
     """
     from datetime import datetime, timedelta
     from models import db, AuditLog
     data = request.json or {}
     prune_audit = data.get('prune_audit', True)
-    vacuum_db = data.get('vacuum_db', True)
-    days = int(data.get('audit_days_keep', 180))
+    vacuum_db = data.get('vacuum_db', data.get('run_vacuum', True))
+    days = int(data.get('audit_days_keep', data.get('days_to_keep', 180)))
 
     cleaned_actions = []
+    deleted_audit = 0
 
     # 1. Prune audit logs older than N days
     if prune_audit:
@@ -197,6 +218,7 @@ def run_storage_cleanup():
     return jsonify({
         "success": True,
         "message": "Pembersihan storage & rotasi cache berhasil dijalankan!",
+        "pruned_audit_logs": deleted_audit,
         "actions_taken": cleaned_actions
     })
 

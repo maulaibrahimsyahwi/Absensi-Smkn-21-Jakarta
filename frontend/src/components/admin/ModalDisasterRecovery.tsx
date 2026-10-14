@@ -38,9 +38,9 @@ export default function ModalDisasterRecovery({
   const fetchBackups = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/admin/backup");
+      const res = await api.get("/admin/backup/list");
       if (res.data?.success) {
-        setBackups(res.data.data?.backups || []);
+        setBackups(res.data?.backups || res.data?.data?.backups || []);
       }
     } catch (err) {
       console.error("Gagal mengambil daftar backup:", err);
@@ -66,7 +66,7 @@ export default function ModalDisasterRecovery({
     setCreating(true);
     setNotification(null);
     try {
-      const res = await api.post("/admin/backup");
+      const res = await api.post("/admin/backup/create");
       if (res.data?.success) {
         setNotification({
           type: "success",
@@ -94,14 +94,27 @@ export default function ModalDisasterRecovery({
     }
   };
 
-  const handleDownload = (filename: string) => {
-    const downloadUrl = `/api/admin/backup/download/${encodeURIComponent(filename)}`;
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  const handleDownload = async (filename: string) => {
+    try {
+      const res = await api.get(`/admin/backup/download/${encodeURIComponent(filename)}`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/x-sqlite3" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Gagal mengunduh berkas backup:", err);
+      setNotification({
+        type: "error",
+        message: "Gagal mengunduh berkas cadangan database. Pastikan sesi login Admin masih aktif.",
+      });
+    }
   };
 
   return (

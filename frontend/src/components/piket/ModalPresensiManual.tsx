@@ -61,13 +61,12 @@ export default function ModalPresensiManual({
         const res = await api.get("/siswa", {
           params: { search: studentSearch.trim(), limit: 15 },
         });
-        if (res.data && res.data.data) {
-          const filtered = (res.data.data || []).filter(
-            (s: any) => s.status !== "Alumni",
-          );
-          setStudentList(filtered);
-          setIsDropdownOpen(filtered.length > 0);
-        }
+        const raw = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        const filtered = raw.filter(
+          (s: any) => s.status !== "Alumni",
+        );
+        setStudentList(filtered);
+        setIsDropdownOpen(filtered.length > 0);
       } catch (err) {
         console.warn("Gagal mencari data siswa:", err);
       } finally {

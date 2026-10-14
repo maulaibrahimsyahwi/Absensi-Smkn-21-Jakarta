@@ -32,6 +32,8 @@ export interface OfflineAttendanceEntry {
   waktu?: string; // Format WIB string lokal
   status?: string;
   notes?: string;
+  tipe?: string; // "harian" | "perpustakaan"
+  keperluan?: string; // Catatan tujuan kunjungan perpustakaan
 }
 
 export type OfflineAttendanceInput = Omit<
