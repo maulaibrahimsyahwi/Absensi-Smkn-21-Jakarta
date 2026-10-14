@@ -32,7 +32,6 @@ export interface UseGeofenceReturn {
   geoState: GeoState;
   setGeoState: Dispatch<SetStateAction<GeoState>>;
   checkGeofence: () => Promise<void>;
-  toggleSimulation: () => void;
   isGpsValid: boolean;
   isGpsWaiting: boolean;
   isGpsBlocked: boolean;
@@ -111,41 +110,15 @@ export function useGeofence(targetCoordinates: TargetCoordinates): UseGeofenceRe
     checkGeofence();
   }, [checkGeofence]);
 
-  const toggleSimulation = () => {
-    setGeoState((prev) => {
-      const nextSim = !prev.simulated;
-      if (nextSim) {
-        return {
-          loading: false,
-          simulated: true,
-          isWithinRadius: true,
-          insidePolygon: true,
-          distanceMeters: 8,
-          accuracy: 5,
-          error: null,
-          latitude: targetCoordinates.latitude,
-          longitude: targetCoordinates.longitude,
-          isMock: false,
-        };
-      } else {
-        checkGeofence();
-        return { ...prev, simulated: false };
-      }
-    });
-  };
-
-  // Status Validitas GPS
-  const isGpsValid =
-    !geoState.loading && (geoState.isWithinRadius || geoState.simulated);
+  // Status Validitas GPS (Wajib hardware asli di dalam batas sekolah)
+  const isGpsValid = !geoState.loading && geoState.isWithinRadius;
   const isGpsWaiting = geoState.loading;
-  const isGpsBlocked =
-    !geoState.loading && !geoState.isWithinRadius && !geoState.simulated;
+  const isGpsBlocked = !geoState.loading && !geoState.isWithinRadius;
 
   return {
     geoState,
     setGeoState,
     checkGeofence,
-    toggleSimulation,
     isGpsValid,
     isGpsWaiting,
     isGpsBlocked,

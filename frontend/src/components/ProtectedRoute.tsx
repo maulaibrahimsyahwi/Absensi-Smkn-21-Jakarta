@@ -85,7 +85,13 @@ export default function ProtectedRoute({
   }
 
   // 5. Khusus Siswa: Wajib memiliki data biometrik wajah resmi untuk mengakses fitur operasional
-  if (role === "siswa" && requireBiometric && !user?.terdaftar) {
+  // Pengecualian: Siswa dengan dispensasi medis biometrik aktif (cedera/perban wajah) diperbolehkan masuk
+  const isMedicalExempt = Boolean(
+    user?.is_medical_exempt ||
+    (user?.medical_exemption_until && new Date(user.medical_exemption_until + 'T23:59:59') >= new Date())
+  );
+
+  if (role === "siswa" && requireBiometric && !user?.terdaftar && !isMedicalExempt) {
     return (
       <Navigate
         to="/portal-siswa"

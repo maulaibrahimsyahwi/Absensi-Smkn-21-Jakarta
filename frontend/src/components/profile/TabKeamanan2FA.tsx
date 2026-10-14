@@ -83,6 +83,9 @@ export default function TabKeamanan2FA({
         totp_code: twoFactorCode.trim(),
       });
       if (res.data?.success) {
+        if (res.data?.token) {
+          localStorage.setItem("smkn21_auth_token", res.data.token);
+        }
         setTwoFactorSuccess(
           "2FA berhasil diaktifkan! Akun Anda kini terlindungi.",
         );
@@ -118,6 +121,9 @@ export default function TabKeamanan2FA({
         totp_code: twoFactorCode.trim(),
       });
       if (res.data?.success) {
+        if (res.data?.token) {
+          localStorage.setItem("smkn21_auth_token", res.data.token);
+        }
         setTwoFactorSuccess("2FA berhasil dinonaktifkan");
         setTwoFactorStep("idle");
         setTwoFactorDisablePass("");

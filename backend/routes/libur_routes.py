@@ -11,6 +11,7 @@ from models import db, HariLibur, AuditLog
 from utils.auth_middleware import token_required, role_required
 from utils.helpers import get_holiday_status, is_school_day
 from utils.national_holidays import get_national_holidays_for_year
+from utils.realtime_bus import notify_data_changed
 
 libur_bp = Blueprint('libur', __name__)
 
@@ -248,6 +249,8 @@ def create_hari_libur():
         )
         db.session.add(new_libur)
         db.session.commit()
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
 
         return jsonify({
             "success": True,
@@ -314,6 +317,8 @@ def update_hari_libur(id):
             return jsonify({"success": False, "message": "Tanggal selesai tidak boleh mendahului tanggal mulai."}), 400
 
         db.session.commit()
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
         return jsonify({
             "success": True,
             "message": f"Data hari libur '{record.nama}' berhasil diperbarui.",
@@ -341,6 +346,8 @@ def delete_hari_libur(id):
         nama = record.nama
         db.session.delete(record)
         db.session.commit()
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
         return jsonify({"success": True, "message": f"Hari libur '{nama}' berhasil dihapus dari sistem."}), 200
     except Exception as e:
         db.session.rollback()
@@ -377,6 +384,8 @@ def quick_override_today():
             if today_record:
                 db.session.delete(today_record)
                 db.session.commit()
+                notify_data_changed("libur")
+                notify_data_changed("presensi")
             return jsonify({
                 "success": True,
                 "message": "Status hari ini telah dikembalikan ke kalender operasional normal."
@@ -407,6 +416,8 @@ def quick_override_today():
                 db.session.add(new_override)
 
             db.session.commit()
+            notify_data_changed("libur")
+            notify_data_changed("presensi")
             return jsonify({
                 "success": True,
                 "message": f"Berhasil mengatur status hari ini: {final_nama}."
@@ -493,6 +504,8 @@ def sync_national_holidays():
             added_count += 1
 
         db.session.commit()
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
         return jsonify({
             "success": True,
             "message": f"Berhasil menyinkronkan {added_count} hari libur nasional & cuti bersama tahun {tahun_int} ({skipped_count} dilewati karena sudah ada).",
@@ -561,6 +574,8 @@ def sync_academic_calendar():
             added_count += 1
 
         db.session.commit()
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
         return jsonify({
             "success": True,
             "message": f"Berhasil menambahkan {added_count} jadwal libur semester resmi Dinas Pendidikan untuk tahun {tahun_int}.",
@@ -658,7 +673,7 @@ def quick_surat_edaran():
 
         # Audit log
         audit = AuditLog(
-            user_id=current_u.get('id'),
+            user_id=current_u.get('user_id') or current_u.get('id'),
             role=current_u.get('role', 'admin'),
             user_name=admin_name,
             action='AKSI_CEPAT_SE',
@@ -669,6 +684,9 @@ def quick_surat_edaran():
         )
         db.session.add(audit)
         db.session.commit()
+
+        notify_data_changed("libur")
+        notify_data_changed("presensi")
 
         action_label = "Diliburkan (Presensi Ditutup)" if tipe_hari == 'libur' else "Wajib Masuk (Presensi Dibuka)"
         return jsonify({
@@ -748,7 +766,8 @@ def get_dokumen_edaran(filename):
     """
     Menampilkan dan preview berkas Surat Edaran resmi (PDF/gambar) untuk siswa, guru, staf, atau admin.
     """
-    return send_from_directory(UPLOAD_EDARAN_DIR, filename)
+    safe_name = os.path.basename(filename)
+    return send_from_directory(UPLOAD_EDARAN_DIR, safe_name)
 
 
 @libur_bp.route('/api/hari_libur/dokumen_info/<path:filename>', methods=['GET'])
@@ -756,16 +775,17 @@ def get_dokumen_info(filename):
     """
     Mengambil informasi berkas Surat Edaran (jumlah halaman PDF, tipe berkas, dsb.)
     """
-    filepath = os.path.join(UPLOAD_EDARAN_DIR, filename)
+    safe_name = os.path.basename(filename)
+    filepath = os.path.join(UPLOAD_EDARAN_DIR, safe_name)
     if not os.path.exists(filepath):
         return jsonify({"success": False, "message": "Berkas tidak ditemukan."}), 404
 
-    is_pdf = filename.lower().endswith('.pdf')
+    is_pdf = safe_name.lower().endswith('.pdf')
     total_pages = count_pdf_pages(filepath) if is_pdf else 1
 
     return jsonify({
         "success": True,
-        "filename": filename,
+        "filename": safe_name,
         "is_pdf": is_pdf,
         "total_pages": total_pages
     }), 200
@@ -973,7 +993,7 @@ def import_file_libur():
         db.session.commit()
 
         audit = AuditLog(
-            user_id=current_u.get('id'),
+            user_id=current_u.get('user_id') or current_u.get('id'),
             role=current_u.get('role', 'admin'),
             user_name=admin_name,
             action='IMPORT_FILE_LIBUR',
@@ -984,6 +1004,10 @@ def import_file_libur():
         )
         db.session.add(audit)
         db.session.commit()
+
+        if added_count > 0:
+            notify_data_changed("libur")
+            notify_data_changed("presensi")
 
         if added_count == 0 and len(errors) > 0:
             return jsonify({

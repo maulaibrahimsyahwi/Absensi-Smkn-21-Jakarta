@@ -126,7 +126,6 @@ export default function AbsensiPerpus() {
   const {
     geoState,
     checkGeofence,
-    toggleSimulation,
     isGpsValid,
     isGpsWaiting,
     isGpsBlocked,
@@ -260,7 +259,6 @@ export default function AbsensiPerpus() {
         longitude: geoState.longitude,
         accuracy: geoState.accuracy,
         distance: geoState.distanceMeters,
-        simulated: geoState.simulated,
         is_mock: geoState.isMock || false,
         liveness_token: verifiedTokenRef.current || livenessToken,
         device_id: getDeviceId(),
@@ -505,16 +503,6 @@ export default function AbsensiPerpus() {
             <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
             <span className="hidden sm:inline">GPS:</span> Cek Radius...
           </div>
-        ) : geoState.simulated ? (
-          <button
-            type="button"
-            onClick={toggleSimulation}
-            title="Klik untuk matikan simulasi dev"
-            className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900/90 backdrop-blur-md border border-purple-400/50 text-purple-200 text-[11px] sm:text-xs font-semibold transition-all cursor-pointer"
-          >
-            <Navigation className="w-3.5 h-3.5 text-purple-300" />
-            <span>Mode Uji: SMKN 21 (&le;10m)</span>
-          </button>
         ) : geoState.isWithinRadius ? (
           <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/80 backdrop-blur-md border border-emerald-400/50 text-emerald-200 text-[11px] sm:text-xs font-semibold">
             <MapPin className="w-3.5 h-3.5 text-emerald-500" />
@@ -609,24 +597,6 @@ export default function AbsensiPerpus() {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             <span>Mencari Sinyal Lokasi Sekolah...</span>
           </div>
-
-          {/* Localhost dev simulation toggle */}
-          {(window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1") && (
-            <div className="pt-4 border-t border-white/10 max-w-xs w-full text-center">
-              <p className="text-[11px] text-slate-400 mb-2 font-mono">
-                [Mode Pengembang / Dev Test]
-              </p>
-              <button
-                type="button"
-                onClick={toggleSimulation}
-                className="w-full py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer shadow-md"
-              >
-                <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;10m)</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -673,24 +643,6 @@ export default function AbsensiPerpus() {
               Kembali
             </Link>
           </div>
-
-          {/* Localhost dev simulation toggle */}
-          {(window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1") && (
-            <div className="pt-4 border-t border-white/10 max-w-xs w-full text-center">
-              <p className="text-[11px] text-slate-400 mb-2 font-mono">
-                [Mode Pengembang / Dev Test]
-              </p>
-              <button
-                type="button"
-                onClick={toggleSimulation}
-                className="w-full py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer"
-              >
-                <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;10m)</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 

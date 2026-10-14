@@ -281,10 +281,15 @@ def verify_harian():
     # Periksa target siswa dan status PJJ jika presensi mandiri
     if target_siswa:
         is_pjj_user, pjj_label_user = is_kelas_pjj(target_siswa.kelas, now_dt)
+        is_med_exempt_early = bool(
+            target_siswa.medical_exemption_until and
+            target_siswa.medical_exemption_until >= date.today()
+        )
 
         # Validasi Liveness Token (Anti-Tembak API / Celah Foto Statis)
         # Khusus presensi mandiri siswa, wajib menyertakan token verifikasi kedipan aktif yang sah dari server
-        if user_role == 'siswa':
+        # Pengecualian: Siswa dengan dispensasi khusus medis biometrik (cedera/perban wajah)
+        if user_role == 'siswa' and not is_med_exempt_early:
             liveness_token = data.get('liveness_token')
             is_token_valid, token_msg = verify_liveness_token(liveness_token, expected_siswa_id)
             if not is_token_valid:

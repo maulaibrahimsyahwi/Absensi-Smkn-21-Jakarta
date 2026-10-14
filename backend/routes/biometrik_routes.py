@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, date
 from flask import Blueprint, request, jsonify
 from models import db, Siswa
 from face_utils import get_face_encoding, check_face_present, analyze_liveness, verify_face
@@ -230,8 +231,16 @@ def detect_liveness():
                             if not siswa or not hasattr(siswa, 'face_encoding'):
                                 siswa = Siswa.query.get(user_id)
 
+                            # Cek status dispensasi khusus medis biometrik
+                            med_until = getattr(siswa, 'medical_exemption_until', None)
+                            is_med_exempt = False
+                            if med_until:
+                                today_str = date.today().strftime("%Y-%m-%d")
+                                med_str = med_until.strftime("%Y-%m-%d") if hasattr(med_until, 'strftime') else str(med_until)
+                                is_med_exempt = (med_str >= today_str)
+
                             face_enc = getattr(siswa, 'face_encoding', None)
-                            if siswa and face_enc:
+                            if siswa and face_enc and not is_med_exempt:
                                 try:
                                     stored = json.loads(face_enc) if isinstance(face_enc, str) else face_enc
                                     encs = stored if isinstance(stored, list) else []

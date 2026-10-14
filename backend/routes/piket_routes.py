@@ -184,10 +184,24 @@ def delete_izin_piket(id):
     if not izin:
         return jsonify({"success": False, "message": "Data izin piket tidak ditemukan."}), 404
     try:
+        # Jika tipe izin adalah "Izin Masuk", batalkan juga poin pelanggaran terlambat (+5 poin) yang otomatis tercatat
+        if izin.tipe == "Izin Masuk":
+            start_of_day = datetime.combine(izin.tanggal, time.min)
+            end_of_day = datetime.combine(izin.tanggal, time.max)
+            pelanggaran_terkait = PelanggaranSiswa.query.filter(
+                PelanggaranSiswa.siswa_id == izin.siswa_id,
+                PelanggaranSiswa.jenis_pelanggaran == "Terlambat masuk sekolah",
+                PelanggaranSiswa.tanggal_waktu >= start_of_day,
+                PelanggaranSiswa.tanggal_waktu <= end_of_day
+            ).first()
+            if pelanggaran_terkait:
+                db.session.delete(pelanggaran_terkait)
+                notify_data_changed("pelanggaran")
+
         db.session.delete(izin)
         db.session.commit()
         notify_data_changed("piket")
-        return jsonify({"success": True, "message": "Surat izin piket berhasil dihapus."})
+        return jsonify({"success": True, "message": "Surat izin piket dan catatan keterlambatan terkait (jika ada) berhasil dihapus."})
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -685,9 +699,20 @@ def apply_dispensasi_massal():
     curr_ta = cfg.tahun_ajaran if cfg and cfg.tahun_ajaran else "2026/2027"
     curr_sem = cfg.semester if cfg and cfg.semester else "Ganjil"
 
+    # Batch load seluruh siswa & catatan absensi hari ini (mengeliminasi 160+ N+1 queries)
+    siswa_list = Siswa.query.filter(Siswa.id.in_(siswa_ids)).all()
+    siswa_map = {s.id: s for s in siswa_list}
+
+    absen_today_list = AbsensiHarian.query.filter(
+        AbsensiHarian.siswa_id.in_(siswa_ids),
+        AbsensiHarian.waktu >= start_today,
+        AbsensiHarian.waktu <= end_today
+    ).all()
+    absen_map = {a.siswa_id: a for a in absen_today_list}
+
     created_count = 0
     for s_id in siswa_ids:
-        siswa = Siswa.query.get(s_id)
+        siswa = siswa_map.get(s_id)
         if not siswa:
             continue
 
@@ -705,13 +730,7 @@ def apply_dispensasi_massal():
         db.session.add(izin)
 
         # 2. Jika siswa belum absensi hari ini, otomatis berikan status Dispensasi resmi
-        absen = AbsensiHarian.query.filter(
-            AbsensiHarian.siswa_id == siswa.id,
-            AbsensiHarian.waktu >= start_today,
-            AbsensiHarian.waktu <= end_today
-        ).first()
-
-        if not absen:
+        if s_id not in absen_map:
             new_absen = AbsensiHarian(
                 siswa_id=siswa.id,
                 kelas=siswa.kelas,
@@ -724,6 +743,7 @@ def apply_dispensasi_massal():
                 semester=curr_sem
             )
             db.session.add(new_absen)
+            absen_map[s_id] = new_absen
 
         created_count += 1
 

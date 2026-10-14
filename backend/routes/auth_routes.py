@@ -3,9 +3,9 @@ import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User, Siswa, AbsensiHarian, AbsensiPerpustakaan, PengajuanIzin, IzinPiket
 from utils.totp_utils import generate_totp_secret, verify_totp, get_totp_uri, get_qr_url
-from utils.auth_middleware import generate_token, token_required, role_required, decode_token
+from utils.auth_middleware import generate_token, token_required, role_required, decode_token, invalidate_account_cache
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import time as time_module
 from utils.helpers import get_holiday_status
 
@@ -127,7 +127,10 @@ def login():
                 "foto_profil": siswa.foto_profil,
                 "two_factor_enabled": bool(siswa.two_factor_enabled),
                 "must_change_password": must_change_pass,
-                "terdaftar": bool(siswa.face_encoding)
+                "terdaftar": bool(siswa.face_encoding),
+                "medical_exemption_until": siswa.medical_exemption_until.strftime("%Y-%m-%d") if siswa.medical_exemption_until else None,
+                "medical_exemption_alasan": siswa.medical_exemption_alasan,
+                "is_medical_exempt": bool(siswa.medical_exemption_until and siswa.medical_exemption_until >= date.today())
             }
         })
 
@@ -677,6 +680,7 @@ def reset_siswa_password(id):
         siswa.must_change_password = True
         siswa.active_session_token = None  # Invalidate sesi aktif siswa
         db.session.commit()
+        invalidate_account_cache('siswa', siswa.id)
 
         current_u = getattr(request, 'current_user', {})
         record_audit_log(
@@ -748,7 +752,9 @@ def reset_siswa_2fa(id):
         
         siswa.two_factor_enabled = False
         siswa.two_factor_secret = None
+        siswa.active_session_token = None
         db.session.commit()
+        invalidate_account_cache('siswa', siswa.id)
 
         current_u = getattr(request, 'current_user', {})
         record_audit_log(
@@ -784,7 +790,9 @@ def reset_staf_2fa(id):
         
         staf.two_factor_enabled = False
         staf.two_factor_secret = None
+        staf.active_session_token = None
         db.session.commit()
+        invalidate_account_cache(staf.role or 'staf', staf.id)
 
         current_u = getattr(request, 'current_user', {})
         record_audit_log(
@@ -903,12 +911,25 @@ def verify_enable_2fa():
         return jsonify({"success": False, "message": "Kode verifikasi 6 digit tidak cocok atau telah kedaluwarsa. "}), 400
 
     account.two_factor_enabled = True
+    new_session = secrets.token_hex(16)
+    account.active_session_token = new_session
     db.session.commit()
+    invalidate_account_cache(role, account.id)
+
+    identifier = account.nis if role == 'siswa' else account.username
+    new_jwt = generate_token(
+        user_id=account.id,
+        role=role,
+        identifier=identifier,
+        session_token=new_session
+    )
 
     return jsonify({
         "success": True,
         "message": "Autentikasi Dua Faktor (2FA) berhasil diaktifkan! Akun Anda kini terlindungi dari akses tanpa izin.",
-        "two_factor_enabled": True
+        "two_factor_enabled": True,
+        "token": new_jwt,
+        "session_token": new_session
     })
 
 
@@ -958,12 +979,25 @@ def disable_2fa():
 
     account.two_factor_enabled = False
     account.two_factor_secret = None
+    new_session = secrets.token_hex(16)
+    account.active_session_token = new_session
     db.session.commit()
+    invalidate_account_cache(role, account.id)
+
+    identifier = account.nis if role == 'siswa' else account.username
+    new_jwt = generate_token(
+        user_id=account.id,
+        role=role,
+        identifier=identifier,
+        session_token=new_session
+    )
 
     return jsonify({
         "success": True,
         "message": "2FA berhasil dinonaktifkan untuk akun Anda.",
-        "two_factor_enabled": False
+        "two_factor_enabled": False,
+        "token": new_jwt,
+        "session_token": new_session
     })
 
 

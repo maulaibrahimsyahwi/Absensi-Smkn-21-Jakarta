@@ -109,7 +109,8 @@ class Siswa(db.Model):
             "must_change_password": bool(self.must_change_password),
             "is_deleted": bool(self.is_deleted),
             "medical_exemption_until": self.medical_exemption_until.strftime("%Y-%m-%d") if self.medical_exemption_until else None,
-            "medical_exemption_alasan": self.medical_exemption_alasan
+            "medical_exemption_alasan": self.medical_exemption_alasan,
+            "is_medical_exempt": bool(self.medical_exemption_until and self.medical_exemption_until >= date.today())
         }
 
 

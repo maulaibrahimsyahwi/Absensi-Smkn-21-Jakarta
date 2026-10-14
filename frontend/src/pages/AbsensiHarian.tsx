@@ -163,7 +163,6 @@ export default function AbsensiHarian(): React.JSX.Element {
   const {
     geoState,
     checkGeofence,
-    toggleSimulation,
     isGpsValid,
     isGpsWaiting,
     isGpsBlocked,
@@ -193,6 +192,13 @@ export default function AbsensiHarian(): React.JSX.Element {
   const isHoliday = Boolean(attendanceToday?.is_holiday);
   // Presensi ditutup jika hari libur resmi, ATAU akhir pekan (kecuali ada kegiatan masuk khusus)
   const isAttendanceClosed = isHoliday || (isRawWeekend && !isSpecialSchoolDay);
+
+  // Status Dispensasi Khusus Medis Biometrik (Misal cedera atau perban wajah)
+  const isMedicalExempt = Boolean(
+    user?.is_medical_exempt ||
+    (user?.medical_exemption_until && new Date(user.medical_exemption_until + "T23:59:59") >= new Date())
+  );
+  const isReadyForCapture = isLiveVerified || isMedicalExempt;
 
   // Liveness Detection Adaptif & Anti-DDoS Polling
   const verifiedTokenRef = useRef<string | null>(null);
@@ -407,17 +413,17 @@ export default function AbsensiHarian(): React.JSX.Element {
   const captureRef = useRef<() => Promise<void>>(() => Promise.resolve());
   captureRef.current = captureAndVerify;
 
-  // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI (3 Detik)
+  // 2. Countdown Timer: HANYA BERJALAN JIKA KEDIPAN MATA TERVERIFIKASI ATAU DISPENSASI MEDIS AKTIF (3 Detik)
   useEffect(() => {
     if (
       isAttendanceClosed ||
       loading ||
       result ||
       !effectiveGpsValid ||
-      !isLiveVerified ||
+      !isReadyForCapture ||
       (isSiswa && attendanceToday?.already_attended)
     ) {
-      if (!isLiveVerified) setCountdown(3);
+      if (!isReadyForCapture) setCountdown(3);
       return;
     }
 
@@ -434,7 +440,7 @@ export default function AbsensiHarian(): React.JSX.Element {
   }, [
     isAttendanceClosed,
     countdown,
-    isLiveVerified,
+    isReadyForCapture,
     loading,
     result,
     effectiveGpsValid,
@@ -730,6 +736,18 @@ export default function AbsensiHarian(): React.JSX.Element {
         </div>
       )}
 
+      {/* Banner Notifikasi Dispensasi Medis Biometrik Aktif */}
+      {isMedicalExempt && !result && (
+        <div className="absolute top-16 sm:top-18 inset-x-3 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-20 flex justify-center animate-in fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-600/95 border border-emerald-400 text-white font-bold text-xs shadow-xl backdrop-blur-md">
+            <Stethoscope className="w-4 h-4 text-emerald-200 shrink-0" />
+            <span>
+              Dispensasi Medis Biometrik: {user?.medical_exemption_alasan || "Cedera/Perban Wajah"} (Kedipan Dibypass)
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* 5. Loading Indicator Saat Memverifikasi */}
       {loading && (
         <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-3 z-30 pointer-events-none p-4 text-center">
@@ -914,24 +932,6 @@ export default function AbsensiHarian(): React.JSX.Element {
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
             <span>Mencari Sinyal Lokasi </span>
           </div>
-
-          {/* Localhost dev simulation toggle */}
-          {(window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1") && (
-            <div className="pt-4 border-t border-white/10 max-w-xs w-full text-center">
-              <p className="text-[11px] text-slate-400 mb-2 font-mono">
-                [Mode Pengembang / Dev Test]
-              </p>
-              <button
-                type="button"
-                onClick={toggleSimulation}
-                className="w-full py-2 px-3 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer shadow-md"
-              >
-                <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;10m)</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -985,24 +985,6 @@ export default function AbsensiHarian(): React.JSX.Element {
               Kembali
             </Link>
           </div>
-
-          {/* Localhost dev simulation toggle */}
-          {(window.location.hostname === "localhost" ||
-            window.location.hostname === "127.0.0.1") && (
-            <div className="pt-4 border-t border-white/10 max-w-xs w-full text-center">
-              <p className="text-[11px] text-slate-400 mb-2 font-mono">
-                [Mode Pengembangan / Dev Test]
-              </p>
-              <button
-                type="button"
-                onClick={toggleSimulation}
-                className="w-full py-2 px-3 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-indigo-400/40 cursor-pointer"
-              >
-                <Navigation className="w-3.5 h-3.5 text-indigo-200" />
-                <span>Simulasi di SMKN 21 (&le;10m)</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
 

@@ -1,14 +1,14 @@
 import os
 import uuid
 import base64
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, date
 from flask import Blueprint, request, jsonify, send_from_directory
 from sqlalchemy.orm import joinedload
 from config import BASE_DIR
 from models import db, Siswa, AbsensiHarian, PengajuanIzin, PengaturanJadwal
 from utils.auth_middleware import token_required, role_required
 from utils.audit_trail import record_audit_log
-from utils.helpers import is_school_day
+from utils.helpers import is_school_day, get_holiday_status
 from utils.realtime_bus import notify_data_changed
 
 izin_bp = Blueprint('izin', __name__)
@@ -99,6 +99,31 @@ def submit_pengajuan_izin():
 
     if (tgl_selesai - tgl_mulai).days > 30:
         return jsonify({"success": False, "message": "Rentang tanggal pengajuan izin maksimal 30 hari."}), 400
+
+    # Batasi tanggal mundur (backdate): maksimal H-3 dari hari ini
+    today_date = date.today()
+    if tgl_mulai < today_date - timedelta(days=3):
+        return jsonify({
+            "success": False,
+            "message": "Pengajuan izin tidak dapat diajukan mundur lebih dari 3 hari yang lalu (maksimal H-3)."
+        }), 400
+
+    # Pastikan terdapat minimal satu hari sekolah efektif dalam rentang pengajuan
+    cur_check = tgl_mulai
+    has_school_day = False
+    while cur_check <= tgl_selesai:
+        check_dt = datetime.combine(cur_check, time(8, 0, 0))
+        h_st = get_holiday_status(check_dt)
+        if h_st.get("is_school_day"):
+            has_school_day = True
+            break
+        cur_check += timedelta(days=1)
+
+    if not has_school_day:
+        return jsonify({
+            "success": False,
+            "message": "Rentang tanggal pengajuan izin tidak memiliki hari sekolah efektif (seluruhnya jatuh pada hari libur atau akhir pekan)."
+        }), 400
 
     if not alasan:
         return jsonify({"success": False, "message": "Alasan / keterangan ketidakhadiran wajib diisi."}), 400
@@ -226,11 +251,13 @@ def verifikasi_pengajuan_izin(id):
                     ).first()
 
                     if existing:
-                        existing.status = pengajuan.jenis
-                        if not existing.tahun_ajaran:
-                            existing.tahun_ajaran = curr_ta
-                        if not existing.semester:
-                            existing.semester = curr_sem
+                        # Hanya perbarui jika status sebelumnya adalah 'Alpa' (jangan timpa kehadiran fisik Tepat Waktu/Terlambat)
+                        if "Alpa" in (existing.status or ""):
+                            existing.status = pengajuan.jenis
+                            if not existing.tahun_ajaran:
+                                existing.tahun_ajaran = curr_ta
+                            if not existing.semester:
+                                existing.semester = curr_sem
                     else:
                         absensi_baru = AbsensiHarian(
                             siswa_id=pengajuan.siswa_id,
