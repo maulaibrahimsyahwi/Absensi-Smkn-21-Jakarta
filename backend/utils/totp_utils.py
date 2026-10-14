@@ -31,23 +31,66 @@ def get_totp_token(secret, time_step=30, digits=6, t=None):
     code = (struct.unpack('>I', h[offset:offset+4])[0] & 0x7FFFFFFF) % (10 ** digits)
     return f'{code:0{digits}d}'
 
-def verify_totp(secret, token, window=1, time_step=30):
+class TOTPResult:
+    """
+    Hasil verifikasi TOTP yang kompatibel dua arah:
+    - Mendukung evaluasi boolean langsung: if not verify_totp(...)
+    - Mendukung tuple unpacking: valid, step = verify_totp(...)
+    - Mendukung akses properti: res.valid, res.step
+    """
+    __slots__ = ('valid', 'step')
+
+    def __init__(self, valid: bool, step: int = None):
+        self.valid = valid
+        self.step = step
+
+    def __bool__(self):
+        return bool(self.valid)
+
+    def __iter__(self):
+        return iter((self.valid, self.step))
+
+    def __getitem__(self, idx):
+        return (self.valid, self.step)[idx]
+
+    def __eq__(self, other):
+        if isinstance(other, bool):
+            return self.valid == other
+        if isinstance(other, (tuple, list)) and len(other) == 2:
+            return (self.valid, self.step) == tuple(other)
+        return False
+
+    def __repr__(self):
+        return f"TOTPResult(valid={self.valid}, step={self.step})"
+
+
+def verify_totp(secret, token, window=1, time_step=30, last_step=None):
     """
     Memverifikasi token TOTP 6 digit dengan toleransi window pergeseran waktu (default +/- 30s).
+    Mendukung proteksi Anti-Replay: menolak token jika time step sudah pernah digunakan (step <= last_step).
     Menggunakan hmac.compare_digest untuk mencegah Timing Attack.
+    Mengembalikan objek TOTPResult yang mendukung unpacking (valid, step) sekaligus evaluasi boolean langsung.
     """
     if not secret or not token:
-        return False
+        return TOTPResult(False, None)
     token = str(token).strip()
     if len(token) != 6 or not token.isdigit():
-        return False
+        return TOTPResult(False, None)
     current_time = time.time()
-    for offset in range(-window, window + 1):
-        test_time = current_time + (offset * time_step)
+    current_step = int(current_time // time_step)
+
+    # Sort offset dari 0 (waktu sekarang), lalu -1, +1, dst. agar mencocokkan waktu terdekat terlebih dahulu
+    offsets = sorted(range(-window, window + 1), key=lambda x: abs(x))
+    for offset in offsets:
+        test_step = current_step + offset
+        if last_step is not None and test_step <= int(last_step):
+            # Token replay dari time step yang sama atau masa lalu ditolak
+            continue
+        test_time = test_step * time_step
         expected_token = get_totp_token(secret, time_step=time_step, t=test_time)
         if hmac.compare_digest(expected_token, token):
-            return True
-    return False
+            return TOTPResult(True, test_step)
+    return TOTPResult(False, None)
 
 def get_totp_uri(secret, account_name, issuer="SMKN 21 Jakarta"):
     """

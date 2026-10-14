@@ -2,20 +2,22 @@ from datetime import datetime
 from flask import request
 from models import db, AuditLog
 
-def record_audit_log(user_id, role, user_name, action, target_type=None, target_id=None, keterangan=None, ip_address=None):
+def record_audit_log(user_id, role, user_name="Sistem", action="ACTION", target_type=None, target_id=None, keterangan=None, ip_address=None, **kwargs):
     """
     Mencatat jejak audit (audit trail) untuk tindakan administratif atau kedisiplinan penting.
     
     Parameters:
     - user_id: ID pengguna yang melakukan aksi
-    - role: Peran pengguna ('admin', 'piket', 'staf')
+    - role: Peran pengguna ('admin', 'piket', 'staf', 'siswa')
     - user_name: Nama lengkap pengguna
-    - action: Jenis aksi (e.g. 'VERIFIKASI_IZIN', 'HAPUS_PELANGGARAN', 'RESET_PASSWORD', 'CATAT_PELANGGARAN')
-    - target_type: Objek yang diubah (e.g. 'PengajuanIzin', 'PelanggaranSiswa', 'Siswa')
+    - action: Jenis aksi (e.g. 'VERIFIKASI_IZIN', 'SESSION_OVERRIDDEN', 'RESET_PASSWORD', 'CATAT_PELANGGARAN')
+    - target_type: Objek yang diubah (e.g. 'PengajuanIzin', 'PelanggaranSiswa', 'Siswa', 'User')
     - target_id: ID atau NIS objek terkait
-    - keterangan: Rincian keterangan audit
+    - keterangan: Rincian keterangan audit (alias: details)
     - ip_address: IP address pemohon (opsional, jika kosong diambil dari request)
     """
+    if not keterangan and 'details' in kwargs:
+        keterangan = kwargs['details']
     try:
         if not ip_address:
             try:

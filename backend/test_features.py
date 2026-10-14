@@ -1,6 +1,8 @@
 from app import app
+from models import db, User
 from utils.totp_utils import generate_totp_secret, get_totp_token, verify_totp
 from utils.auth_middleware import generate_token
+import time as time_module
 from datetime import datetime, time
 from config import WAKTU_MULAI_MASUK, WAKTU_BATAS_MASUK
 
@@ -23,8 +25,14 @@ def run_tests():
         assert res_bot.status_code == 403, f"Expected 403 for bot honeypot, got {res_bot.status_code}"
         print("[OK] Honeypot blocked bot request:", res_bot.get_json().get('message'))
 
-        # Buat token admin untuk menguji endpoint terproteksi
+        # Buat token admin untuk menguji endpoint terproteksi dan bersihkan status 2FA
         with app.app_context():
+            admin_user = User.query.filter_by(username='admin').first()
+            if admin_user:
+                admin_user.two_factor_enabled = False
+                admin_user.set_two_factor_secret(None)
+                admin_user.last_totp_step = None
+                db.session.commit()
             admin_token = generate_token(1, 'admin', 'admin')
         admin_headers = {'Authorization': f'Bearer {admin_token}'}
 
@@ -62,15 +70,26 @@ def run_tests():
         assert res_l2_wrong.status_code == 401
         print("[OK] Login Step 2 rejected wrong code:", res_l2_wrong.get_json().get('message'))
 
-        # Attempt Login: Step 2 with correct code
-        res_l2_ok = client.post('/api/auth/login', json={
+        # Attempt Login: Anti-Replay test with previously consumed valid_code
+        res_l2_replay = client.post('/api/auth/login', json={
             'username': 'admin',
             'password': 'admin123',
             'role': 'admin',
             'totp_code': valid_code
         })
+        assert res_l2_replay.status_code == 401, "Replaying previously consumed TOTP token must be rejected!"
+        print("[OK] Login Step 2 successfully rejected replayed TOTP code (Anti-Replay Protection)!")
+
+        # Attempt Login: Step 2 with fresh valid code from next time window
+        fresh_code = get_totp_token(admin_secret, t=time_module.time() + 30)
+        res_l2_ok = client.post('/api/auth/login', json={
+            'username': 'admin',
+            'password': 'admin123',
+            'role': 'admin',
+            'totp_code': fresh_code
+        })
         assert res_l2_ok.status_code == 200 and res_l2_ok.get_json()['success']
-        print("[OK] Login Step 2 successful with valid 2FA TOTP code!")
+        print("[OK] Login Step 2 successful with fresh valid 2FA TOTP code!")
 
         # Disable 2FA
         res_disable = client.post('/api/auth/2fa/disable', json={
@@ -109,7 +128,7 @@ def run_tests():
 
         # Access staf list with valid Bearer token
         staf_res = client.get('/api/staf', headers={'Authorization': f'Bearer {token}'})
-        assert staf_res.status_code == 200
+        assert staf_res.status_code == 200, f"Expected 200 for staf endpoint, got {staf_res.status_code}: {staf_res.get_json()}"
         print("[OK] Staf endpoint accessible with valid Admin Bearer token!")
 
         # Test local SVG QR generation

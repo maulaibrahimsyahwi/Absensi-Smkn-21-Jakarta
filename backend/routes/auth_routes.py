@@ -80,13 +80,16 @@ def login():
                     "role": "siswa",
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
-            if not verify_totp(siswa.two_factor_secret, totp_code):
+            sec = siswa.get_two_factor_secret() or siswa.two_factor_secret
+            valid, matched_step = verify_totp(sec, totp_code, last_step=siswa.last_totp_step)
+            if not valid:
                 _record_failed_attempt(username, ip_address=client_ip)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
+            siswa.last_totp_step = matched_step
 
         _clear_attempts(username, ip_address=client_ip)
 
@@ -94,8 +97,18 @@ def login():
         welcome_prefix = "Selamat datang kembali (Alumni)" if is_alumni_user else "Selamat datang"
 
         # Multi-Device / Single Active Session: Terbitkan session_token baru & invalidasi sesi HP lain
+        old_session = siswa.active_session_token
         new_session = secrets.token_hex(16)
         siswa.active_session_token = new_session
+
+        if old_session:
+            record_audit_log(
+                user_id=siswa.id,
+                role='siswa',
+                action='SESSION_OVERRIDDEN',
+                details=f"Sesi login siswa {siswa.nama} ({siswa.nis}) di perangkat sebelumnya telah dihentikan karena login baru dari IP {client_ip}",
+                ip_address=client_ip
+            )
 
         # Force Change Password: Wajib ganti password jika masih default (NIS atau password None)
         must_change_pass = bool(getattr(siswa, 'must_change_password', False)) or (not siswa.password)
@@ -103,6 +116,7 @@ def login():
             must_change_pass = True
 
         db.session.commit()
+        invalidate_account_cache('siswa', siswa.id)
 
         token = generate_token(user_id=siswa.id, role="siswa", identifier=siswa.nis, session_token=new_session)
 
@@ -155,23 +169,37 @@ def login():
                     "role": user.role,
                     "message": "Autentikasi Dua Faktor (2FA) diperlukan. Masukkan kode 6 digit dari aplikasi Authenticator Anda."
                 }), 200
-            if not verify_totp(user.two_factor_secret, totp_code):
+            sec = user.get_two_factor_secret() or user.two_factor_secret
+            valid, matched_step = verify_totp(sec, totp_code, last_step=user.last_totp_step)
+            if not valid:
                 _record_failed_attempt(username, ip_address=client_ip)
                 return jsonify({
                     "success": False,
                     "requires_2fa": True,
                     "message": "Kode 2FA Authenticator salah atau telah kedaluwarsa. Silakan periksa kembali aplikasi Authenticator Anda."
                 }), 401
+            user.last_totp_step = matched_step
 
         _clear_attempts(username, ip_address=client_ip)
 
         role_label = "Administrator" if user.role == "admin" else "Guru Piket"
 
         # Multi-Device / Single Active Session: Terbitkan session_token baru & invalidasi sesi HP lain
+        old_session = user.active_session_token
         new_session = secrets.token_hex(16)
         user.active_session_token = new_session
+
+        if old_session:
+            record_audit_log(
+                user_id=user.id,
+                role=user.role,
+                action='SESSION_OVERRIDDEN',
+                details=f"Sesi login staf {user.nama} ({user.username}) di perangkat sebelumnya telah dihentikan karena login baru dari IP {client_ip}",
+                ip_address=client_ip
+            )
         must_change_pass = bool(getattr(user, 'must_change_password', False))
         db.session.commit()
+        invalidate_account_cache(user.role, user.id)
 
         token = generate_token(user_id=user.id, role=user.role, identifier=user.username, session_token=new_session)
 
@@ -889,9 +917,9 @@ def setup_2fa():
             "message": "Autentikasi Dua Faktor (2FA) sudah aktif pada akun ini. Nonaktifkan terlebih dahulu jika Anda ingin mengatur ulang."
         }), 400
 
-    # Buat secret baru
+    # Buat secret baru (tersimpan terenkripsi at-rest dengan Fernet)
     secret = generate_totp_secret()
-    account.two_factor_secret = secret
+    account.set_two_factor_secret(secret)
     db.session.commit()
 
     qr_url = get_qr_url(secret, account_name)
@@ -911,11 +939,13 @@ def setup_2fa():
 def verify_enable_2fa():
     """
     Memverifikasi token 6-digit pertama kali untuk mengaktifkan 2FA secara resmi.
+    Menerapkan proteksi anti brute-force dan anti-replay time step.
     """
     data = request.json or {}
     user_id = data.get('id')
     role = str(data.get('role', '')).strip().lower()
     totp_code = str(data.get('totp_code', '')).strip()
+    client_ip = request.remote_addr or '127.0.0.1'
 
     if not user_id or not totp_code:
         return jsonify({"success": False, "message": "ID akun dan kode 6 digit OTP wajib diisi."}), 400
@@ -937,16 +967,31 @@ def verify_enable_2fa():
     if not account or not account.two_factor_secret:
         return jsonify({"success": False, "message": "Pengaturan 2FA belum diinisiasi. Silakan mulai ulang."}), 400
 
-    if not verify_totp(account.two_factor_secret, totp_code):
-        return jsonify({"success": False, "message": "Kode verifikasi 6 digit tidak cocok atau telah kedaluwarsa. "}), 400
+    identifier = account.nis if role == 'siswa' else account.username
 
+    # Pengecekan lockout brute-force OTP
+    is_locked, remaining = _check_account_locked(identifier, ip_address=client_ip)
+    if is_locked:
+        minutes = max(1, (remaining + 59) // 60)
+        return jsonify({
+            "success": False,
+            "message": f"Percobaan verifikasi 2FA terlalu sering. Silakan coba kembali dalam {minutes} menit."
+        }), 429
+
+    sec = account.get_two_factor_secret() or account.two_factor_secret
+    valid, matched_step = verify_totp(sec, totp_code, last_step=account.last_totp_step)
+    if not valid:
+        _record_failed_attempt(identifier, ip_address=client_ip)
+        return jsonify({"success": False, "message": "Kode verifikasi 6 digit tidak cocok atau telah kedaluwarsa."}), 400
+
+    _clear_attempts(identifier, ip_address=client_ip)
     account.two_factor_enabled = True
+    account.last_totp_step = matched_step
     new_session = secrets.token_hex(16)
     account.active_session_token = new_session
     db.session.commit()
     invalidate_account_cache(role, account.id)
 
-    identifier = account.nis if role == 'siswa' else account.username
     new_jwt = generate_token(
         user_id=account.id,
         role=role,
@@ -968,12 +1013,14 @@ def verify_enable_2fa():
 def disable_2fa():
     """
     Menonaktifkan 2FA dengan verifikasi kata sandi atau kode TOTP aktif.
+    Dilindungi dengan brute-force rate limiting dan pembersihan secret at-rest.
     """
     data = request.json or {}
     user_id = data.get('id')
     role = str(data.get('role', '')).strip().lower()
     password = str(data.get('password', '')).strip()
     totp_code = str(data.get('totp_code', '')).strip()
+    client_ip = request.remote_addr or '127.0.0.1'
 
     if not user_id:
         return jsonify({"success": False, "message": "ID akun diperlukan."}), 400
@@ -989,26 +1036,42 @@ def disable_2fa():
 
     if role == 'siswa':
         account = Siswa.query.get(user_id)
-        valid_pass = account.password if (account and account.password) else (account.nis if account else "")
     else:
         account = User.query.get(user_id)
-        valid_pass = account.password if account else ""
 
     if not account:
         return jsonify({"success": False, "message": "Akun tidak ditemukan."}), 404
+
+    identifier = account.nis if role == 'siswa' else account.username
+
+    # Pengecekan lockout brute-force OTP / Password
+    is_locked, remaining = _check_account_locked(identifier, ip_address=client_ip)
+    if is_locked:
+        minutes = max(1, (remaining + 59) // 60)
+        return jsonify({
+            "success": False,
+            "message": f"Percobaan penonaktifan 2FA terlalu sering. Silakan coba kembali dalam {minutes} menit."
+        }), 429
 
     # Verifikasi keamanan sebelum menonaktifkan 2FA
     authenticated = False
     if password and verify_and_upgrade_password(account, password, is_siswa=(role == 'siswa')):
         authenticated = True
-    elif totp_code and account.two_factor_secret and verify_totp(account.two_factor_secret, totp_code):
-        authenticated = True
+    elif totp_code and account.two_factor_secret:
+        sec = account.get_two_factor_secret() or account.two_factor_secret
+        valid, matched_step = verify_totp(sec, totp_code, last_step=account.last_totp_step)
+        if valid:
+            authenticated = True
+            account.last_totp_step = matched_step
 
     if not authenticated:
+        _record_failed_attempt(identifier, ip_address=client_ip)
         return jsonify({"success": False, "message": "Konfirmasi gagal! Masukkan kata sandi akun atau kode 2FA yang valid untuk menonaktifkan"}), 401
 
+    _clear_attempts(identifier, ip_address=client_ip)
     account.two_factor_enabled = False
-    account.two_factor_secret = None
+    account.set_two_factor_secret(None)
+    account.last_totp_step = None
     new_session = secrets.token_hex(16)
     account.active_session_token = new_session
     db.session.commit()

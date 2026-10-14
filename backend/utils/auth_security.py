@@ -34,8 +34,24 @@ def check_account_locked(username, ip_address=None):
     return False, 0
 
 
+def _prune_expired_attempts():
+    """Membersihkan entri percobaan login yang sudah kedaluwarsa untuk mencegah kebocoran memori RAM."""
+    now = time_module.time()
+    keys_to_remove = []
+    for k, timestamps in list(_login_attempts.items()):
+        valid = [t for t in timestamps if now - t < LOCKOUT_DURATION_SECONDS]
+        if not valid:
+            keys_to_remove.append(k)
+        else:
+            _login_attempts[k] = valid
+    for k in keys_to_remove:
+        _login_attempts.pop(k, None)
+
+
 def record_failed_attempt(username, ip_address=None):
     """Mencatat stempel waktu percobaan login yang gagal untuk pasangan username dan IP."""
+    if len(_login_attempts) > 1000:
+        _prune_expired_attempts()
     key = _get_lockout_key(username, ip_address)
     _login_attempts[key].append(time_module.time())
 
