@@ -305,9 +305,10 @@ def save_signature():
     Menyimpan atau memperbarui tanda tangan digital (Base64 PNG) untuk pengguna yang sedang aktif.
     """
     data = request.json or {}
-    role = str(data.get('role', '')).strip().lower()
-    user_id = data.get('id')
-    signature = data.get('signature')
+    current_user = getattr(request, 'current_user', {}) or {}
+    role = str(data.get('role', '') or current_user.get('role', '')).strip().lower()
+    user_id = data.get('id') or data.get('user_id') or current_user.get('user_id')
+    signature = data.get('signature') or data.get('tanda_tangan')
 
     if not role or not user_id:
         return jsonify({"success": False, "message": "Data role dan ID pengguna wajib disertakan."}), 400
@@ -432,9 +433,10 @@ def save_foto_profil():
     Dibatasi maksimal ~2 MB (Base64 string < 2.8 MB).
     """
     data = request.json or {}
-    role = str(data.get('role', '')).strip().lower()
-    user_id = data.get('id')
-    foto_profil = data.get('foto_profil', '')
+    current_user = getattr(request, 'current_user', {}) or {}
+    role = str(data.get('role', '') or current_user.get('role', '')).strip().lower()
+    user_id = data.get('id') or data.get('user_id') or current_user.get('user_id')
+    foto_profil = data.get('foto_profil', '') or data.get('foto', '')
 
     if not role or not user_id:
         return jsonify({"success": False, "message": "Identitas pengguna wajib disertakan."}), 400
@@ -947,9 +949,10 @@ def verify_enable_2fa():
     Menerapkan proteksi anti brute-force dan anti-replay time step.
     """
     data = request.json or {}
-    user_id = data.get('id')
-    role = str(data.get('role', '')).strip().lower()
-    totp_code = str(data.get('totp_code', '')).strip()
+    current_user = getattr(request, 'current_user', {}) or {}
+    user_id = data.get('id') or data.get('user_id') or current_user.get('user_id')
+    role = str(data.get('role', '') or current_user.get('role', '')).strip().lower()
+    totp_code = str(data.get('totp_code', '') or data.get('code', '')).strip()
     client_ip = request.remote_addr or '127.0.0.1'
 
     if not user_id or not totp_code:

@@ -33,7 +33,7 @@ export const pelanggaranService = {
    * Mengambil daftar peringkat akumulasi poin pelanggaran per siswa.
    */
   getAkumulasiPoin: async (params: Record<string, unknown> = {}): Promise<ApiResponse> => {
-    const res = await api.get("/pelanggaran/akumulasi", { params });
+    const res = await api.get("/pelanggaran/rekap", { params });
     return res.data;
   },
 };

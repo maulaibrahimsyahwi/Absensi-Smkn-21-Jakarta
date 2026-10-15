@@ -23,6 +23,7 @@ import {
 import { passwordChecks, PASSWORD_MIN } from "../utils/passwordPolicy";
 import SignaturePad, { SignaturePadHandle } from "./ui/SignaturePad";
 import Button from "./ui/Button";
+import api from "../services/api";
 
 type Step = "password" | "signature";
 
@@ -30,6 +31,7 @@ export default function OnboardingGate(): React.JSX.Element | null {
   const { user, changePassword, saveSignature, logout } = useAuth();
 
   const [step, setStep] = useState<Step>("password");
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean>(false);
   const [oldPassword, setOldPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [confirmPassword, setConfirmPassword] = useState<string>("");
@@ -48,7 +50,7 @@ export default function OnboardingGate(): React.JSX.Element | null {
 
   // Cek apakah akun perlu melewati Onboarding Gate
   const mustChangePassword = Boolean(user?.must_change_password);
-  const needsOnboarding = Boolean(user && (mustChangePassword || step === "signature"));
+  const needsOnboarding = Boolean(user && !isOnboardingCompleted && (mustChangePassword || step === "signature"));
 
   useEffect(() => {
     if (!mustChangePassword) return;
@@ -125,7 +127,13 @@ export default function OnboardingGate(): React.JSX.Element | null {
       const res = await saveSignature(dataUrl);
       if (res.success) {
         setSuccessMsg("Tanda tangan digital berhasil disimpan!");
-        // State must_change_password sudah false, gate otomatis tertutup
+        if (user?.role === "siswa") {
+          api.post("/siswa/privacy_consent").catch(() => {});
+        }
+        setTimeout(() => {
+          setIsOnboardingCompleted(true);
+          setStep("password");
+        }, 600);
       } else {
         setErrorMsg(res.message || "Gagal menyimpan tanda tangan digital.");
       }

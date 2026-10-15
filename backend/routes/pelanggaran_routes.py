@@ -572,6 +572,7 @@ def get_pelanggaran_list():
 
 
 @pelanggaran_bp.route('/api/pelanggaran/rekap', methods=['GET'])
+@pelanggaran_bp.route('/api/pelanggaran/akumulasi', methods=['GET'])
 @token_required
 @role_required(['piket', 'admin'])
 def get_pelanggaran_rekap():

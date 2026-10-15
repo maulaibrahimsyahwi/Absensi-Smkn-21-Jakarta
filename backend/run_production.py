@@ -104,6 +104,13 @@ if __name__ == "__main__":
     except Exception as e:
         logging.error(f"[DB] Peringatan saat inisialisasi basis data: {e}")
 
+    try:
+        from utils.backup_utils import start_auto_backup_scheduler
+        start_auto_backup_scheduler()
+        logging.info("[BACKUP] Auto-backup scheduler aktif.")
+    except Exception as e:
+        logging.error(f"[BACKUP] Gagal memulai auto-backup scheduler: {e}")
+
     serve(
         app,
         host=host,

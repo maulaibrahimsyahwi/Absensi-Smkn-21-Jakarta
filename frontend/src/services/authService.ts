@@ -35,9 +35,12 @@ export const authService = {
   /**
    * Menyimpan tanda tangan digital Base64 PNG akun.
    */
-  saveSignature: async (dataUrl: string): Promise<ApiResponse> => {
+  saveSignature: async (dataUrl: string, options?: { role?: string; id?: number | string }): Promise<ApiResponse> => {
     const res = await api.post("/auth/signature", {
       tanda_tangan: dataUrl,
+      signature: dataUrl,
+      role: options?.role,
+      id: options?.id,
     });
     return res.data;
   },
@@ -53,8 +56,13 @@ export const authService = {
   /**
    * Mengunggah foto profil avatar baru.
    */
-  saveFotoProfil: async (fotoData: string): Promise<ApiResponse<{ foto: string }>> => {
-    const res = await api.post("/auth/foto_profil", { foto: fotoData });
+  saveFotoProfil: async (fotoData: string, options?: { role?: string; id?: number | string }): Promise<ApiResponse<{ foto: string }>> => {
+    const res = await api.post("/auth/foto_profil", {
+      foto: fotoData,
+      foto_profil: fotoData,
+      role: options?.role,
+      id: options?.id,
+    });
     return res.data;
   },
 
@@ -77,8 +85,14 @@ export const authService = {
   /**
    * Mengonfirmasi aktivasi 2FA dengan kode TOTP 6 digit.
    */
-  verifyEnable2FA: async (payload: { code: string; secret?: string }): Promise<ApiResponse> => {
-    const res = await api.post("/auth/2fa/verify_enable", payload);
+  verifyEnable2FA: async (payload: { code: string; totp_code?: string; id?: number | string; role?: string; secret?: string }): Promise<ApiResponse> => {
+    const res = await api.post("/auth/2fa/verify_enable", {
+      totp_code: payload.totp_code || payload.code,
+      code: payload.code,
+      id: payload.id,
+      role: payload.role,
+      secret: payload.secret,
+    });
     return res.data;
   },
 

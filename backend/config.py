@@ -1,10 +1,18 @@
 import os
 import secrets
-from datetime import time, timezone, timedelta
+from datetime import datetime, time, timezone, timedelta
 from dotenv import load_dotenv
 
 # Zona Waktu Resmi Indonesia Barat (WIB = UTC+7)
 WIB = timezone(timedelta(hours=7))
+
+def now_wib():
+    """Mengembalikan datetime naive waktu saat ini dalam zona WIB (UTC+7)."""
+    return datetime.now(WIB).replace(tzinfo=None)
+
+def today_wib():
+    """Mengembalikan date waktu saat ini dalam zona WIB (UTC+7)."""
+    return now_wib().date()
 
 # Direktori dasar backend
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))

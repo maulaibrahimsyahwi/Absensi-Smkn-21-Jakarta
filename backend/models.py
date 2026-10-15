@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, date
 from flask_sqlalchemy import SQLAlchemy
+from config import now_wib, today_wib
 
 db = SQLAlchemy()
 
@@ -21,7 +22,7 @@ class User(db.Model):
     last_totp_step = db.Column(db.BigInteger, nullable=True)  # Anti-Replay protection counter
     active_session_token = db.Column(db.String(128), nullable=True)  # Single Active Session Token
     must_change_password = db.Column(db.Boolean, default=False, nullable=False)  # Force change password
-    created_at = db.Column(db.DateTime, default=datetime.now)
+    created_at = db.Column(db.DateTime, default=now_wib)
 
     def get_two_factor_secret(self):
         if not self.two_factor_secret:
@@ -121,7 +122,7 @@ class Siswa(db.Model):
             return False
         if not self.tanggal_lulus:
             return False
-        delta = datetime.now() - self.tanggal_lulus
+        delta = now_wib() - self.tanggal_lulus
         return delta.days >= 365
 
     def to_dict(self, include_signature=False):
@@ -163,7 +164,7 @@ class Siswa(db.Model):
             "is_deleted": bool(self.is_deleted),
             "medical_exemption_until": self.medical_exemption_until.strftime("%Y-%m-%d") if self.medical_exemption_until else None,
             "medical_exemption_alasan": self.medical_exemption_alasan,
-            "is_medical_exempt": bool(self.medical_exemption_until and self.medical_exemption_until >= date.today()),
+            "is_medical_exempt": bool(self.medical_exemption_until and self.medical_exemption_until >= today_wib()),
             "privacy_consent_at": self.privacy_consent_at.strftime("%Y-%m-%d %H:%M:%S") if self.privacy_consent_at else None,
             "has_privacy_consent": bool(self.privacy_consent_at)
         }
@@ -177,7 +178,7 @@ class AbsensiHarian(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
     kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat presensi
-    waktu = db.Column(db.DateTime, default=datetime.now, index=True)
+    waktu = db.Column(db.DateTime, default=now_wib, index=True)
     status = db.Column(db.String(20), nullable=False)  # "Tepat Waktu", "Terlambat", "Sakit", "Izin", "Hadir (Dispensasi Medis)"
     device_id = db.Column(db.String(64), nullable=True, index=True)  # Fingerprint ID perangkat
     is_flagged_proxy = db.Column(db.Boolean, default=False, nullable=False, index=True)  # Flag indikasi titip absen 1 HP bergantian
@@ -226,7 +227,7 @@ class AbsensiPerpustakaan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     siswa_id = db.Column(db.Integer, db.ForeignKey('siswa.id'), nullable=False, index=True)
     kelas = db.Column(db.String(50), nullable=True, index=True)  # Snapshot kelas historis saat kunjungan
-    waktu = db.Column(db.DateTime, default=datetime.now, index=True)
+    waktu = db.Column(db.DateTime, default=now_wib, index=True)
     keperluan = db.Column(db.String(100), nullable=False)  # "Meminjam Buku", "Mengembalikan Buku", dll
     
     siswa = db.relationship('Siswa', backref=db.backref('absensi_perpus', lazy=True))
@@ -270,7 +271,7 @@ class PengajuanIzin(db.Model):
     latitude = db.Column(db.Float, nullable=True)
     longitude = db.Column(db.Float, nullable=True)
     lokasi_teks = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    created_at = db.Column(db.DateTime, default=now_wib, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('pengajuan_izin', lazy=True))
 
@@ -332,7 +333,7 @@ class IzinPiket(db.Model):
     petugas_piket = db.Column(db.String(100), nullable=False)
     tanda_tangan_petugas = db.Column(db.Text, nullable=True)  # Base64 digital signature guru piket
     tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature siswa
-    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    created_at = db.Column(db.DateTime, default=now_wib, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('izin_piket', lazy=True))
 
@@ -387,7 +388,7 @@ class PelanggaranSiswa(db.Model):
     nis = db.Column(db.String(30), nullable=False, index=True)
     nama_siswa = db.Column(db.String(150), nullable=False, index=True)
     kelas = db.Column(db.String(50), nullable=False, index=True)
-    tanggal_waktu = db.Column(db.DateTime, nullable=False, default=datetime.now, index=True)
+    tanggal_waktu = db.Column(db.DateTime, nullable=False, default=now_wib, index=True)
     jenis_pelanggaran = db.Column(db.String(255), nullable=False, index=True)
     poin = db.Column(db.Integer, nullable=False, default=5)
     kategori = db.Column(db.String(20), default="Pelanggaran", nullable=False, index=True)  # "Pelanggaran" atau "Prestasi"
@@ -397,7 +398,7 @@ class PelanggaranSiswa(db.Model):
     tanda_tangan_siswa = db.Column(db.Text, nullable=True)  # Base64 digital signature kanvas
     status_verifikasi = db.Column(db.String(30), default="Disetujui", nullable=False, index=True)  # "Disetujui" (petugas) atau "Menunggu Konfirmasi" (lapor mandiri)
     keterangan = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    created_at = db.Column(db.DateTime, default=now_wib, index=True)
 
     siswa = db.relationship('Siswa', backref=db.backref('catatan_pelanggaran', lazy=True))
 
@@ -446,7 +447,7 @@ class PengaturanPJJ(db.Model):
     tanggal_selesai = db.Column(db.Date, nullable=True)
     keterangan = db.Column(db.String(255), nullable=True)  # misal "Asesmen Nasional", "PKL / Magang"
     updated_by = db.Column(db.String(100), nullable=True)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
     def to_dict(self):
         try:
@@ -487,7 +488,7 @@ class AuditLog(db.Model):
     target_id = db.Column(db.String(50), nullable=True)
     keterangan = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.String(50), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now, index=True)
+    created_at = db.Column(db.DateTime, default=now_wib, index=True)
 
     def to_dict(self):
         return {
@@ -526,8 +527,8 @@ class HariLibur(db.Model):
     nama_file_surat = db.Column(db.String(255), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_by = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = db.Column(db.DateTime, default=now_wib)
+    updated_at = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
     def to_dict(self):
         total_pages = 1
@@ -584,7 +585,7 @@ class PengaturanJadwal(db.Model):
     tahun_ajaran = db.Column(db.String(20), default="2026/2027", nullable=False)  # e.g., "2026/2027"
     semester = db.Column(db.String(10), default="Ganjil", nullable=False)  # "Ganjil" atau "Genap"
     updated_by = db.Column(db.String(100), nullable=True)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    updated_at = db.Column(db.DateTime, default=now_wib, onupdate=now_wib)
 
     def to_dict(self):
         return {

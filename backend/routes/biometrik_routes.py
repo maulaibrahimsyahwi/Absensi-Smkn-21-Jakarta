@@ -49,15 +49,34 @@ def register_face():
     if not siswa:
         return jsonify({"success": False, "message": "Siswa tidak ditemukan"}), 404
 
+    current_u = getattr(request, 'current_user', {}) or {}
+    role = current_u.get('role')
+
     # Validasi Hak Persetujuan Pemrosesan Biometrik (UU PDP No. 27/2022 Pasal 20, 22, & 25)
     if not siswa.privacy_consent_at:
-        return jsonify({
-            "success": False,
-            "message": (
-                f"Registrasi biometrik ditolak: Siswa {siswa.nama} (dan Orang Tua/Wali) "
-                "belum menyetujui lembar persetujuan pemrosesan data biometrik (UU PDP Pasal 22 & 25)."
+        if role in ['admin', 'piket']:
+            # Perekaman dilakukan oleh otoritas sekolah berdasarkan formulir persetujuan fisik orang tua saat admisi
+            from utils.helpers import now_wib
+            from utils.audit_trail import record_audit_log
+            siswa.privacy_consent_at = now_wib()
+            db.session.commit()
+            record_audit_log(
+                user_id=current_u.get('user_id'),
+                role=role,
+                user_name=current_u.get('identifier', 'Admin'),
+                action='ADMIN_VERIFIED_BIOMETRIC_CONSENT',
+                target_type='Siswa',
+                target_id=str(siswa.id),
+                keterangan=f"Otoritas sekolah ({role}) mengonfirmasi persetujuan fisik orang tua siswa {siswa.nama} ({siswa.nis}) untuk registrasi biometrik"
             )
-        }), 403
+        else:
+            return jsonify({
+                "success": False,
+                "message": (
+                    f"Registrasi biometrik ditolak: Siswa {siswa.nama} (dan Orang Tua/Wali) "
+                    "belum menyetujui lembar persetujuan pemrosesan data biometrik (UU PDP Pasal 22 & 25)."
+                )
+            }), 403
         
     try:
         encodings = []

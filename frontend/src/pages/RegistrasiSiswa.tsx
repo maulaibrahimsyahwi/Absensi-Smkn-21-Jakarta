@@ -253,6 +253,7 @@ export default function RegistrasiSiswa() {
             nama: cleanNama,
             kelas: cleanKelas,
             jenis_kelamin: jenisKelamin || "Laki-laki",
+            privacy_consent: true,
           });
           targetId = createRes.data.id;
         }

@@ -13,9 +13,6 @@ from utils.audit_trail import record_audit_log
 
 backup_bp = Blueprint('backup', __name__)
 
-# Start background auto backup scheduler upon module loading
-start_auto_backup_scheduler()
-
 @backup_bp.route('/api/admin/backup/create', methods=['POST'])
 @backup_bp.route('/api/admin/backup', methods=['POST'])
 @token_required
@@ -294,34 +291,36 @@ def run_storage_cleanup():
             import time
             from models import Siswa, User, IzinPiket, PengajuanIzin, PelanggaranSiswa
             from utils.file_storage import SURAT_DIR, SIGNATURES_DIR, AVATARS_DIR
+            from utils.crypto_utils import decrypt_field
 
             referenced_files = set()
+
+            def _register_ref(val):
+                if val and isinstance(val, str) and not val.startswith('data:'):
+                    plain = decrypt_field(val)
+                    if plain and isinstance(plain, str) and not plain.startswith('data:'):
+                        referenced_files.add(os.path.basename(plain))
 
             # Kumpulkan berkas yang masih aktif dirujuk oleh basis data
             for s in Siswa.query.with_entities(Siswa.tanda_tangan, Siswa.foto_profil).all():
                 for val in s:
-                    if val and isinstance(val, str) and not val.startswith('data:'):
-                        referenced_files.add(os.path.basename(val))
+                    _register_ref(val)
 
-            for u in User.query.with_entities(User.foto_profil).all():
+            for u in User.query.with_entities(User.foto_profil, User.tanda_tangan).all():
                 for val in u:
-                    if val and isinstance(val, str) and not val.startswith('data:'):
-                        referenced_files.add(os.path.basename(val))
+                    _register_ref(val)
 
             for ip in IzinPiket.query.with_entities(IzinPiket.tanda_tangan_petugas, IzinPiket.tanda_tangan_siswa).all():
                 for val in ip:
-                    if val and isinstance(val, str) and not val.startswith('data:'):
-                        referenced_files.add(os.path.basename(val))
+                    _register_ref(val)
 
             for pi in PengajuanIzin.query.with_entities(PengajuanIzin.surat_bukti, PengajuanIzin.tanda_tangan_siswa).all():
                 for val in pi:
-                    if val and isinstance(val, str) and not val.startswith('data:'):
-                        referenced_files.add(os.path.basename(val))
+                    _register_ref(val)
 
             for ps in PelanggaranSiswa.query.with_entities(PelanggaranSiswa.tanda_tangan_siswa).all():
                 for val in ps:
-                    if val and isinstance(val, str) and not val.startswith('data:'):
-                        referenced_files.add(os.path.basename(val))
+                    _register_ref(val)
 
             # Scan direktori fisik uploads untuk mencari file yang tidak terikat (orphan)
             now_epoch = time.time()

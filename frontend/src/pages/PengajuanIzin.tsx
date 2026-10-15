@@ -241,14 +241,28 @@ export default function PengajuanIzin(): React.JSX.Element {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setErrorMsg("File lampiran harus berupa file gambar (JPG/PNG).");
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+    if (!isImage && !isPdf) {
+      setErrorMsg("File lampiran harus berupa file gambar (JPG/PNG) atau dokumen PDF.");
       return;
     }
 
     // Maksimal 5MB sebelum resize
     if (file.size > 5 * 1024 * 1024) {
-      setErrorMsg("Ukuran foto maksimal 5 MB.");
+      setErrorMsg("Ukuran berkas maksimal 5 MB.");
+      return;
+    }
+
+    if (isPdf) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        setSuratBukti(dataUrl);
+        setSuratPreview(dataUrl);
+      };
+      reader.readAsDataURL(file);
       return;
     }
 
@@ -852,7 +866,7 @@ export default function PengajuanIzin(): React.JSX.Element {
                   <input
                     ref={galleryInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf,application/pdf"
                     onChange={handleFileChange}
                     className="hidden"
                   />

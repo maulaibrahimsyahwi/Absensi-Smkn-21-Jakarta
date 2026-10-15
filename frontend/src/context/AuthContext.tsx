@@ -246,10 +246,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
           const norm = normalizeUser(res.data.user);
           setUser((prev) => {
             if (!prev) return null;
+            const effectiveNorm = { ...norm };
+            if (!effectiveNorm.tanda_tangan && prev.tanda_tangan) {
+              effectiveNorm.tanda_tangan = prev.tanda_tangan;
+            }
             const changed = MERGE_FIELDS.some(
-              (k) => (prev as any)[k] !== (norm as any)[k] && (norm as any)[k] !== undefined,
+              (k) => (prev as any)[k] !== (effectiveNorm as any)[k] && (effectiveNorm as any)[k] !== undefined,
             );
-            return changed ? { ...prev, ...norm } : prev;
+            return changed ? { ...prev, ...effectiveNorm } : prev;
           });
         }
       } catch {

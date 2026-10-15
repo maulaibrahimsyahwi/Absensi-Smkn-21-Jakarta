@@ -53,7 +53,19 @@ def add_siswa():
         if jenis_kelamin_input not in ["Laki-laki", "Perempuan"]:
             jenis_kelamin_input = "Laki-laki"
 
-        baru = Siswa(nis=nis, nisn=nisn, nama=nama, kelas=kelas, status=status_input, jenis_kelamin=jenis_kelamin_input)
+        from utils.helpers import now_wib
+        consent_flag = data.get('privacy_consent', True)
+        consent_time = now_wib() if consent_flag else None
+
+        baru = Siswa(
+            nis=nis, 
+            nisn=nisn, 
+            nama=nama, 
+            kelas=kelas, 
+            status=status_input, 
+            jenis_kelamin=jenis_kelamin_input,
+            privacy_consent_at=consent_time
+        )
         db.session.add(baru)
         db.session.commit()
         notify_data_changed("siswa")
@@ -125,13 +137,15 @@ def batch_import_siswa():
                 else:
                     skipped_count += 1
             else:
+                from utils.helpers import now_wib
                 baru = Siswa(
                     nis=nis,
                     nisn=nisn,
                     nama=nama,
                     kelas=kelas if kelas else "UMUM",
                     status="Aktif",
-                    jenis_kelamin=jenis_kelamin
+                    jenis_kelamin=jenis_kelamin,
+                    privacy_consent_at=now_wib()
                 )
                 db.session.add(baru)
                 existing_siswa_map[nis] = baru
@@ -882,26 +896,32 @@ def set_privacy_consent():
     role = current_u.get('role')
     user_id = current_u.get('user_id')
 
-    if role != 'siswa':
-        return jsonify({"success": False, "message": "Persetujuan privasi biometrik hanya berlaku untuk akun siswa."}), 403
+    if role not in ['siswa', 'admin', 'piket']:
+        return jsonify({"success": False, "message": "Persetujuan privasi biometrik hanya dapat dicatat oleh siswa atau staf berwenang."}), 403
 
-    siswa = Siswa.query.get(user_id)
+    target_siswa_id = user_id if role == 'siswa' else (request.json or {}).get('siswa_id')
+    if not target_siswa_id:
+        return jsonify({"success": False, "message": "Parameter siswa_id wajib diisi untuk pencatatan oleh staf."}), 400
+
+    siswa = Siswa.query.get(target_siswa_id)
     if not siswa:
         return jsonify({"success": False, "message": "Data siswa tidak ditemukan."}), 404
 
     try:
-        now = datetime.now()
+        from utils.helpers import now_wib
+        now = now_wib()
         siswa.privacy_consent_at = now
         db.session.commit()
 
+        actor_name = current_u.get('identifier', 'Admin') if role != 'siswa' else siswa.nama
         record_audit_log(
-            user_id=siswa.id,
-            role='siswa',
-            user_name=siswa.nama,
+            user_id=current_u.get('user_id', siswa.id),
+            role=role,
+            user_name=actor_name,
             action='BIOMETRIC_PRIVACY_CONSENT',
             target_type='Siswa',
             target_id=str(siswa.id),
-            keterangan=f"Siswa {siswa.nama} ({siswa.nis}) memberikan persetujuan eksplisit pemrosesan biometrik wajah (UU PDP Pasal 22 & 25)"
+            keterangan=f"Persetujuan pemrosesan biometrik wajah siswa {siswa.nama} ({siswa.nis}) diverifikasi oleh {role} (UU PDP Pasal 22 & 25)"
         )
 
         return jsonify({

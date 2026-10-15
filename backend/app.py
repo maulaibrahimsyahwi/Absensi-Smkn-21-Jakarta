@@ -109,9 +109,17 @@ app.register_blueprint(realtime_bp)
 if 'auth.login' in app.view_functions:
     limiter.limit("10 per minute")(app.view_functions['auth.login'])
 
-# Bebaskan endpoint presensi dan realtime agar tidak ada siswa terblokir di jam sibuk 06:15-06:30
-limiter.exempt(presensi_bp)
-limiter.exempt(realtime_bp)
+# Bebaskan endpoint pulse realtime agar polling dashboard tidak terhambat
+if 'realtime.get_pulse' in app.view_functions:
+    limiter.exempt(app.view_functions['realtime.get_pulse'])
+
+# Terapkan kuota rate limit presensi aman dari DoS namun lapang untuk jam sibuk
+if 'presensi.verify_presensi' in app.view_functions:
+    limiter.limit("60 per minute")(app.view_functions['presensi.verify_presensi'])
+if 'presensi.sync_offline' in app.view_functions:
+    limiter.limit("15 per minute")(app.view_functions['presensi.sync_offline'])
+if 'presensi.verify_presensi_perpus' in app.view_functions:
+    limiter.limit("30 per minute")(app.view_functions['presensi.verify_presensi_perpus'])
 
 # Terapkan kuota rate limit terukur pada endpoint biometrik untuk mencegah DoS inferensi AI (BIO-03)
 if 'biometrik.detect_liveness' in app.view_functions:
@@ -141,17 +149,24 @@ def protect_sensitive_static_files():
     norm_path = os.path.normpath(request.path).replace('\\', '/')
     if norm_path.startswith('/static/uploads/surat/') or norm_path.startswith('/static/uploads/signatures/'):
         auth = request.headers.get("Authorization")
-        if not auth or not auth.strip().startswith("Bearer "):
+        token = None
+        if auth and auth.strip().startswith("Bearer "):
+            token = auth.strip().split(" ")[1]
+        elif request.args.get("token"):
+            token = request.args.get("token").strip()
+
+        if not token:
             return jsonify({
                 "success": False,
-                "message": "Akses langsung ke berkas sensitif memerlukan header Authorization Bearer yang sah."
+                "message": "Akses langsung ke berkas sensitif memerlukan header Authorization Bearer yang sah atau parameter token."
             }), 401
 
-        token = auth.strip().split(" ")[1]
+        token = token.strip()
         try:
             import secrets
             from utils.auth_middleware import decode_token
-            from models import Siswa, PengajuanIzin, User
+            from models import Siswa, PengajuanIzin, User, PelanggaranSiswa, IzinPiket
+            from utils.crypto_utils import decrypt_field
             payload = decode_token(token)
             role = str(payload.get("role", "")).lower()
             user_id = payload.get("user_id")
@@ -178,12 +193,18 @@ def protect_sensitive_static_files():
                         return jsonify({"success": False, "message": "Akses ditolak: Anda bukan pemilik dokumen medis ini."}), 403
                 elif norm_path.startswith('/static/uploads/signatures/'):
                     expected_sig_url = f"/static/uploads/signatures/{fname}"
-                    owns_profile_sig = (siswa.tanda_tangan == expected_sig_url)
-                    owns_izin_sig = PengajuanIzin.query.filter_by(
-                        siswa_id=siswa.id,
-                        tanda_tangan_siswa=expected_sig_url
-                    ).first() is not None
-                    if not (owns_profile_sig or owns_izin_sig):
+                    owns_profile_sig = (decrypt_field(siswa.tanda_tangan) == expected_sig_url)
+                    owns_other_sig = False
+                    for pi in PengajuanIzin.query.filter_by(siswa_id=siswa.id).all():
+                        if decrypt_field(pi.tanda_tangan_siswa) == expected_sig_url:
+                            owns_other_sig = True
+                            break
+                    if not owns_other_sig:
+                        for ps in PelanggaranSiswa.query.filter_by(siswa_id=siswa.id).all():
+                            if decrypt_field(ps.tanda_tangan_siswa) == expected_sig_url:
+                                owns_other_sig = True
+                                break
+                    if not (owns_profile_sig or owns_other_sig):
                         return jsonify({"success": False, "message": "Akses ditolak: Anda bukan pemilik tanda tangan digital ini."}), 403
                 return None
 
@@ -361,5 +382,10 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
     run_db_migrations(app)
+    try:
+        from utils.backup_utils import start_auto_backup_scheduler
+        start_auto_backup_scheduler()
+    except Exception as e_sched:
+        app.logger.warning(f"Gagal memulai auto-backup scheduler: {e_sched}")
     is_debug = os.environ.get('FLASK_DEBUG') == '1'
     app.run(debug=is_debug, host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))

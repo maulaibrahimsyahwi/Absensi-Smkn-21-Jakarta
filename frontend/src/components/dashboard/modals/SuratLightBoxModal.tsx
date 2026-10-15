@@ -45,9 +45,9 @@ export default function SuratLightboxModal({
     let isMounted = true;
     setLoading(true);
 
-    // Ambil dokumen via axios yang otomatis menyertakan header Authorization: Bearer
+    // Ambil dokumen via axios dengan baseURL kosong agar mengarah ke /static/uploads/... bukan /api/static/...
     api
-      .get(rawSrc, { responseType: "blob" })
+      .get(rawSrc, { baseURL: "", responseType: "blob" })
       .then((res) => {
         if (!isMounted) return;
         const objectUrl = URL.createObjectURL(res.data);
@@ -56,7 +56,10 @@ export default function SuratLightboxModal({
       .catch(() => {
         if (!isMounted) return;
         // Fallback: sertakan token pada URL langsung jika fetch blob gagal
-        const token = localStorage.getItem("token") || "";
+        const token =
+          localStorage.getItem("smkn21_auth_token") ||
+          localStorage.getItem("token") ||
+          "";
         const tokenizedUrl = token
           ? `${rawSrc}${rawSrc.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
           : rawSrc;
@@ -74,7 +77,10 @@ export default function SuratLightboxModal({
     };
   }, [item?.surat_bukti]);
 
-  const token = localStorage.getItem("token") || "";
+  const token =
+    localStorage.getItem("smkn21_auth_token") ||
+    localStorage.getItem("token") ||
+    "";
   const rawUrl = item ? getFileUrl(item.surat_bukti) : "";
   const externalTabUrl = token
     ? `${rawUrl}${rawUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`

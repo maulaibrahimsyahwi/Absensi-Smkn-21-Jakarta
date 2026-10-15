@@ -381,8 +381,8 @@ def get_piket_notifikasi():
 
     try:
         # 4. Presensi Offline / Proxy yang Membutuhkan Verifikasi Guru Piket
-        flagged_records = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter(
-            (AbsensiHarian.is_deleted == False) | (AbsensiHarian.is_deleted == None),
+        flagged_records = AbsensiHarian.query.join(Siswa).options(joinedload(AbsensiHarian.siswa)).filter(
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None),
             (AbsensiHarian.is_flagged_proxy == True) | (AbsensiHarian.status.ilike('%Perlu Verifikasi%'))
         ).order_by(AbsensiHarian.waktu.desc()).limit(10).all()
 
@@ -865,6 +865,17 @@ def verifikasi_presensi_flag(id):
                 reject_note += f": {catatan}"
             absen.proxy_note = f"[{reject_note}] {absen.proxy_note or ''}".strip()
             msg = f"Presensi {nama_siswa} ditolak dan status diubah menjadi Alpa."
+
+            # Hapus pencatatan pelanggaran terlambat hari itu agar tidak terjadi hukuman ganda
+            if absen.waktu and absen.siswa_id:
+                tgl_str = absen.waktu.strftime("%Y-%m-%d")
+                pel_terlambat = PelanggaranSiswa.query.filter(
+                    PelanggaranSiswa.siswa_id == absen.siswa_id,
+                    PelanggaranSiswa.jenis_pelanggaran.ilike('%Terlambat%'),
+                    PelanggaranSiswa.tanggal_waktu.ilike(f"{tgl_str}%")
+                ).all()
+                for p in pel_terlambat:
+                    db.session.delete(p)
         else:
             return jsonify({"success": False, "message": "Aksi tidak valid. Pilih 'setujui' atau 'tolak'."}), 400
 
@@ -904,8 +915,8 @@ def get_flagged_presensi():
         page = max(1, int(request.args.get('page', 1)))
         per_page = min(50, max(5, int(request.args.get('per_page', 20))))
 
-        query = AbsensiHarian.query.options(joinedload(AbsensiHarian.siswa)).filter(
-            (AbsensiHarian.is_deleted == False) | (AbsensiHarian.is_deleted == None),
+        query = AbsensiHarian.query.join(Siswa).options(joinedload(AbsensiHarian.siswa)).filter(
+            (Siswa.is_deleted == False) | (Siswa.is_deleted == None),
             (AbsensiHarian.is_flagged_proxy == True) | (AbsensiHarian.status.ilike('%Perlu Verifikasi%'))
         ).order_by(AbsensiHarian.waktu.desc())
 

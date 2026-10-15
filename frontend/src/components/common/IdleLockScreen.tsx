@@ -134,6 +134,10 @@ export default function IdleLockScreen() {
         password,
       });
       if (res.data?.success) {
+        if (res.data.token) {
+          localStorage.setItem("smkn21_auth_token", res.data.token);
+          api.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
+        }
         setIsLocked(false);
         setPassword("");
         lastActivity.current = Date.now();

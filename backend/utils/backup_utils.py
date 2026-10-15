@@ -258,12 +258,17 @@ def restore_db_from_backup(backup_target, mode='replace'):
                     raw_text = jf.read().decode('utf-8')
                     snapshot_json_data = decrypt_json_payload(raw_text)
 
-                # Ekstrak berkas uploads jika ada
+                # Ekstrak berkas uploads jika ada dengan mitigasi Zip Slip
+                allowed_uploads_dir = os.path.realpath(os.path.join(BASE_DIR, 'static', 'uploads'))
                 for item in zipf.namelist():
                     if item.startswith('static/uploads/') and not item.endswith('/'):
                         dest_path = os.path.join(BASE_DIR, item)
-                        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                        with zipf.open(item) as sf, open(dest_path, 'wb') as df:
+                        real_dest = os.path.realpath(dest_path)
+                        # Validasi bahwa path absolut tujuan berada di dalam folder static/uploads
+                        if not real_dest.startswith(allowed_uploads_dir + os.sep) and real_dest != allowed_uploads_dir:
+                            continue
+                        os.makedirs(os.path.dirname(real_dest), exist_ok=True)
+                        with zipf.open(item) as sf, open(real_dest, 'wb') as df:
                             shutil.copyfileobj(sf, df)
                         extracted_uploads += 1
         else:

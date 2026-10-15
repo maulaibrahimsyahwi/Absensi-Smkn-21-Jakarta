@@ -639,6 +639,31 @@ def verify_perpus():
         if result['success']:
             siswa_id = result['siswa_id']
             siswa = Siswa.query.get(siswa_id)
+            if not siswa:
+                return jsonify({"success": False, "message": "Siswa tidak ditemukan."}), 404
+
+            # Jika request dari sesi login siswa, pastikan wajah sesuai akun yang login
+            current_u = getattr(request, 'current_user', {})
+            role = current_u.get('role')
+            if role == 'siswa' and current_u.get('user_id') != siswa_id:
+                return jsonify({
+                    "success": False, 
+                    "message": "Presensi perpustakaan ditolak: Wajah yang terdeteksi tidak sesuai dengan akun siswa yang sedang login."
+                }), 403
+
+            # Cegah spam pencatatan ganda dalam 5 menit terakhir
+            five_mins_ago = now_dt - timedelta(minutes=5)
+            duplicate_visit = AbsensiPerpustakaan.query.filter(
+                AbsensiPerpustakaan.siswa_id == siswa_id,
+                AbsensiPerpustakaan.waktu >= five_mins_ago
+            ).first()
+            if duplicate_visit:
+                return jsonify({
+                    "success": True,
+                    "already_recorded": True,
+                    "message": f"Kunjungan {siswa.nama} ({siswa.kelas}) sudah tercatat baru saja ({duplicate_visit.waktu.strftime('%H:%M WIB')})."
+                })
+
             kunjungan = AbsensiPerpustakaan(
                 siswa_id=siswa_id,
                 kelas=siswa.kelas if siswa else None,
@@ -677,6 +702,11 @@ def sync_offline():
     records = data.get('records', [])
     if not isinstance(records, list) or len(records) == 0:
         return jsonify({"success": False, "message": "Tidak ada data antrean presensi offline yang dikirim."}), 400
+    if len(records) > 10:
+        return jsonify({
+            "success": False,
+            "message": "Batas antrean offline maksimal 10 rekaman per batch untuk menjaga kestabilan server."
+        }), 400
 
     current_u = getattr(request, 'current_user', {})
     user_role = str(getattr(request, 'user_role', current_u.get('role', ''))).lower()
